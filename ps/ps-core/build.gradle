@@ -1,0 +1,5 @@
+dependencies {
+  api 'io.micrometer:micrometer-core:1.12.6'
+  api 'org.slf4j:slf4j-api:2.0.12'
+}
+

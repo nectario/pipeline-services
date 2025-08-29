@@ -1,0 +1,27 @@
+sourceSets {
+  main {
+    java {
+      srcDirs += ["$buildDir/generated/sources/ps"]
+    }
+  }
+  test {
+    java {
+      srcDirs += ["$buildDir/generated/sources/ps-test"]
+    }
+  }
+}
+
+dependencies {
+  implementation project(':ps:ps-core')
+}
+
+tasks.register('cleanGenerated') {
+  group = 'build'
+  doLast {
+    delete "$buildDir/generated/sources/ps"
+    delete "$buildDir/generated/sources/ps-test"
+  }
+}
+
+clean.dependsOn tasks.named('cleanGenerated')
+
