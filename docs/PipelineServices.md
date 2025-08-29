@@ -37,21 +37,30 @@ ps/
 ### 2.1 Core types
 
 ```java
-package com.ps.core;
+package com.pipeline.core;
 
 @FunctionalInterface
-public interface ThrowingFn<I,O> {
-  O apply(I in) throws Exception;
+public interface ThrowingFn<I, O> {
+    O apply(I in) throws Exception;
 }
 
 public final class ShortCircuit {
-  private ShortCircuit() {}
-  static final class Signal extends RuntimeException {
-    final Object value; Signal(Object v) { this.value = v; }
-  }
-  /** Force an immediate pipeline return with the provided final value. */
-  @SuppressWarnings("unchecked")
-  public static <T> T now(T finalValue) { throw new Signal(finalValue); }
+    private ShortCircuit() {
+    }
+
+    static final class Signal extends RuntimeException {
+        final Object value;
+
+        Signal(Object v) {
+            this.value = v;
+        }
+    }
+
+    /** Force an immediate pipeline return with the provided final value. */
+    @SuppressWarnings("unchecked")
+    public static <T> T now(T finalValue) {
+        throw new Signal(finalValue);
+    }
 }
 ```
 
@@ -62,38 +71,50 @@ public final class ShortCircuit {
 ### 2.2 Unary pipelines (same input/output type)
 
 ```java
-package com.ps.core;
+package com.pipeline.core;
 
 import java.util.List;
-import java.util.function.Function;
 
 public final class Pipeline<T> {
-  private final String name;
-  private final List<ThrowingFn<T,T>> steps;
-  private final boolean shortCircuit;
+    private final String name;
+    private final List<ThrowingFn<T, T>> steps;
+    private final boolean shortCircuit;
 
-  private Pipeline(String name, boolean shortCircuit, List<ThrowingFn<T,T>> steps) { ... }
+    private Pipeline(String name, boolean shortCircuit, List<ThrowingFn<T, T>> steps) { ...}
 
-  /** Var-args builder for convenience (mirrors existing style). */
-  @SafeVarargs
-  public static <T> Pipeline<T> build(String name, boolean shortCircuit, ThrowingFn<T,T>... steps) { ... }
+    /** Var-args builder for convenience (mirrors existing style). */
+    @SafeVarargs
+    public static <T> Pipeline<T> build(String name, boolean shortCircuit, ThrowingFn<T, T>... steps) { ...}
 
-  /** Builder API (for chaining, pre/post, etc.). */
-  public static <T> Builder<T> builder(String name) { ... }
-  public static final class Builder<T> {
-    public Builder<T> shortCircuit(boolean b) { ... }
-    public Builder<T> beforeEach(ThrowingFn<T,T> pre) { ... }
-    public Builder<T> step(ThrowingFn<T,T> s) { ... }
-    public Builder<T> afterEach(ThrowingFn<T,T> post) { ... }
-    public Pipeline<T> build() { ... }
-  }
+    /** Builder API (for chaining, pre/post, etc.). */
+    public static <T> Builder<T> builder(String name) { ...}
 
-  /** Run the pipeline. Honors shortCircuit flag and ShortCircuit.now(). */
-  public T run(T input) { ... }
+    public static final class Builder<T> {
+        public Builder<T> shortCircuit(boolean b) { ...}
 
-  public String name() { return name; }
-  public boolean shortCircuit() { return shortCircuit; }
-  public int size() { return steps.size(); }
+        public Builder<T> beforeEach(ThrowingFn<T, T> pre) { ...}
+
+        public Builder<T> step(ThrowingFn<T, T> s) { ...}
+
+        public Builder<T> afterEach(ThrowingFn<T, T> post) { ...}
+
+        public Pipeline<T> build() { ...}
+    }
+
+    /** Run the pipeline. Honors shortCircuit flag and ShortCircuit.now(). */
+    public T run(T input) { ...}
+
+    public String name() {
+        return name;
+    }
+
+    public boolean shortCircuit() {
+        return shortCircuit;
+    }
+
+    public int size() {
+        return steps.size();
+    }
 }
 ```
 
@@ -108,24 +129,31 @@ public final class Pipeline<T> {
 ### 2.3 Typed pipelines (different I/O types)
 
 ```java
-package com.ps.core;
+package com.pipeline.core;
 
-public final class Pipe<I,O> {
-  private Pipe() {}
-  public static <I> Builder<I> from(Class<I> inType) { return new Builder<>(); }
+public final class Pipe<I, O> {
+    private Pipe() {
+    }
 
-  public static final class Builder<I> {
-    private boolean shortCircuit = true;
-    private final java.util.List<ThrowingFn<?,?>> steps = new java.util.ArrayList<>();
-    private java.util.function.Function<Exception,?> onErrorReturn;
+    public static <I> Builder<I> from(Class<I> inType) {
+        return new Builder<>();
+    }
 
-    public Builder<I> shortCircuit(boolean b) { ... }
-    public <O> Builder<I> onErrorReturn(java.util.function.Function<Exception,O> f) { ... }
-    public <M> Builder<M> step(ThrowingFn<I,M> s) { ... }
-    public <O> Pipe<I,O> to(Class<O> outType) { ... }
-  }
+    public static final class Builder<I> {
+        private boolean shortCircuit = true;
+        private final java.util.List<ThrowingFn<?, ?>> steps = new java.util.ArrayList<>();
+        private java.util.function.Function<Exception, ?> onErrorReturn;
 
-  public O run(I in) throws Exception { ... }
+        public Builder<I> shortCircuit(boolean b) { ...}
+
+        public <O> Builder<I> onErrorReturn(java.util.function.Function<Exception, O> f) { ...}
+
+        public <M> Builder<M> step(ThrowingFn<I, M> s) { ...}
+
+        public <O> Pipe<I, O> to(Class<O> outType) { ...}
+    }
+
+    public O run(I in) throws Exception { ...}
 }
 ```
 
@@ -143,17 +171,18 @@ public final class Pipe<I,O> {
 ### 2.4 Helper utilities
 
 ```java
-package com.ps.core;
+package com.pipeline.core;
 
 public final class Steps {
-  private Steps(){}
+    private Steps() {
+    }
 
-  /** Unary: ignore errors, pass input through unchanged. */
-  public static <T> ThrowingFn<T,T> ignoreErrors(ThrowingFn<T,T> step) { ... }
+    /** Unary: ignore errors, pass input through unchanged. */
+    public static <T> ThrowingFn<T, T> ignoreErrors(ThrowingFn<T, T> step) { ...}
 
-  /** Typed: if step throws, use fallback to produce required O. */
-  public static <I,O> ThrowingFn<I,O> withFallback(ThrowingFn<I,O> step,
-                                                   java.util.function.Function<Exception,O> fallback) { ... }
+    /** Typed: if step throws, use fallback to produce required O. */
+    public static <I, O> ThrowingFn<I, O> withFallback(ThrowingFn<I, O> step,
+                                                       java.util.function.Function<Exception, O> fallback) { ...}
 }
 ```
 
@@ -162,16 +191,19 @@ public final class Steps {
 ### 2.5 Registry (optional but recommended)
 
 ```java
-package com.ps.core;
+package com.pipeline.core;
 
 import java.util.Map;
 import java.util.Optional;
 
 public final class PipelineRegistry {
-  public void register(String key, Pipeline<String> pipeline) { ... }
-  public Optional<Pipeline<String>> lookup(String key) { ... }
-  public Map<String, Pipeline<String>> asMap() { ... }
-  public int size() { ... }
+    public void register(String key, Pipeline<String> pipeline) { ...}
+
+    public Optional<Pipeline<String>> lookup(String key) { ...}
+
+    public Map<String, Pipeline<String>> asMap() { ...}
+
+    public int size() { ...}
 }
 ```
 
@@ -201,23 +233,29 @@ public final class PipelineRegistry {
 **Prompt builder (code‑side):**
 
 ```java
-package com.ps.prompt;
+package com.pipeline.prompt;
 
-import com.ps.core.ThrowingFn;
+import com.pipeline.core.ThrowingFn;
 
 public final class Prompt {
-  public static <I,O> PromptBuilder<I,O> step(Class<I> in, Class<O> out) { ... }
+    public static <I, O> PromptBuilder<I, O> step(Class<I> in, Class<O> out) { ...}
 
-  public static final class PromptBuilder<I,O> {
-    public PromptBuilder<I,O> name(String stepName) { ... }
-    public PromptBuilder<I,O> goal(String text) { ... }
-    public PromptBuilder<I,O> rules(String... lines) { ... }        // "deterministic", "no IO", etc.
-    public PromptBuilder<I,O> example(I input, O expected) { ... }  // multiple allowed
-    public PromptBuilder<I,O> property(String assertion) { ... }    // e.g., "volatility>=0"
-    public PromptBuilder<I,O> p50Micros(int budget) { ... }
-    /** Returns a placeholder that Codex replaces with the generated class at build time. */
-    public ThrowingFn<I,O> build() { ... }
-  }
+    public static final class PromptBuilder<I, O> {
+        public PromptBuilder<I, O> name(String stepName) { ...}
+
+        public PromptBuilder<I, O> goal(String text) { ...}
+
+        public PromptBuilder<I, O> rules(String... lines) { ...}        // "deterministic", "no IO", etc.
+
+        public PromptBuilder<I, O> example(I input, O expected) { ...}  // multiple allowed
+
+        public PromptBuilder<I, O> property(String assertion) { ...}    // e.g., "volatility>=0"
+
+        public PromptBuilder<I, O> p50Micros(int budget) { ...}
+
+        /** Returns a placeholder that Codex replaces with the generated class at build time. */
+        public ThrowingFn<I, O> build() { ...}
+    }
 }
 ```
 
@@ -242,21 +280,23 @@ public final class Prompt {
 **HTTP adapter signature**
 
 ```java
-package com.ps.remote.http;
+package com.pipeline.remote.http;
 
-import com.ps.core.ThrowingFn;
+import com.pipeline.core.ThrowingFn;
+
 public final class HttpStep {
-  public static <I,O> ThrowingFn<I,O> jsonPost(RemoteSpec<I,O> spec) { ... }
-  public static <I,O> ThrowingFn<I,O> jsonGet(RemoteSpec<I,O> spec) { ... }
+    public static <I, O> ThrowingFn<I, O> jsonPost(RemoteSpec<I, O> spec) { ...}
 
-  public static final class RemoteSpec<I,O> {
-    public String endpoint;
-    public int timeoutMillis = 1000;
-    public int retries = 0;
-    public java.util.Map<String,String> headers = java.util.Map.of();
-    public java.util.function.Function<I, String> toJson;   // I -> JSON body or query
-    public java.util.function.Function<String, O> fromJson; // JSON -> O
-  }
+    public static <I, O> ThrowingFn<I, O> jsonGet(RemoteSpec<I, O> spec) { ...}
+
+    public static final class RemoteSpec<I, O> {
+        public String endpoint;
+        public int timeoutMillis = 1000;
+        public int retries = 0;
+        public java.util.Map<String, String> headers = java.util.Map.of();
+        public java.util.function.Function<I, String> toJson;   // I -> JSON body or query
+        public java.util.function.Function<String, O> fromJson; // JSON -> O
+    }
 }
 ```
 
@@ -330,13 +370,18 @@ public final class HttpStep {
 - Required API:
 
 ```java
-package com.ps.disruptor;
+package com.pipeline.disruptor;
 
 public final class DisruptorEngine<T> implements AutoCloseable {
-  public DisruptorEngine(String name, int bufferSize, com.ps.core.Pipeline<T> pipeline, com.ps.metrics.MetricsRecorder metrics) { ... }
-  public void publish(T payload) { ... }
-  public void close() { shutdown(); }
-  public void shutdown() { ... }
+    public DisruptorEngine(String name, int bufferSize, com.pipeline.core.Pipeline<T> pipeline, com.pipeline.metrics.MetricsRecorder metrics) { ...}
+
+    public void publish(T payload) { ...}
+
+    public void close() {
+        shutdown();
+    }
+
+    public void shutdown() { ...}
 }
 ```
 
@@ -349,15 +394,18 @@ public final class DisruptorEngine<T> implements AutoCloseable {
 - Module `ps-core` exposes timers and counters through a simple `MetricsRecorder` SPI:
 
 ```java
-package com.ps.metrics;
+package com.pipeline.metrics;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
 public interface MetricsRecorder {
-  void onStepSuccess(String pipeline, String stepName, long nanos);
-  void onStepError(String pipeline, String stepName, Throwable t);
-  void onShortCircuit(String pipeline, String stepName);
-  MeterRegistry registry();
+    void onStepSuccess(String pipeline, String stepName, long nanos);
+
+    void onStepError(String pipeline, String stepName, Throwable t);
+
+    void onShortCircuit(String pipeline, String stepName);
+
+    MeterRegistry registry();
 }
 ```
 
@@ -422,37 +470,49 @@ public interface MetricsRecorder {
 ### 10.1 Unary text cleaner (local + prompt + short‑circuit)
 
 ```java
-import static com.ps.core.ShortCircuit.now;
-import static com.ps.core.Steps.ignoreErrors;
+import static com.pipeline.core.ShortCircuit.now;
+import static com.pipeline.core.Steps.ignoreErrors;
 
 var p = Pipeline.build("clean_text", false,
-  (String s) -> s.strip(),
-  ignoreErrors((String s) -> riskyNormalize(s)),              // continues on error
-  (String s) -> s.length() > 280 ? now(s.substring(0, 280)) : s
+        (String s) -> s.strip(),
+        ignoreErrors((String s) -> riskyNormalize(s)),              // continues on error
+        (String s) -> s.length() > 280 ? now(s.substring(0, 280)) : s
 );
-System.out.println(p.run("  Hello   <b>World</b>  "));
+System.out.
+
+println(p.run("  Hello   <b>World</b>  "));
 ```
 
 ### 10.2 Typed quote pipeline (local + prompt)
 
 ```java
-record Req(String symbol, int qty) {}
-sealed interface Res permits Ok,Rejected {}
-record Ok(double px) implements Res {}
-record Rejected(String reason) implements Res {}
+record Req(String symbol, int qty) {
+}
+
+sealed interface Res permits Ok, Rejected {
+}
+
+record Ok(double px) implements Res {
+}
+
+record Rejected(String reason) implements Res {
+}
 
 var pipe =
-  Pipe.from(Req.class)
-      .step((Req r) -> { if (r.qty()<=0) return ShortCircuit.now(new Rejected("qty<=0")); return r; })
-      .step(com.ps.prompt.Prompt.step(Req.class, Ok.class)
-            .name("price")
-            .goal("Return a deterministic demo price for a symbol")
-            .rules("deterministic","no IO")
-            .example(new Req("AAPL",10), new Ok(101.25))
-            .build())
-      .shortCircuit(true)
-      .onErrorReturn(e -> new Rejected("PricingError: "+e.getMessage()))
-      .to(Res.class);
+        Pipe.from(Req.class)
+                .step((Req r) -> {
+                    if (r.qty() <= 0) return ShortCircuit.now(new Rejected("qty<=0"));
+                    return r;
+                })
+                .step(com.pipeline.prompt.Prompt.step(Req.class, Ok.class)
+                        .name("price")
+                        .goal("Return a deterministic demo price for a symbol")
+                        .rules("deterministic", "no IO")
+                        .example(new Req("AAPL", 10), new Ok(101.25))
+                        .build())
+                .shortCircuit(true)
+                .onErrorReturn(e -> new Rejected("PricingError: " + e.getMessage()))
+                .to(Res.class);
 
 Res r = pipe.run(new Req("AAPL", 10)); // Ok(101.25)
 ```

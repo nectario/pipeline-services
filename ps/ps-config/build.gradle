@@ -1,7 +1,0 @@
-dependencies {
-  implementation project(':ps:ps-core')
-  implementation project(':ps:ps-remote')
-  implementation project(':ps:ps-prompt')
-  implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
-}
-

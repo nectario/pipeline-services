@@ -1,0 +1,16 @@
+{
+  "pipeline": "clean_text",
+  "type": "unary",
+  "shortCircuit": false,
+  "steps": [
+    { "$prompt": {
+      "name": "normalize",
+      "inType": "java.lang.String",
+      "outType": "java.lang.String",
+      "goal": "Normalize whitespace, remove HTML tags. Deterministic, no I/O.",
+      "rules": ["deterministic","no IO"],
+      "examples": [["  Hello <b>World</b>  ", "Hello World"]]
+    } }
+  ]
+}
+
