@@ -7,11 +7,12 @@ public final class Example04_FinanceOrderFlow {
   private Example04_FinanceOrderFlow() {}
 
   public static void run() throws Exception {
-    Pipe pipe = Pipe.<FinanceSteps.Tick>named("ex04")
-        .step(FinanceSteps::computeFeatures)
-        .step(FinanceSteps::score)
-        .step(FinanceSteps::decide)
-        .to(FinanceSteps.OrderResponse.class);
+    Pipe<FinanceSteps.Tick, FinanceSteps.OrderResponse> pipe =
+        Pipe.<FinanceSteps.Tick>named("ex04")
+            .step(FinanceSteps::computeFeatures)
+            .step(FinanceSteps::score)
+            .step(FinanceSteps::decide)
+            .to(FinanceSteps.OrderResponse.class);
 
     var tick = new FinanceSteps.Tick("AAPL", 30.0);
     var res = pipe.run(tick);

@@ -23,10 +23,10 @@ public final class Pipe<I, O> {
         this.steps = List.copyOf(steps);
     }
 
-    public static <I> Builder<I> from(Class<I> inType) { return new Builder<>("pipe"); }
-    public static <I> Builder<I> named(String name) { return new Builder<>(name); }
+    public static <I> Builder<I, I> from(Class<I> inType) { return new Builder<>("pipe"); }
+    public static <I> Builder<I, I> named(String name) { return new Builder<>(name); }
 
-    public static final class Builder<I> {
+    public static final class Builder<I, C> {
         private final String name;
         private boolean shortCircuit = true;
         private final List<ThrowingFn<?, ?>> steps = new ArrayList<>();
@@ -34,9 +34,9 @@ public final class Pipe<I, O> {
 
         private Builder(String name) { this.name = name; }
 
-        public Builder<I> shortCircuit(boolean b) { this.shortCircuit = b; return this; }
-        public <O> Builder<I> onErrorReturn(java.util.function.Function<Exception, O> f) { this.onErrorReturn = f; return this; }
-        public <M> Builder<M> step(ThrowingFn<I, M> f) { steps.add(f); return (Builder<M>) this; }
+        public Builder<I, C> shortCircuit(boolean b) { this.shortCircuit = b; return this; }
+        public <X> Builder<I, C> onErrorReturn(java.util.function.Function<Exception, X> f) { this.onErrorReturn = f; return this; }
+        public <M> Builder<I, M> step(ThrowingFn<C, M> f) { steps.add(f); return (Builder<I, M>) this; }
         public <O> Pipe<I, O> to(Class<O> out) { return new Pipe<>(name, shortCircuit, (java.util.function.Function<Exception,O>) onErrorReturn, steps); }
     }
 

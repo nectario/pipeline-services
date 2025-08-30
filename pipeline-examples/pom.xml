@@ -42,34 +42,13 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
-        <configuration>
-          <mainClass>com.pipeline.examples.ExamplesMain</mainClass>
-          <includeProjectDependencies>true</includeProjectDependencies>
-          <classpathScope>compile</classpathScope>
-          <additionalClasspathElements>
-            <additionalClasspathElement>${project.basedir}/../pipeline-core/target/classes</additionalClasspathElement>
-            <additionalClasspathElement>${project.basedir}/../pipeline-config/target/classes</additionalClasspathElement>
-            <additionalClasspathElement>${project.basedir}/../pipeline-remote/target/classes</additionalClasspathElement>
-            <additionalClasspathElement>${project.basedir}/../pipeline-disruptor/target/classes</additionalClasspathElement>
-          </additionalClasspathElements>
-        </configuration>
         <executions>
           <execution>
             <id>run-examples</id>
             <phase>none</phase>
-            <goals>
-              <goal>java</goal>
-            </goals>
+            <goals><goal>java</goal></goals>
             <configuration>
               <mainClass>com.pipeline.examples.ExamplesMain</mainClass>
-              <includeProjectDependencies>true</includeProjectDependencies>
-              <classpathScope>compile</classpathScope>
-              <additionalClasspathElements>
-                <additionalClasspathElement>${project.basedir}/../pipeline-core/target/classes</additionalClasspathElement>
-                <additionalClasspathElement>${project.basedir}/../pipeline-config/target/classes</additionalClasspathElement>
-                <additionalClasspathElement>${project.basedir}/../pipeline-remote/target/classes</additionalClasspathElement>
-                <additionalClasspathElement>${project.basedir}/../pipeline-disruptor/target/classes</additionalClasspathElement>
-              </additionalClasspathElements>
             </configuration>
           </execution>
         </executions>

@@ -11,7 +11,7 @@ public final class PolicySteps {
   public static String rateLimit(String s) throws Exception {
     long now = System.nanoTime();
     long last = LAST_NS.get();
-    if (now - last < MIN_GAP_NS) return s; // pass through; real impl could ShortCircuit.now(...)
+    if (now - last < MIN_GAP_NS) return s;
     LAST_NS.set(now);
     return s;
   }
