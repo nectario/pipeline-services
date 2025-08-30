@@ -48,6 +48,11 @@ public final class Pipeline<T> {
         @SafeVarargs public final Builder<T> steps(ThrowingFn<T, T>... ss) { this.steps.addAll(Arrays.asList(ss)); return this; }
         public Builder<T> afterEach(ThrowingFn<T, T> post) { this.afterEach.add(post); return this; }
         public Pipeline<T> build() { return new Pipeline<>(name, shortCircuit, beforeEach, steps, afterEach); }
+
+        // Aliases for ergonomics
+        public Builder<T> addPreAction(ThrowingFn<T, T> pre) { return beforeEach(pre); }
+        public Builder<T> addStep(ThrowingFn<T, T> s) { return step(s); }
+        public Builder<T> addPostAction(ThrowingFn<T, T> post) { return afterEach(post); }
     }
 
     public T run(T input) {

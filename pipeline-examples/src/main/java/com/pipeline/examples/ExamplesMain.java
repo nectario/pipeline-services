@@ -13,7 +13,7 @@ public final class ExamplesMain {
     Example08_IntArrayStats.run();
     Example09_LoadFromJsonConfig.run();
     Example10_DisruptorIntegration.run();
+    Example_RuntimeImperative.run();
     System.out.println("-- done --");
   }
 }
-
