@@ -1,0 +1,10 @@
+{
+  "pipeline": "json_clean_text",
+  "type": "unary",
+  "shortCircuit": false,
+  "steps": [
+    {"$local": "com.pipeline.examples.adapters.TextStripStep"},
+    {"$local": "com.pipeline.examples.adapters.TextNormalizeStep"}
+  ]
+}
+

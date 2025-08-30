@@ -23,6 +23,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>21</maven.compiler.release>
+    <skipTests>false</skipTests>
+    <maven.test.skip>${skipTests}</maven.test.skip>
 
     <!-- deps -->
     <junit.version>5.10.2</junit.version>
@@ -107,4 +109,3 @@
     </pluginManagement>
   </build>
 </project>
-

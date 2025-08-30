@@ -15,50 +15,44 @@ public final class HttpStep {
     private HttpStep() {}
 
     public static <I, O> ThrowingFn<I, O> jsonPost(RemoteSpec<I, O> spec) {
-        return in -> execute(spec, in, true);
+        return in -> invoke(spec, "POST", in);
     }
 
     public static <I, O> ThrowingFn<I, O> jsonGet(RemoteSpec<I, O> spec) {
-        return in -> execute(spec, in, false);
+        return in -> invoke(spec, "GET", in);
     }
 
-    private static <I, O> O execute(RemoteSpec<I, O> spec, I in, boolean post) throws Exception {
+    private static <I, O> O invoke(RemoteSpec<I, O> spec, String method, I in) throws IOException, InterruptedException {
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(spec.timeoutMillis))
                 .build();
 
-        int attempts = 0;
-        Exception last = null;
-        while (attempts <= spec.retries) {
+        String body = spec.toJson.apply(in);
+        HttpRequest.Builder b = HttpRequest.newBuilder()
+                .uri(URI.create(spec.endpoint))
+                .timeout(Duration.ofMillis(spec.timeoutMillis));
+
+        if ("POST".equalsIgnoreCase(method)) {
+            b = b.POST(HttpRequest.BodyPublishers.ofString(body));
+        } else {
+            b = b.GET();
+        }
+        for (Map.Entry<String, String> e : spec.headers.entrySet()) {
+            b.header(e.getKey(), e.getValue());
+        }
+        b.header("Content-Type", "application/json");
+
+        IOException last = null;
+        for (int attempt = 0; attempt <= spec.retries; attempt++) {
             try {
-                HttpRequest request;
-                if (post) {
-                    String body = spec.toJson.apply(in);
-                    HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(spec.endpoint))
-                            .timeout(Duration.ofMillis(spec.timeoutMillis))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(body));
-                    for (Map.Entry<String, String> e : spec.headers.entrySet()) b.header(e.getKey(), e.getValue());
-                    request = b.build();
-                } else {
-                    String query = spec.toJson.apply(in);
-                    String url = spec.endpoint + (spec.endpoint.contains("?") ? "&" : "?") + query;
-                    HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url))
-                            .timeout(Duration.ofMillis(spec.timeoutMillis))
-                            .GET();
-                    for (Map.Entry<String, String> e : spec.headers.entrySet()) b.header(e.getKey(), e.getValue());
-                    request = b.build();
-                }
-                HttpResponse<String> resp = client.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> resp = client.send(b.build(), HttpResponse.BodyHandlers.ofString());
                 int code = resp.statusCode();
                 if (code >= 200 && code < 300) {
                     return spec.fromJson.apply(resp.body());
                 }
-                throw new IOException("HTTP " + code + ": " + resp.body());
-            } catch (Exception e) {
-                last = e;
-                attempts++;
-                if (attempts > spec.retries) throw e;
+                last = new IOException("HTTP " + code + " body=" + resp.body());
+            } catch (IOException ioe) {
+                last = ioe;
             }
         }
         throw last != null ? last : new IOException("Unknown HTTP error");
@@ -73,4 +67,3 @@ public final class HttpStep {
         public Function<String, O> fromJson; // JSON -> O
     }
 }
-

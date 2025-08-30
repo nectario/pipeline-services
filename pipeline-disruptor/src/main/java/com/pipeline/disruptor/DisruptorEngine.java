@@ -7,7 +7,6 @@ import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 public final class DisruptorEngine<T> implements AutoCloseable {
     private final String name;
@@ -16,34 +15,31 @@ public final class DisruptorEngine<T> implements AutoCloseable {
     private final ExecutorService worker;
     private volatile boolean running = true;
 
-    public DisruptorEngine(String name, int bufferSize, Pipeline<T> pipeline, com.pipeline.metrics.MetricsRecorder metrics) {
+    public DisruptorEngine(String name, int bufferSize, Pipeline<T> pipeline) {
         this.name = Objects.requireNonNull(name);
         this.pipeline = Objects.requireNonNull(pipeline);
         this.queue = new ArrayBlockingQueue<>(bufferSize);
-        if (metrics != null) Metrics.setRecorder(metrics);
         this.worker = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "ps-disruptor-" + name);
+            Thread t = new Thread(r, "engine-" + name);
             t.setDaemon(true);
             return t;
         });
-        worker.submit(this::runLoop);
+        worker.execute(this::loop);
     }
 
-    private void runLoop() {
+    private void loop() {
         while (running) {
             try {
-                T payload = queue.poll(50, TimeUnit.MILLISECONDS);
-                if (payload == null) continue;
-                try {
-                    pipeline.run(payload);
-                } catch (Exception e) {
-                    if (pipeline.shortCircuit()) {
-                        Metrics.recorder().onShortCircuit(pipeline.name(), "engine");
-                    }
-                }
+                T payload = queue.take();
+                var rec = Metrics.recorder();
+                long t0 = System.nanoTime();
+                pipeline.run(payload);
+                rec.onStepSuccess(name, "e2e", System.nanoTime() - t0);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 break;
+            } catch (Throwable t) {
+                Metrics.recorder().onStepError(name, "e2e", t);
             }
         }
     }

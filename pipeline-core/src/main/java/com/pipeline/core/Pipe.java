@@ -6,79 +6,63 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
-public class Pipe<I, O> {
-    private Pipe() {}
+public final class Pipe<I, O> {
+    private static final Logger log = LoggerFactory.getLogger(Pipe.class);
 
-    public static <I> Builder<I> from(Class<I> inType) { return new Builder<>(); }
+    private final List<ThrowingFn<?, ?>> steps;
+    private final boolean shortCircuit;
+    private final java.util.function.Function<Exception, O> onErrorReturn;
+    private final String name;
 
-    public static final class Builder<I> {
-        private static final Logger log = LoggerFactory.getLogger(Builder.class);
-
-        private boolean shortCircuit = true;
-        private final List<ThrowingFn<?, ?>> steps = new ArrayList<>();
-        private Function<Exception, ?> onErrorReturn;
-
-        public Builder<I> shortCircuit(boolean b) { this.shortCircuit = b; return this; }
-
-        public <O> Builder<I> onErrorReturn(Function<Exception, O> f) {
-            this.onErrorReturn = f; return this;
-        }
-
-        @SuppressWarnings("unchecked")
-        public <M> Builder<M> step(ThrowingFn<?, ?> s) { // type-bending but safe at runtime order
-            steps.add(s);
-            return (Builder<M>) this;
-        }
-
-        public <O> Pipe<I, O> to(Class<O> outType) { return new Runner<>(steps, shortCircuit, onErrorReturn); }
+    private Pipe(String name, boolean shortCircuit, java.util.function.Function<Exception, O> onErrorReturn,
+                 List<ThrowingFn<?, ?>> steps) {
+        this.name = name;
+        this.shortCircuit = shortCircuit;
+        this.onErrorReturn = onErrorReturn;
+        this.steps = List.copyOf(steps);
     }
 
-    public O run(I in) throws Exception { throw new UnsupportedOperationException("Not implemented"); }
+    public static <I> Builder<I> from(Class<I> inType) { return new Builder<>("pipe"); }
+    public static <I> Builder<I> named(String name) { return new Builder<>(name); }
 
-    static final class Runner<I, O> extends Pipe<I, O> {
-        private final List<ThrowingFn<?, ?>> steps;
-        private final boolean shortCircuit;
-        private final Function<Exception, ?> onErrorReturn;
+    public static final class Builder<I> {
+        private final String name;
+        private boolean shortCircuit = true;
+        private final List<ThrowingFn<?, ?>> steps = new ArrayList<>();
+        private java.util.function.Function<Exception, ?> onErrorReturn;
 
-        Runner(List<ThrowingFn<?, ?>> steps, boolean shortCircuit, Function<Exception, ?> onErrorReturn) {
-            this.steps = List.copyOf(steps);
-            this.shortCircuit = shortCircuit;
-            this.onErrorReturn = onErrorReturn;
-        }
+        private Builder(String name) { this.name = name; }
 
-        @SuppressWarnings({"unchecked", "rawtypes"})
-        public O run(I in) throws Exception {
-            Object current = in;
-            int idx = 0;
+        public Builder<I> shortCircuit(boolean b) { this.shortCircuit = b; return this; }
+        public <O> Builder<I> onErrorReturn(java.util.function.Function<Exception, O> f) { this.onErrorReturn = f; return this; }
+        public <M> Builder<M> step(ThrowingFn<I, M> f) { steps.add(f); return (Builder<M>) this; }
+        public <O> Pipe<I, O> to(Class<O> out) { return new Pipe<>(name, shortCircuit, (java.util.function.Function<Exception,O>) onErrorReturn, steps); }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public O run(I in) throws Exception {
+        var rec = Metrics.recorder();
+        Object cur = in;
+        for (int i = 0; i < steps.size(); i++) {
+            var fn = (ThrowingFn) steps.get(i);
+            var stepName = "s" + i;
             try {
-                for (ThrowingFn step : steps) {
-                    long start = System.nanoTime();
-                    try {
-                        current = step.apply(current);
-                        Metrics.recorder().onStepSuccess("pipe", "s" + idx, System.nanoTime() - start);
-                    } catch (ShortCircuit.Signal s) {
-                        Metrics.recorder().onShortCircuit("pipe", "s" + idx);
-                        return (O) s.value;
-                    } catch (Exception e) {
-                        Metrics.recorder().onStepError("pipe", "s" + idx, e);
-                        if (shortCircuit) {
-                            Metrics.recorder().onShortCircuit("pipe", "s" + idx);
-                            if (onErrorReturn != null) {
-                                return (O) onErrorReturn.apply(e);
-                            }
-                            throw e;
-                        }
-                        // keep current and continue
-                    }
-                    idx++;
+                long t0 = System.nanoTime();
+                cur = fn.apply(cur);
+                rec.onStepSuccess(name, stepName, System.nanoTime() - t0);
+            } catch (ShortCircuit.Signal sc) {
+                rec.onShortCircuit(name, stepName);
+                return (O) sc.value;
+            } catch (Exception ex) {
+                rec.onStepError(name, stepName, ex);
+                if (shortCircuit) {
+                    if (onErrorReturn != null) return onErrorReturn.apply(ex);
+                    throw ex;
                 }
-            } catch (ShortCircuit.Signal s) {
-                Metrics.recorder().onShortCircuit("pipe", "s" + idx);
-                return (O) s.value;
+                // continue: keep current value
             }
-            return (O) current;
         }
+        return (O) cur;
     }
 }
