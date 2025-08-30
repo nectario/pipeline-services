@@ -7,7 +7,7 @@ public final class Example08IntArrayStats {
   private Example08IntArrayStats() {}
 
   public static void run() throws Exception {
-    Pipe pipe = Pipe.<int[]>named("ex08")
+    Pipe<int[], ArraySteps.Stats> pipe = Pipe.<int[]>named("ex08")
         .step(ArraySteps::clipNegatives)
         .step(ArraySteps::stats)
         .to(ArraySteps.Stats.class);
