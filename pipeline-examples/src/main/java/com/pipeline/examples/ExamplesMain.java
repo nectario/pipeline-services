@@ -14,6 +14,11 @@ public final class ExamplesMain {
     Example09LoadFromJsonConfig.run();
     Example10DisruptorIntegration.run();
     ExampleRuntimeImperative.run();
+
+    // New runtime examples
+    Example11RuntimeTextClean.run();
+    Example12RuntimeListFlow.run();
+    Example13RuntimeResetAndFreeze.run();
     System.out.println("-- done --");
   }
 }
