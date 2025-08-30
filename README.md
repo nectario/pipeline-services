@@ -1,6 +1,7 @@
 # Pipeline Services
+**Functional Pipeline Framework for Java 21.**  
+Local‑first pipelines with `shortCircuit`, prompt‑to‑code (build time), and optional remote adapters.
 
-Local‑first, typed pipeline framework for Java 21.
  Build **unary** (`T → T`) and **typed** (`I → … → O`) pipelines with one clear control: **`shortCircuit`**.
  Steps can be **local methods**, **build‑time prompt‑generated code** (scaffold in place), or **remote adapters**.
 
