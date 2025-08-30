@@ -26,9 +26,9 @@ final class RuntimePipelineTest {
     rt.addStep(s -> { throw new RuntimeException("boom"); });
     // last good value returned/kept
     assertEquals("hello", rt.value());
-    // subsequent adds still apply in this design
+    // with shortCircuit=true, session ends; subsequent adds are ignored until reset
     rt.addStep(RuntimePipelineTest::upper);
-    assertEquals("HELLO", rt.value());
+    assertEquals("hello", rt.value());
   }
 
   @Test
@@ -36,6 +36,8 @@ final class RuntimePipelineTest {
     RuntimePipeline<String> rt = new RuntimePipeline<>("t", false, "hello");
     rt.addStep(s -> ShortCircuit.now("FINISH"));
     assertEquals("FINISH", rt.value());
+    // further steps ignored until reset
+    rt.addStep(RuntimePipelineTest::upper);
+    assertEquals("FINISH", rt.value());
   }
 }
-

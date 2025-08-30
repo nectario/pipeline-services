@@ -22,14 +22,8 @@ public final class Example13RuntimeResetAndFreeze {
     rt.addStep(TextSteps::truncateAt280); // may short-circuit if very long
     System.out.println("[ex13-runtime] session2 -> " + rt.value());
 
-    // Freeze the same set of steps into a reusable immutable Pipeline
-    Pipeline<String> immutable = rt.toImmutable(
-        PolicySteps::rateLimit,
-        TextSteps::strip,
-        TextSteps::normalizeWhitespace,
-        PolicySteps::audit,
-        TextSteps::truncateAt280
-    );
+    // Freeze the recorded steps (pre/main/post) into a reusable immutable Pipeline
+    Pipeline<String> immutable = rt.toImmutable();
     String out = immutable.run("  Reusable   pipeline   input  ");
     System.out.println("[ex13-runtime] frozen -> " + out);
   }

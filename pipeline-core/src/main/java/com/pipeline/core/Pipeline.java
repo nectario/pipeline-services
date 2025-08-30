@@ -33,6 +33,10 @@ public final class Pipeline<T> {
         return new Builder<T>(name).shortCircuit(shortCircuit).steps(steps).build();
     }
 
+    public static <T> Builder<T> builder(String name) {
+        return new Builder<>(name);
+    }
+
     public static final class Builder<T> {
         private final String name;
         private boolean shortCircuit = true;

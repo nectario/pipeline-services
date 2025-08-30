@@ -176,12 +176,7 @@ rt.reset("  Another   Input ");   // start a new run
 You can “freeze” a runtime session into an immutable pipeline:
 
 ```java
-var frozen = rt.toImmutable(
-  com.pipeline.examples.steps.PolicySteps::rateLimit,
-  TextSteps::strip,
-  TextSteps::normalizeWhitespace,
-  com.pipeline.examples.steps.PolicySteps::audit
-);
+var frozen = rt.toImmutable(); // or rt.freeze()
 ```
 
 ------
@@ -384,7 +379,7 @@ RuntimePipeline<T>
   .addStep(ThrowingFn<T,T>)      -> T
   .addPostAction(ThrowingFn<T,T>)-> T
   .reset(T) / .value()
-  .toImmutable(ThrowingFn<T,T>...)
+  .toImmutable() / .freeze()
 
 // Short-circuit
 ShortCircuit.now(T finalValue) // ends immediately with finalValue

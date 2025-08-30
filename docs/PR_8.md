@@ -1,3 +1,26 @@
+
+
+## PR 8 - Freeze Pipelines or make Pipelines Immutable 
+
+
+
+## What changes & why
+
+- **Record as you go.** `addPreAction`, `addStep`, and `addPostAction` now:
+  1. **Append** the function to an internal list (`pre`, `main`, `post`), and
+  2. **Apply** it to the current value (unless the session already short‑circuited).
+- **`toImmutable()`** builds a `Pipeline<T>` using the recorded lists, preserving pre/main/post structure.
+- **`freeze()`** is a convenience alias for readability.
+- **Short‑circuit behavior:** if a step calls `ShortCircuit.now(...)`, we mark the session **ended**; further `add*` calls **do not execute or record** until you call `reset(...)`. (This keeps the recording faithful to what actually ran.)
+- **Introspection helpers** (optional): `recordedPreCount()`, `recordedStepCount()`, `recordedPostCount()`, and `clearRecorded()` in case you want to reuse the same runtime instance to record a different pipeline shape.
+
+Runtime cost is negligible (three small `ArrayList`s per runtime session).
+
+------
+
+## Patch: `RuntimePipeline.java` (replace the class with this)
+
+```java
 package com.pipeline.core;
 
 import com.pipeline.metrics.Metrics;
@@ -117,3 +140,31 @@ public final class RuntimePipeline<T> {
     }
   }
 }
+```
+
+**Behavior summary:**
+
+- You can call `rt.toImmutable()` (or `rt.freeze()`) anytime to get a reusable `Pipeline<T>` matching what you’ve built so far.
+- After a short‑circuit in this session, further `add*` calls are ignored until `reset()`—they also **won’t** be added to the recording. This keeps the frozen pipeline consistent with what ran.
+
+------
+
+## Example update (one line)
+
+In your example that previously passed the steps again, change:
+
+```java
+// before
+Pipeline<String> frozen = rt.toImmutable(
+    com.pipeline.examples.steps.PolicySteps::rateLimit,
+    TextSteps::strip,
+    TextSteps::normalizeWhitespace,
+    com.pipeline.examples.steps.PolicySteps::audit
+);
+
+// after
+Pipeline<String> frozen = rt.toImmutable();  // or rt.freeze();
+```
+
+(Everything else in the example remains the same.)
+

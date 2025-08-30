@@ -13,10 +13,8 @@ public final class ExampleRuntimeImperative {
     rt.addPostAction(PolicySteps::audit);
     System.out.println("[adhoc_clean] -> " + rt.value());
 
-    // If you later want a reusable immutable pipeline out of the same steps:
-    // Pipeline<String> p = rt.toImmutable(PolicySteps::rateLimit, TextSteps::strip,
-    //                                     TextSteps::normalizeWhitespace, PolicySteps::audit);
+    // If you later want a reusable immutable pipeline out of the recorded steps:
+    // Pipeline<String> p = rt.freeze(); // or rt.toImmutable()
     // System.out.println(p.run("  Another    Input "));
   }
 }
-
