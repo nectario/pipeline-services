@@ -6,16 +6,19 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 public final class Pipe<I, O> {
     private static final Logger log = LoggerFactory.getLogger(Pipe.class);
 
     private final List<ThrowingFn<?, ?>> steps;
     private final boolean shortCircuit;
-    private final java.util.function.Function<Exception, O> onErrorReturn;
+    private final Function<Exception, O> onErrorReturn; // may be null
     private final String name;
 
-    private Pipe(String name, boolean shortCircuit, java.util.function.Function<Exception, O> onErrorReturn,
+    private Pipe(String name,
+                 boolean shortCircuit,
+                 Function<Exception, O> onErrorReturn,
                  List<ThrowingFn<?, ?>> steps) {
         this.name = name;
         this.shortCircuit = shortCircuit;
@@ -23,27 +26,45 @@ public final class Pipe<I, O> {
         this.steps = List.copyOf(steps);
     }
 
+    /** Start a typed pipeline builder; current type == input type initially. */
     public static <I> Builder<I, I> from(Class<I> inType) { return new Builder<>("pipe"); }
+
+    /** Start with a friendly name. */
     public static <I> Builder<I, I> named(String name) { return new Builder<>(name); }
 
+    /** Builder tracks both the original input type I and the current type C. */
     public static final class Builder<I, C> {
         private final String name;
         private boolean shortCircuit = true;
         private final List<ThrowingFn<?, ?>> steps = new ArrayList<>();
-        private java.util.function.Function<Exception, ?> onErrorReturn;
+        private Function<Exception, ?> onErrorReturn;
 
         private Builder(String name) { this.name = name; }
 
         public Builder<I, C> shortCircuit(boolean b) { this.shortCircuit = b; return this; }
-        public <X> Builder<I, C> onErrorReturn(java.util.function.Function<Exception, X> f) { this.onErrorReturn = f; return this; }
-        public <M> Builder<I, M> step(ThrowingFn<C, M> f) { steps.add(f); return (Builder<I, M>) this; }
-        public <O> Pipe<I, O> to(Class<O> out) { return new Pipe<>(name, shortCircuit, (java.util.function.Function<Exception,O>) onErrorReturn, steps); }
+
+        /** You can set this before `to(...)`; it's cast to the final O there. */
+        public Builder<I, C> onErrorReturn(Function<Exception, ?> f) { this.onErrorReturn = f; return this; }
+
+        /** Add a step that transforms current type C to a new type M. */
+        @SuppressWarnings("unchecked")
+        public <M> Builder<I, M> step(ThrowingFn<? super C, ? extends M> f) {
+            steps.add((ThrowingFn<?, ?>) f);
+            return (Builder<I, M>) this;
+        }
+
+        /** Finish: produce a Pipe<I,O> from original input I to desired output O. */
+        @SuppressWarnings("unchecked")
+        public <O> Pipe<I, O> to(Class<O> outType) {
+            return new Pipe<>(name, shortCircuit, (Function<Exception, O>) onErrorReturn, steps);
+        }
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public O run(I in) throws Exception {
         var rec = Metrics.recorder();
         Object cur = in;
+
         for (int i = 0; i < steps.size(); i++) {
             var fn = (ThrowingFn) steps.get(i);
             var stepName = "s" + i;
@@ -60,7 +81,7 @@ public final class Pipe<I, O> {
                     if (onErrorReturn != null) return onErrorReturn.apply(ex);
                     throw ex;
                 }
-                // continue: keep current value
+                // shortCircuit=false -> keep current value and continue
             }
         }
         return (O) cur;
