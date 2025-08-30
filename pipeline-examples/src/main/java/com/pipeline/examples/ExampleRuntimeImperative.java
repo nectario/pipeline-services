@@ -4,7 +4,7 @@ import com.pipeline.core.RuntimePipeline;
 import com.pipeline.examples.steps.TextSteps;
 import com.pipeline.examples.steps.PolicySteps;
 
-public final class Example_RuntimeImperative {
+public final class ExampleRuntimeImperative {
   public static void run() {
     var rt = new RuntimePipeline<>("adhoc_clean", /*shortCircuit=*/false, "  Hello   World  ");
     rt.addPreAction(PolicySteps::rateLimit);

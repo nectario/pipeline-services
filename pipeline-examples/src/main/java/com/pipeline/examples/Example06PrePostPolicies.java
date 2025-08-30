@@ -4,8 +4,8 @@ import com.pipeline.core.Pipeline;
 import com.pipeline.examples.steps.PolicySteps;
 import com.pipeline.examples.steps.TextSteps;
 
-public final class Example06_PrePostPolicies {
-  private Example06_PrePostPolicies() {}
+public final class Example06PrePostPolicies {
+  private Example06PrePostPolicies() {}
 
   public static void run() {
     var p = new Pipeline.Builder<String>("ex06")

@@ -3,8 +3,8 @@ package com.pipeline.examples;
 import com.pipeline.core.Pipeline;
 import com.pipeline.examples.steps.TextSteps;
 
-public final class Example02_ShortCircuitOnException {
-  private Example02_ShortCircuitOnException() {}
+public final class Example02ShortCircuitOnException {
+  private Example02ShortCircuitOnException() {}
 
   public static void run() {
     var p = new Pipeline.Builder<String>("ex02")

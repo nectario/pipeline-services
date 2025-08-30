@@ -4,8 +4,8 @@ import com.pipeline.core.Pipe;
 import com.pipeline.examples.steps.CsvSteps;
 import com.pipeline.examples.steps.JsonSteps;
 
-public final class Example03_CsvToJson {
-  private Example03_CsvToJson() {}
+public final class Example03CsvToJson {
+  private Example03CsvToJson() {}
 
   public static void run() throws Exception {
     Pipe<String, String> pipe = Pipe.<String>named("ex03")

@@ -3,8 +3,8 @@ package com.pipeline.examples;
 import com.pipeline.core.Pipe;
 import com.pipeline.examples.steps.ArraySteps;
 
-public final class Example08_IntArrayStats {
-  private Example08_IntArrayStats() {}
+public final class Example08IntArrayStats {
+  private Example08IntArrayStats() {}
 
   public static void run() throws Exception {
     Pipe pipe = Pipe.<int[]>named("ex08")

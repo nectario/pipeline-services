@@ -3,8 +3,8 @@ package com.pipeline.examples;
 import com.pipeline.core.Pipe;
 import com.pipeline.examples.steps.FinanceSteps;
 
-public final class Example04_FinanceOrderFlow {
-  private Example04_FinanceOrderFlow() {}
+public final class Example04FinanceOrderFlow {
+  private Example04FinanceOrderFlow() {}
 
   public static void run() throws Exception {
     Pipe<FinanceSteps.Tick, FinanceSteps.OrderResponse> pipe =

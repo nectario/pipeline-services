@@ -4,8 +4,8 @@ import com.pipeline.core.Pipe;
 import com.pipeline.examples.steps.ErrorHandlers;
 import com.pipeline.examples.steps.QuoteSteps;
 
-public final class Example05_TypedWithFallback {
-  private Example05_TypedWithFallback() {}
+public final class Example05TypedWithFallback {
+  private Example05TypedWithFallback() {}
 
   public static void run() throws Exception {
     Pipe<QuoteSteps.Req, QuoteSteps.Res> pipe =

@@ -4,8 +4,8 @@ import com.pipeline.core.Pipeline;
 import com.pipeline.disruptor.DisruptorEngine;
 import com.pipeline.examples.steps.TextSteps;
 
-public final class Example10_DisruptorIntegration {
-  private Example10_DisruptorIntegration() {}
+public final class Example10DisruptorIntegration {
+  private Example10DisruptorIntegration() {}
 
   public static void run() throws Exception {
     var p = new Pipeline.Builder<String>("ex10-clean")

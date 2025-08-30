@@ -6,8 +6,8 @@ import com.pipeline.examples.steps.ListSteps;
 import java.util.Arrays;
 import java.util.List;
 
-public final class Example07_ListDedupSort {
-  private Example07_ListDedupSort() {}
+public final class Example07ListDedupSort {
+  private Example07ListDedupSort() {}
 
   public static void run() {
     var p = new Pipeline.Builder<List<String>>("ex07")
