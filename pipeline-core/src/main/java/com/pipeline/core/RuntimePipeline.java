@@ -35,18 +35,21 @@ public final class RuntimePipeline<T> {
 
   /** Apply a pre action (record + execute unless ended) and return the updated value. */
   public T addPreAction(ThrowingFn<T,T> preFn) {
+    if (ended) return current;           // <-- do not record after short-circuit
     pre.add(preFn);
     return apply(preFn, "pre" + preIdx++);
   }
 
   /** Apply a main step (record + execute unless ended) and return the updated value. */
   public T addStep(ThrowingFn<T,T> stepFn) {
+    if (ended) return current;           // <-- do not record after short-circuit
     main.add(stepFn);
     return apply(stepFn, "s" + stepIdx++);
   }
 
   /** Apply a post action (record + execute unless ended) and return the updated value. */
   public T addPostAction(ThrowingFn<T,T> postFn) {
+    if (ended) return current;           // <-- do not record after short-circuit
     post.add(postFn);
     return apply(postFn, "post" + postIdx++);
   }
@@ -74,7 +77,7 @@ public final class RuntimePipeline<T> {
 
   /** Freeze the recorded steps into an immutable Pipeline<T>. */
   public Pipeline<T> toImmutable() {
-    Pipeline.Builder<T> b = Pipeline.builder(name).shortCircuit(shortCircuit);
+    Pipeline.Builder<T> b = Pipeline.<T>builder(name).shortCircuit(shortCircuit);
     for (var fn : pre)  b.beforeEach(fn);
     for (var fn : main) b.step(fn);
     for (var fn : post) b.afterEach(fn);

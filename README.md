@@ -10,24 +10,23 @@ Local‑first pipelines with `shortCircuit`, prompt‑to‑code (build time), an
 ------
 
 ## Contents
-
-- [Why](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#why)
-- [Features at a glance](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#features-at-a-glance)
-- [Modules](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#modules)
-- [Install & build](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#install--build)
-- [Quick start](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#quick-start)
-  - [Unary pipelines with `Pipeline`](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#unary-pipelines-with-pipelinet)
-  - [Typed pipelines with `Pipe`](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#typed-pipelines-with-pipeio)
-  - [Imperative runtime style with `RuntimePipeline`](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#imperative-runtime-style-with-runtimepipelinet)
-  - [Per‑pipeline JSON config (optional)](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#per-pipeline-json-config-optional)
-  - [HTTP remote step](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#http-remote-step)
-- [Short‑circuit semantics](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#shortcircuit-semantics)
-- [Prompt‑generated steps (scaffold)](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#prompt-generated-steps-scaffold)
-- [Metrics](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#metrics)
-- [Examples](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#examples)
-- [Roadmap](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#roadmap)
-- [Contributing](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#contributing)
-- [License](https://chatgpt.com/g/g-p-68b238013c5c819194a696bf35f9f2e9/c/68b1c630-6a80-8327-a8cb-cdb66c9c6ada#license)
+- [Why](#why)
+- [Features at a glance](#features-at-a-glance)
+- [Modules](#modules)
+- [Install & build](#install--build)
+- [Quick start](#quick-start)
+  - [Unary pipelines with `Pipeline<T>`](#unary-pipelines-with-pipelinet)
+  - [Typed pipelines with `Pipe<I,O>`](#typed-pipelines-with-pipeio)
+  - [Imperative runtime style with `RuntimePipeline<T>`](#imperative-runtime-style-with-runtimepipelinet)
+  - [Per‑pipeline JSON config (optional)](#per-pipeline-json-config-optional)
+  - [HTTP remote step](#http-remote-step)
+- [Short‑circuit semantics](#shortcircuit-semantics)
+- [Prompt‑generated steps (scaffold)](#prompt-generated-steps-scaffold)
+- [Metrics](#metrics)
+- [Examples](#examples)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ------
 
@@ -76,6 +75,29 @@ Requirements:
 
 - Java 21+
 - Maven 3.9+ (wrapper included)
+
+**Using the BOM (when published to Maven Central)**
+```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.github.nectario</groupId>
+      <artifactId>pipeline-bom</artifactId>
+      <version>0.1.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>io.github.nectario</groupId>
+    <artifactId>pipeline-core</artifactId>
+  </dependency>
+</dependencies>
+```
+*(Keep the existing `mvnw` build instructions.)*
 
 Build everything:
 
@@ -176,8 +198,11 @@ rt.reset("  Another   Input ");   // start a new run
 You can “freeze” a runtime session into an immutable pipeline:
 
 ```java
-var frozen = rt.toImmutable(); // or rt.freeze()
+// Freeze the recorded steps into an immutable pipeline
+Pipeline<String> frozen = rt.toImmutable();   // or rt.freeze()
 ```
+
+> After a short‑circuit in a session, further `add*` calls are **ignored and not recorded** until `reset(...)`, so `freeze()` always reflects the steps that actually run.
 
 ------
 
