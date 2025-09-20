@@ -1,0 +1,124 @@
+# PipelineServices_Contract_v1.yaml
+meta:
+  version: "v1"
+  status: "active"
+  purpose: >
+    Define the cross-language public surface (Java, Python, Mojo, and future ports)
+    and the behavioral invariants for labeled pipelines, jumps, short-circuiting,
+    metrics, JSON configuration, prompt and remote steps, and the Disruptor engine.
+
+language_conventions:
+  java:
+    style: "CamelCase for types, camelCase for members; checked exceptions as appropriate"
+  python:
+    style: "snake_case, no leading underscores in public API; type hints where reasonable"
+  mojo:
+    style: "structs (no classes), fn with typed parameters/returns, snake_case for functions/vars, PascalCase for structs"
+  common:
+    names: [Pipeline, Pipe, RuntimePipeline, Metrics, LoggingMetrics, NoopMetrics, PipelineRegistry, PipelineJsonLoader]
+    rules:
+      - "Public event names are canonical: pipeline.start, step.start, step.end, step.error, step.jump, pipeline.end"
+      - "Durations use monotonic clocks (perf_counter_ns-equivalent)"
+
+invariants:
+  pipeline:
+    sections:
+      - "pre: runs once before main"
+      - "main: labeled steps; only here may jumps target"
+      - "post: runs once after main"
+    labels:
+      unique: true
+      targetable_sections: ["main"]
+      start_label_section: "main"
+    control_flow:
+      short_circuit:
+        effect: "Terminates successfully with provided value"
+        signal: "Exception/raise or typed signal per language"
+      jump:
+        fields: ["label", "delayMillis"]
+        effect: "Sets next step to target label in main; optional delay before jump"
+        guardrails:
+          max_jumps:
+            default: 1000
+            effect: "If exceeded, error and terminate per short_circuit setting"
+  before_after_each:
+    applies_to: "main steps only"
+  error_handling:
+    short_circuit_true: "First unhandled error ends the run with error"
+    short_circuit_false: "Record error in metrics and continue with current value"
+  metrics:
+    events: [pipeline.start, step.start, step.end, step.error, step.jump, pipeline.end]
+    fields:
+      pipeline.start: [name, runId, startLabel]
+      step.start: [name, runId, index, label]
+      step.end: [name, runId, index, label, durationNanos, success]
+      step.error: [name, runId, index, label, error]
+      step.jump: [name, runId, fromLabel, toLabel, delayMillis]
+      pipeline.end: [name, runId, durationNanos, success, error?]
+
+json_config:
+  root:
+    fields:
+      pipeline: "string"
+      type: ["unary", "typed"]
+      shortCircuit: "boolean (default true)"
+      pre: "array[StepNode] (optional)"
+      steps: "array[StepNode] (required for unary; optional for typed)"
+      post: "array[StepNode] (optional)"
+  step_node:
+    one_of:
+      - $local: "package.module.ClassWithApply"
+      - $method:
+          ref: "package.module.Class#method | package.module:function"
+          target: "@this | @beanId | null"
+      - $prompt: "object — free-form prompt spec"
+      - $remote:
+          endpoint: "string (URL)"
+          method: ["POST","GET"]
+          timeoutMillis: "int"
+          retries: "int"
+          headers: "map[string,string]"
+          toJsonBean: "string?"
+          fromJsonBean: "string?"
+    optional:
+      label: "string"
+      jumpWhen:
+        label: "string (target must be in main)"
+        delayMillis: "int"
+        predicate: "StepNode returning bool"
+prompt:
+  adapter_signature: "adapter(input_value, prompt_spec_dict) -> output_value"
+  spec_fields: [name, goal, rules[], examples[], p50Micros?]
+
+remote:
+  request:
+    to_json: "function used to encode input"
+    from_json: "function used to decode response"
+    method_semantics:
+      GET: "If to_json -> dict, encode with application/x-www-form-urlencoded; else append string as query"
+      POST: "Send body as application/json"
+  retries:
+    backoff: "linear 50ms * (attemptIndex+1)"
+    total_attempts: "retries + 1"
+engine:
+  disruptor:
+    queue_behavior:
+      backpressure: "block"
+      worker: "single-consumer"
+      publish_errors: "raise if engine stopped"
+defaults:
+  max_jumps: 1000
+  shortCircuit: true
+compliance_tests:
+  - id: "jump_guard_pre_section"
+    description: "Jump to a pre-section label must fail"
+  - id: "pipeline_start_event"
+    description: "Metrics must include pipeline.start"
+  - id: "duplicate_labels_rejected"
+    description: "Duplicate labels anywhere are an error"
+  - id: "typed_pre_post_order"
+    description: "Typed pipe runs pre -> steps -> post in order"
+  - id: "remote_get_encoding"
+    description: "GET query encodes dict with urlencode and appends strings directly"
+  - id: "engine_backpressure_block"
+    description: "publish blocks when queue is full"

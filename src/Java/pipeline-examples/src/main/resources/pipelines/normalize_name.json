@@ -1,0 +1,27 @@
+{
+  "pipeline": "normalize_name",
+  "type": "unary",
+  "shortCircuit": false,
+  "steps": [
+    {"$local": "com.pipeline.examples.adapters.TextStripStep"},
+    {
+      "$prompt": {
+        "class": "com.pipeline.generated.NormalizeName",
+        "in": "java.lang.String",
+        "out": "java.lang.String",
+        "goal": "Normalize human names to Title Case while preserving internal spaces.",
+        "rules": [
+          "Trim leading/trailing whitespace",
+          "Collapse internal whitespace to single spaces",
+          "Title-case each token (first letter uppercase, rest lowercase)"
+        ],
+        "examples": [
+          {"in": "  john   SMITH ", "out": "John Smith"},
+          {"in": "ALICE    deLANEY", "out": "Alice Delaney"}
+        ],
+        "p50Micros": 200
+      }
+    },
+    {"$local": "com.pipeline.examples.adapters.TextNormalizeStep"}
+  ]
+}

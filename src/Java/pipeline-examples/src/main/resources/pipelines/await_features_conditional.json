@@ -1,0 +1,22 @@
+{
+  "pipeline": "await_features_conditional",
+  "type": "typed",
+  "inType": "com.pipeline.examples.steps.FinanceSteps$Features",
+  "outType": "com.pipeline.examples.steps.FinanceSteps$Score",
+  "shortCircuit": true,
+  "steps": [
+    { "label":"await",
+      "in": "com.pipeline.examples.steps.FinanceSteps$Features",
+      "out":"com.pipeline.examples.steps.FinanceSteps$Features",
+      "$method": { "ref":"com.pipeline.examples.polling.AvailabilityTyped#awaitFeatures" } },
+    { "label":"score",
+      "in": "com.pipeline.examples.steps.FinanceSteps$Features",
+      "out":"com.pipeline.examples.steps.FinanceSteps$Score",
+      "jumpWhen": {
+        "label": "await",
+        "delayMillis": 5,
+        "predicate": { "$method": { "ref": "com.pipeline.examples.conditions.TypedPredicates#needsAwait" } }
+      },
+      "$method": { "ref":"com.pipeline.examples.steps.FinanceSteps#score" } }
+  ]
+}

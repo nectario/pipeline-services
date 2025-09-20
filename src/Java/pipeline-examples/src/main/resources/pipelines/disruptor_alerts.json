@@ -1,0 +1,17 @@
+{
+  "pipeline": "disruptor_alerts",
+  "type": "typed",
+  "inType":  "com.pipeline.examples.disruptor.MarketDataEvent",
+  "outType": "com.pipeline.examples.disruptor.Alerts$Alert",
+  "shortCircuit": true,
+  "steps": [
+    { "label": "enrich",
+      "in":  "com.pipeline.examples.disruptor.MarketDataEvent",
+      "out": "com.pipeline.examples.disruptor.Alerts$Enriched",
+      "$method": { "ref": "com.pipeline.examples.disruptor.PriceSteps#enrich" } },
+    { "label": "alert",
+      "in":  "com.pipeline.examples.disruptor.Alerts$Enriched",
+      "out": "com.pipeline.examples.disruptor.Alerts$Alert",
+      "$method": { "ref": "com.pipeline.examples.disruptor.PriceSteps#alert" } }
+  ]
+}

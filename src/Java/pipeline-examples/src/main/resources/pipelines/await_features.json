@@ -1,0 +1,17 @@
+{
+  "pipeline": "await_features",
+  "type": "typed",
+  "inType": "com.pipeline.examples.steps.FinanceSteps$Features",
+  "outType": "com.pipeline.examples.steps.FinanceSteps$Score",
+  "shortCircuit": true,
+  "steps": [
+    { "label":"await",
+      "in": "com.pipeline.examples.steps.FinanceSteps$Features",
+      "out":"com.pipeline.examples.steps.FinanceSteps$Features",
+      "$method": { "ref":"com.pipeline.examples.polling.AvailabilityTyped#awaitFeatures" } },
+    { "label":"score",
+      "in": "com.pipeline.examples.steps.FinanceSteps$Features",
+      "out":"com.pipeline.examples.steps.FinanceSteps$Score",
+      "$method": { "ref":"com.pipeline.examples.steps.FinanceSteps#score" } }
+  ]
+}

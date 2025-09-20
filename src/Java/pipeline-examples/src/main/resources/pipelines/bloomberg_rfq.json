@@ -1,0 +1,32 @@
+{
+  "pipeline": "bloomberg_rfq",
+  "type": "typed",
+  "inType": "com.pipeline.examples.steps.FinanceSteps$Tick",
+  "outType": "com.pipeline.examples.steps.FinanceSteps$OrderResponse",
+  "shortCircuit": true,
+
+  "pre": [
+    { "label": "ensure",
+      "in":  "com.pipeline.examples.steps.FinanceSteps$Tick",
+      "out": "com.pipeline.examples.steps.FinanceSteps$Tick",
+      "$method": { "ref": "com.pipeline.examples.bloomberg.BloombergRFQPipeline#ensureSession", "target": "@this" }
+    }
+  ],
+  "steps": [
+    { "label": "features",
+      "in":  "com.pipeline.examples.steps.FinanceSteps$Tick",
+      "out": "com.pipeline.examples.steps.FinanceSteps$Features",
+      "$method": { "ref": "com.pipeline.examples.bloomberg.BloombergRFQPipeline#computeFeatures", "target": "@this" }
+    },
+    { "label": "score",
+      "in":  "com.pipeline.examples.steps.FinanceSteps$Features",
+      "out": "com.pipeline.examples.steps.FinanceSteps$Score",
+      "$method": { "ref": "com.pipeline.examples.steps.FinanceSteps#score" }
+    },
+    { "label": "decide",
+      "in":  "com.pipeline.examples.steps.FinanceSteps$Score",
+      "out": "com.pipeline.examples.steps.FinanceSteps$OrderResponse",
+      "$method": { "ref": "com.pipeline.examples.steps.FinanceSteps#decide" }
+    }
+  ]
+}
