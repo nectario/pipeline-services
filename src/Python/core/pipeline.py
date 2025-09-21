@@ -255,3 +255,174 @@ try:
     Pipe.add_action = pipe_add_action  # type: ignore[attr-defined]
 except Exception:
     pass
+
+# === Java API parity: additional Pipeline methods and run wrapper ===
+from typing import Callable, Optional, Any
+import time
+
+def pipeline_before(self, label: str, action_function: Callable[[Any], Any]):
+    if not isinstance(label, str) or len(label.strip()) == 0:
+        raise ValueError("before(label, fn) requires a non-empty label")
+    target_index = -1
+    for i, s in enumerate(self._steps):
+        if s.section == 'main' and s.label == label:
+            target_index = i
+            break
+    if target_index < 0:
+        raise ValueError(f"before: label not found among main steps: {label}")
+    name_value = getattr(action_function, '__name__', 'step')
+    self._steps.insert(target_index, _LabeledStep(label=None, name=name_value, fn=action_function, section='main'))
+    return self
+
+def pipeline_after(self, label: str, action_function: Callable[[Any], Any]):
+    if not isinstance(label, str) or len(label.strip()) == 0:
+        raise ValueError("after(label, fn) requires a non-empty label")
+    target_index = -1
+    for i, s in enumerate(self._steps):
+        if s.section == 'main' and s.label == label:
+            target_index = i
+            break
+    if target_index < 0:
+        raise ValueError(f"after: label not found among main steps: {label}")
+    name_value = getattr(action_function, '__name__', 'step')
+    self._steps.insert(target_index + 1, _LabeledStep(label=None, name=name_value, fn=action_function, section='main'))
+    return self
+
+def pipeline_jump_to(self, label: str):
+    self.default_start_label = str(label)
+    return self
+
+def pipeline_set_metrics(self, metrics: Metrics):
+    self._metrics = metrics
+    return self
+
+def pipeline_set_max_jumps_per_run(self, n: int):
+    try:
+        value = int(n)
+    except Exception:
+        value = 0
+    if value < 0:
+        value = 0
+    self.max_jumps = value
+    return self
+
+def pipeline_enable_jumps(self, enabled: bool):
+    if enabled:
+        prev = getattr(self, 'previous_max_jumps', None)
+        if isinstance(prev, int) and prev >= 0:
+            self.max_jumps = prev
+        elif not isinstance(getattr(self, 'max_jumps', None), int) or self.max_jumps <= 0:
+            self.max_jumps = 1000
+    else:
+        self.previous_max_jumps = getattr(self, 'max_jumps', 1000)
+        self.max_jumps = 0
+    return self
+
+def pipeline_set_name(self, new_name: str):
+    self.name = str(new_name)
+    return self
+
+def pipeline_set_short_circuit(self, enabled: bool):
+    self.short_circuit = bool(enabled)
+    return self
+
+def pipeline_on_error_return(self, handler: Callable[[Exception], Any]):
+    if not callable(handler):
+        raise ValueError("on_error_return(handler) requires a function")
+    self.error_handler = handler
+    return self
+
+def pipeline_sleeper(self, sleeper_fn: Callable[[int], None]):
+    if not callable(sleeper_fn):
+        raise ValueError("sleeper(fn) requires a function that accepts milliseconds")
+    self.sleeper_function = sleeper_fn
+    return self
+
+def pipeline_fork(self):
+    clone = Pipeline(self.name, self.short_circuit, self._metrics)
+    clone.max_jumps = getattr(self, 'max_jumps', 1000)
+    clone._steps = [_LabeledStep(label=s.label, name=s.name, fn=s.fn, section=s.section) for s in self._steps]
+    clone._before_each = list(getattr(self, '_before_each', []))
+    clone._after_each = list(getattr(self, '_after_each', []))
+    for attr in ('default_start_label', 'error_handler', 'previous_max_jumps'):
+        if hasattr(self, attr):
+            setattr(clone, attr, getattr(self, attr))
+    return clone
+
+def pipeline_is_sealed(self) -> bool:
+    return bool(getattr(self, 'sealed', False))
+
+def pipeline_add_bean(self, bean_id: str, instance: Any):
+    beans = getattr(self, 'beans', None)
+    if beans is None:
+        beans = {}
+        setattr(self, 'beans', beans)
+    beans[str(bean_id)] = instance
+    return self
+
+def pipeline_add_pipeline_config(self, text_or_path: str):
+    from ..config.json_loader import PipelineJsonLoader
+    loader = PipelineJsonLoader(beans=getattr(self, 'beans', {}), metrics=self._metrics)
+    txt = str(text_or_path or "").strip()
+    if txt.startswith('{') or txt.startswith('['):
+        loaded = loader.load_str(txt)
+    else:
+        loaded = loader.load_file(txt)
+    # Merge steps and hooks
+    self._steps.extend(getattr(loaded, '_steps', []))
+    be = getattr(loaded, '_before_each', [])
+    ae = getattr(loaded, '_after_each', [])
+    if be: getattr(self, '_before_each', []).extend(be)
+    if ae: getattr(self, '_after_each', []).extend(ae)
+    return self
+
+# Monkey-patch methods onto Pipeline
+try:
+    Pipeline.before = pipeline_before  # type: ignore
+    Pipeline.after = pipeline_after  # type: ignore
+    Pipeline.jump_to = pipeline_jump_to  # type: ignore
+    Pipeline.set_metrics = pipeline_set_metrics  # type: ignore
+    Pipeline.set_max_jumps_per_run = pipeline_set_max_jumps_per_run  # type: ignore
+    Pipeline.enable_jumps = pipeline_enable_jumps  # type: ignore
+    Pipeline.set_name = pipeline_set_name  # type: ignore
+    Pipeline.set_short_circuit = pipeline_set_short_circuit  # type: ignore
+    Pipeline.on_error_return = pipeline_on_error_return  # type: ignore
+    Pipeline.sleeper = pipeline_sleeper  # type: ignore
+    Pipeline.fork = pipeline_fork  # type: ignore
+    Pipeline.is_sealed = pipeline_is_sealed  # type: ignore
+    Pipeline.add_bean = pipeline_add_bean  # type: ignore
+    Pipeline.add_pipeline_config = pipeline_add_pipeline_config  # type: ignore
+except Exception:
+    pass
+
+# Wrap run to support default start label, sleeper override, and on_error_return
+try:
+    Pipeline.run_original = Pipeline.run  # type: ignore
+    def run(self, inp, *, start_label: Optional[str] = None, run_id: Optional[str] = None):  # type: ignore[override]
+        chosen_label = start_label if start_label is not None else getattr(self, 'default_start_label', None)
+        using_override = False
+        old_sleep = None
+        if hasattr(self, 'sleeper_function') and callable(getattr(self, 'sleeper_function')):
+            using_override = True
+            old_sleep = time.sleep
+            def sleep_override(seconds: float):
+                try:
+                    millis = int(seconds * 1000.0)
+                except Exception:
+                    millis = 0
+                self.sleeper_function(millis)  # type: ignore[attr-defined]
+            time.sleep = sleep_override  # type: ignore[assignment]
+        self.sealed = True
+        try:
+            return Pipeline.run_original(self, inp, start_label=chosen_label, run_id=run_id)  # type: ignore[attr-defined]
+        except Exception as err:
+            handler = getattr(self, 'error_handler', None)
+            if callable(handler):
+                return handler(err)
+            raise
+        finally:
+            if using_override and old_sleep is not None:
+                time.sleep = old_sleep  # type: ignore[assignment]
+    Pipeline.run = run  # type: ignore[assignment]
+except Exception:
+    pass

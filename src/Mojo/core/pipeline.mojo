@@ -27,6 +27,13 @@ struct Pipeline:
     var after_each_steps: List[StepFunction]
     var metrics: Metrics
     var max_jumps: Int
+    var default_start_label: String
+    var sealed: Bool
+    var has_error_handler: Bool
+    var error_handler: fn(err: PythonObject) -> PythonObject
+    var beans: Dict[String, PythonObject]
+    var has_sleeper: Bool
+    var sleeper_fn: fn(ms: Int) -> None
 
     fn __init__(out self, name: String, short_circuit: Bool = True, metrics: Metrics = NoopMetrics()):
         self.name = name
@@ -35,6 +42,15 @@ struct Pipeline:
         self.before_each_steps = List[StepFunction]()
         self.after_each_steps = List[StepFunction]()
         self.metrics = metrics
+        self.default_start_label = ""
+        self.sealed = False
+        self.has_error_handler = False
+        self.error_handler = fn(err: PythonObject) -> PythonObject:
+            return err
+        self.beans = Dict[String, PythonObject]()
+        self.has_sleeper = False
+        self.sleeper_fn = fn(ms: Int) -> None:
+            sleep(Float64(ms) / 1000.0)
         self.max_jumps = 1000
 
     fn before_each(self, step_function: StepFunction) -> Self:
@@ -52,6 +68,9 @@ struct Pipeline:
         self.step(first); return self
 
     fn run(self, input_value: PythonObject, start_label: String = "", run_id: String = "") raises -> PythonObject:
+        if start_label == "" and self.default_start_label != "":
+            start_label = self.default_start_label
+        self.sealed = True
         var run_scope = self.metrics.on_pipeline_start(self.name, run_id, start_label)
         var run_start_ns: Int = perf_counter_ns()
 
@@ -172,8 +191,11 @@ struct Pipeline:
                         last_error_message = msg
                         break
                     if signals.jump_delay_ms > 0:
-                        var seconds: Float64 = Float64(signals.jump_delay_ms) / 1000.0
-                        sleep(seconds)
+                        if self.has_sleeper:
+                            self.sleeper_fn(signals.jump_delay_ms)
+                        else:
+                            var seconds: Float64 = Float64(signals.jump_delay_ms) / 1000.0
+                            sleep(seconds)
                     if signals.jump_label in label_to_index:
                         var to_index: Int = label_to_index[signals.jump_label]
                         run_scope.on_jump(label_or_name, signals.jump_label, signals.jump_delay_ms)
@@ -235,6 +257,15 @@ struct Pipe:
         self.short_circuit_enabled = short_circuit
         self.steps = List[TypedStepFunction]()
         self.metrics = metrics
+        self.default_start_label = ""
+        self.sealed = False
+        self.has_error_handler = False
+        self.error_handler = fn(err: PythonObject) -> PythonObject:
+            return err
+        self.beans = Dict[String, PythonObject]()
+        self.has_sleeper = False
+        self.sleeper_fn = fn(ms: Int) -> None:
+            sleep(Float64(ms) / 1000.0)
 
     fn step(self, step_function: TypedStepFunction) -> Self:
         self.steps.push_back(step_function); return self
@@ -324,3 +355,144 @@ fn add_action(self, step_function: StepFunction) -> Self:
 # Adds a labeled action into the main section.
 fn add_action_with_label(self, label: String, step_function: StepFunction) -> Self:
     return self.step(step_function, label = label, name = "", section = "main")
+    # === Java parity: additional methods ===
+    fn before(self, label: String, step_function: StepFunction) -> Self:
+        var target_index: Int = -1
+        var i: Int = 0
+        while i < Int(len(self.steps)):
+            var s = self.steps[i]
+            if s.section == "main" and s.label == label:
+                target_index = i
+                break
+            i = i + 1
+        if target_index < 0:
+            raise "before: label not found among main steps: " + label
+        var new_step = LabeledStep(label = "", name = "step", function_pointer = step_function, section = "main")
+        # rebuild steps with insertion
+        var new_steps = List[LabeledStep]()
+        var j: Int = 0
+        while j < Int(len(self.steps)):
+            if j == target_index:
+                new_steps.push_back(new_step)
+            new_steps.push_back(self.steps[j])
+            j = j + 1
+        self.steps = new_steps
+        return self
+
+    fn after(self, label: String, step_function: StepFunction) -> Self:
+        var target_index: Int = -1
+        var i: Int = 0
+        while i < Int(len(self.steps)):
+            var s = self.steps[i]
+            if s.section == "main" and s.label == label:
+                target_index = i
+                break
+            i = i + 1
+        if target_index < 0:
+            raise "after: label not found among main steps: " + label
+        var new_step = LabeledStep(label = "", name = "step", function_pointer = step_function, section = "main")
+        # rebuild steps with insertion after
+        var new_steps = List[LabeledStep]()
+        var j: Int = 0
+        while j < Int(len(self.steps)):
+            new_steps.push_back(self.steps[j])
+            if j == target_index:
+                new_steps.push_back(new_step)
+            j = j + 1
+        self.steps = new_steps
+        return self
+
+    fn jump_to(self, label: String) -> Self:
+        self.default_start_label = label
+        return self
+
+    fn set_metrics(self, metrics_value: Metrics) -> Self:
+        self.metrics = metrics_value
+        return self
+
+    fn set_max_jumps_per_run(self, n: Int) -> Self:
+        if n < 0:
+            self.max_jumps = 0
+        else:
+            self.max_jumps = n
+        return self
+
+    fn enable_jumps(self, enabled: Bool) -> Self:
+        if enabled:
+            if self.max_jumps <= 0:
+                self.max_jumps = 1000
+        else:
+            self.max_jumps = 0
+        return self
+
+    fn set_name(self, new_name: String) -> Self:
+        self.name = new_name
+        return self
+
+    fn set_short_circuit(self, enabled: Bool) -> Self:
+        self.short_circuit_enabled = enabled
+        return self
+
+    fn on_error_return(self, handler: fn(err: PythonObject) -> PythonObject) -> Self:
+        self.error_handler = handler
+        self.has_error_handler = True
+        return self
+
+    fn fork(self) -> Pipeline:
+        var other = Pipeline(self.name, self.short_circuit_enabled, self.metrics)
+        other.max_jumps = self.max_jumps
+        other.steps = List[LabeledStep]()
+        var k: Int = 0
+        while k < Int(len(self.steps)):
+            var s = self.steps[k]
+            other.steps.push_back(LabeledStep(label = s.label, name = s.name, function_pointer = s.function_pointer, section = s.section))
+            k = k + 1
+        other.before_each_steps = List[StepFunction]()
+        var b: Int = 0
+        while b < Int(len(self.before_each_steps)):
+            other.before_each_steps.push_back(self.before_each_steps[b])
+            b = b + 1
+        other.after_each_steps = List[StepFunction]()
+        var a: Int = 0
+        while a < Int(len(self.after_each_steps)):
+            other.after_each_steps.push_back(self.after_each_steps[a])
+            a = a + 1
+        other.default_start_label = self.default_start_label
+        other.has_error_handler = self.has_error_handler
+        other.error_handler = self.error_handler
+        return other
+
+    fn sleeper(self, sleeper_function: fn(ms: Int) -> None) -> Self:
+        self.sleeper_fn = sleeper_function
+        self.has_sleeper = True
+        return self
+
+
+    fn is_sealed(self) -> Bool:
+        return self.sealed
+
+    fn add_bean(self, bean_id: String, instance: PythonObject) -> Self:
+        self.beans[bean_id] = instance
+        return self
+
+    fn add_pipeline_config(self, text: String) raises -> Self:
+        from ..config.json_loader import PipelineJsonLoader
+        var loader = PipelineJsonLoader(beans = self.beans, instance_object = None)
+        var loaded_obj = loader.load_str(text)
+        # Expect a Pipeline returned
+        var loaded = loaded_obj as Pipeline
+        # Merge steps and hooks
+        var i: Int = 0
+        while i < Int(len(loaded.steps)):
+            self.steps.push_back(loaded.steps[i])
+            i = i + 1
+        var b: Int = 0
+        while b < Int(len(loaded.before_each_steps)):
+            self.before_each_steps.push_back(loaded.before_each_steps[b])
+            b = b + 1
+        var a: Int = 0
+        while a < Int(len(loaded.after_each_steps)):
+            self.after_each_steps.push_back(loaded.after_each_steps[a])
+            a = a + 1
+        return self
+

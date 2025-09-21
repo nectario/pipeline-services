@@ -11,3 +11,4 @@ export * from "./disruptor/engine.js";
 
 export { PipelineServices } from './facade.js';
 import './core/add_action_polyfill.js';
+import './core/api_parity_polyfill.js';
