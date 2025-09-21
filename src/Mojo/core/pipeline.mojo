@@ -315,3 +315,12 @@ struct RuntimePipeline:
 
     fn value(self) -> PythonObject:
         return self.current_value
+
+# === Java API parity: add_action helpers ===
+# Adds an unlabeled action into the main section.
+fn add_action(self, step_function: StepFunction) -> Self:
+    return self.step(step_function, label = "", name = "", section = "main")
+
+# Adds a labeled action into the main section.
+fn add_action_with_label(self, label: String, step_function: StepFunction) -> Self:
+    return self.step(step_function, label = label, name = "", section = "main")

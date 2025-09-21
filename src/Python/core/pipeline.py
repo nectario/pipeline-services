@@ -233,3 +233,25 @@ class RuntimePipeline(Generic[T]):
 
     def value(self) -> Optional[T]:
         return self._current
+
+# === Java API parity: add_action helpers ===
+from typing import Optional, Callable, Any
+
+def pipeline_add_action(self, action_function: Callable[[Any], Any], label: Optional[str] = None):
+    if label is not None and not isinstance(label, str):
+        raise TypeError("label must be a string if provided")
+    # Add to main section to allow jumps/labels to match Java semantics
+    return self.step(action_function, label=label, section="main")
+
+def pipe_add_action(self, action_function: Callable[[Any], Any]):
+    # Typed pipe is linear; just append the step
+    return self.step(action_function)
+
+try:
+    Pipeline.add_action = pipeline_add_action  # type: ignore[attr-defined]
+except Exception:
+    pass
+try:
+    Pipe.add_action = pipe_add_action  # type: ignore[attr-defined]
+except Exception:
+    pass

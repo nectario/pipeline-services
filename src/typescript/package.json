@@ -1,0 +1,21 @@
+{
+  "name": "pipeline-services-ts",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Pipeline Services \u2014 TypeScript port (pre/main/post sections, labels & jumps, metrics, JSON loader, prompt and remote steps, disruptor engine).",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "node --test --loader ts-node/esm tests/run-tests.ts"
+  },
+  "keywords": [
+    "pipeline",
+    "workflow",
+    "mojo",
+    "java",
+    "typescript"
+  ],
+  "license": "MIT"
+}
