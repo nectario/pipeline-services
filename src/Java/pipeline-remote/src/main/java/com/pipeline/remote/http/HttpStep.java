@@ -46,6 +46,7 @@ public final class HttpStep {
     }
 
     private static <C> C invoke(RemoteSpec<C> spec, String method, C ctx) throws IOException, InterruptedException {
+        validateSpec(spec);
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(spec.timeoutMillis))
                 .build();
@@ -62,7 +63,8 @@ public final class HttpStep {
             b = b.uri(URI.create(uri));
             b = b.GET();
         }
-        for (Map.Entry<String, String> e : spec.headers.entrySet()) {
+        Map<String, String> headers = spec.headers == null ? Map.of() : spec.headers;
+        for (Map.Entry<String, String> e : headers.entrySet()) {
             b.header(e.getKey(), e.getValue());
         }
         b.header("Content-Type", "application/json");
@@ -92,6 +94,7 @@ public final class HttpStep {
     }
 
     private static <I, O> O invokeTyped(RemoteSpecTyped<I, O> spec, String method, I in) throws IOException, InterruptedException {
+        validateSpec(spec);
         HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(spec.timeoutMillis))
             .build();
@@ -108,7 +111,8 @@ public final class HttpStep {
             b = b.uri(URI.create(uri));
             b = b.GET();
         }
-        for (Map.Entry<String, String> e : spec.headers.entrySet()) {
+        Map<String, String> headers = spec.headers == null ? Map.of() : spec.headers;
+        for (Map.Entry<String, String> e : headers.entrySet()) {
             b.header(e.getKey(), e.getValue());
         }
         b.header("Content-Type", "application/json");
@@ -133,6 +137,22 @@ public final class HttpStep {
         if (query == null || query.isBlank()) return endpoint;
         if (endpoint.contains("?")) return endpoint + "&" + query;
         return endpoint + "?" + query;
+    }
+
+    private static void validateSpec(RemoteSpec<?> spec) {
+        if (spec.endpoint == null || spec.endpoint.isBlank()) {
+            throw new IllegalArgumentException("RemoteSpec.endpoint is required");
+        }
+        Objects.requireNonNull(spec.toJson, "RemoteSpec.toJson");
+        Objects.requireNonNull(spec.fromJson, "RemoteSpec.fromJson");
+    }
+
+    private static void validateSpec(RemoteSpecTyped<?, ?> spec) {
+        if (spec.endpoint == null || spec.endpoint.isBlank()) {
+            throw new IllegalArgumentException("RemoteSpecTyped.endpoint is required");
+        }
+        Objects.requireNonNull(spec.toJson, "RemoteSpecTyped.toJson");
+        Objects.requireNonNull(spec.fromJson, "RemoteSpecTyped.fromJson");
     }
 
     public static final class RemoteSpec<C> {
