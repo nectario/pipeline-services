@@ -7,13 +7,14 @@ import com.pipeline.examples.steps.PolicySteps;
 public final class ExampleJsonPromptMixed {
   private ExampleJsonPromptMixed() {}
 
-  public static void run() {
-    Pipeline<String> p = new Pipeline<String>()
+  public static void run() throws Exception {
+    Pipeline<String, String> p = new Pipeline<String, String>()
         .shortCircuit(false)
         .before(PolicySteps::rateLimit)
         .addAction(TextSteps::strip);
 
-    String json = """      {"pipeline":"normalize_name","type":"unary","shortCircuit":false,
+    String json = """
+      {"pipeline":"normalize_name","type":"unary","shortCircuit":false,
        "steps":[
          {"$prompt":{"class":"com.pipeline.generated.NormalizeName",
                      "in":"java.lang.String","out":"java.lang.String",

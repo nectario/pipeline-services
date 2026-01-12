@@ -5,6 +5,7 @@
     <groupId>io.github.nectario</groupId>
     <artifactId>pipeline-services</artifactId>
     <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
   </parent>
   <artifactId>pipeline-examples</artifactId>
   <name>pipeline-examples</name>
@@ -12,6 +13,11 @@
     <dependency>
       <groupId>io.github.nectario</groupId>
       <artifactId>pipeline-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.nectario</groupId>
+      <artifactId>pipeline-api</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

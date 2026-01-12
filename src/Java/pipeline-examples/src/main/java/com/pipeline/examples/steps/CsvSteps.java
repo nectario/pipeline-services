@@ -5,7 +5,7 @@ import java.util.*;
 public final class CsvSteps {
   private CsvSteps() {}
   /** Very small CSV parser for "a,b\n1,2" -> List<Map> with headers. */
-  public static List<Map<String,String>> parse(String csv) throws Exception {
+  public static List<Map<String,String>> parse(String csv) {
     List<Map<String,String>> out = new ArrayList<>();
     if (csv == null || csv.isBlank()) return out;
     String[] lines = csv.strip().split("\\R+");
@@ -19,4 +19,3 @@ public final class CsvSteps {
     return out;
   }
 }
-

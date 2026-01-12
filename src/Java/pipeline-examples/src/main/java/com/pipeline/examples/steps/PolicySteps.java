@@ -8,7 +8,7 @@ public final class PolicySteps {
 
   private PolicySteps() {}
   /** Simple local rate-limiter: drops to previous value if too soon. */
-  public static String rateLimit(String s) throws Exception {
+  public static String rateLimit(String s) {
     long now = System.nanoTime();
     long last = LAST_NS.get();
     if (now - last < MIN_GAP_NS) return s;
@@ -16,6 +16,5 @@ public final class PolicySteps {
     return s;
   }
   /** Minimal audit example (no-op; could log/metric). */
-  public static String audit(String s) throws Exception { return s; }
+  public static String audit(String s) { return s; }
 }
-

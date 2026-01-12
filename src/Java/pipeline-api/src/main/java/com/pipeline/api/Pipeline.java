@@ -9,6 +9,7 @@ import com.pipeline.core.ThrowingBiConsumer;
 import com.pipeline.core.ThrowingPred;
 import com.pipeline.core.Steps;
 import com.pipeline.core.Jumps;
+import com.pipeline.core.PipelineResult;
 import com.pipeline.core.metrics.Metrics;
 import com.pipeline.core.metrics.NoopMetrics;
 import com.pipeline.remote.http.HttpStep;
@@ -24,6 +25,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -40,7 +42,7 @@ public class Pipeline<I, C> {
 
   private String name = "pipeline";
   private boolean shortCircuit = true;
-  private Function<Exception, ? super C> onErrorReturn; // used when sealing typed
+  private Function<Exception, ? extends C> onErrorReturn; // used when sealing typed
 
   // Phase lists
   private final List<ThrowingFn<?, ?>> pre  = new ArrayList<>();  // C->C
@@ -55,7 +57,7 @@ public class Pipeline<I, C> {
 
   // Compiled cores (used when jumps disabled)
   private volatile com.pipeline.core.Pipeline<C> compiledUnary;
-  private volatile com.pipeline.core.Pipe<I, ?> compiledTyped;
+  private volatile CompiledTyped<I, ?> compiledTyped;
 
   // Beans for instance targets
   private final Map<String,Object> beans = new HashMap<>();
@@ -98,7 +100,7 @@ public class Pipeline<I, C> {
   }
   public Pipeline<I,C> name(String n) { ensureMutable(); this.name = Objects.requireNonNull(n); return this; }
   public Pipeline<I,C> shortCircuit(boolean b) { ensureMutable(); this.shortCircuit = b; return this; }
-  public Pipeline<I,C> onErrorReturn(Function<Exception, ? super C> f) { ensureMutable(); this.onErrorReturn = f; return this; }
+  public Pipeline<I,C> onErrorReturn(Function<Exception, ? extends C> f) { ensureMutable(); this.onErrorReturn = f; return this; }
 
   /** Register a bean instance to target instance methods from JSON or code. */
   public Pipeline<I,C> addBean(String id, Object instance) {
@@ -195,18 +197,25 @@ public class Pipeline<I, C> {
     Metrics.RunScope scope = metrics.onPipelineStart(name, runId, queuedStartLabel);
     currentRunScope.set(scope);
     long t0 = System.nanoTime();
-    Throwable lastErr = null;
     try {
       Object out;
-      if (shouldUseJumpEngine()) out = runWithJumps(input, /*typedOut*/ null, scope);
-      else {
+      boolean success = true;
+      Throwable err = null;
+
+      if (shouldUseJumpEngine()) {
+        out = runWithJumps(input, /*typedOut*/ null, scope);
+      } else {
         if (compiledUnary == null) sealUnaryWithMetrics();
-        out = compiledUnary.run((C) input);
+        PipelineResult<C> result = compiledUnary.execute((C) input);
+        out = result.context();
+        if (result.hasErrors()) {
+          success = false;
+          err = result.errors().getFirst().exception();
+        }
       }
-      scope.onPipelineEnd(true, System.nanoTime()-t0, null);
+      scope.onPipelineEnd(success, System.nanoTime()-t0, err);
       return (C) out;
     } catch (Throwable ex) {
-      lastErr = ex;
       scope.onPipelineEnd(false, System.nanoTime()-t0, ex);
       if (ex instanceof Exception e) throw e;
       throw new RuntimeException(ex);
@@ -250,26 +259,69 @@ public class Pipeline<I, C> {
     if (compiledUnary == null) {
       var b = com.pipeline.core.Pipeline.<C>builder(name).shortCircuit(shortCircuit);
       int idx = 0;
-      for (int i=0;i<pre.size();i++,idx++)  b.beforeEach(wrapForMetrics(idx, labelOf(preLabels,i), castFn(pre.get(i))));
-      for (int i=0;i<main.size();i++,idx++) b.step      (wrapForMetrics(idx, labelOf(mainLabels,i), castFn(main.get(i))));
-      for (int i=0;i<post.size();i++,idx++) b.afterEach (wrapForMetrics(idx, labelOf(postLabels,i), castFn(post.get(i))));
+      for (int i=0;i<pre.size();i++,idx++)  b.addPreAction(labelOf(preLabels,i), wrapForMetricsUnary(idx, labelOf(preLabels,i), castFn(pre.get(i))));
+      for (int i=0;i<main.size();i++,idx++) b.addAction   (labelOf(mainLabels,i), wrapForMetricsUnary(idx, labelOf(mainLabels,i), castFn(main.get(i))));
+      for (int i=0;i<post.size();i++,idx++) b.addPostAction(labelOf(postLabels,i), wrapForMetricsUnary(idx, labelOf(postLabels,i), castFn(post.get(i))));
       compiledUnary = b.build();
     }
     return compiledUnary;
   }
 
-  public synchronized <O> com.pipeline.core.Pipe<I,O> sealTypedWithMetrics(Class<O> outType) {
+  public synchronized <O> CompiledTyped<I,O> sealTypedWithMetrics(Class<O> outType) {
     if (compiledTyped == null) {
-      var b = com.pipeline.core.Pipe.<I>named(name).shortCircuit(shortCircuit);
       int idx = 0;
-      for (int i=0;i<pre.size();i++,idx++)  b.step(wrapForMetrics(idx, labelOf(preLabels,i), castFn(pre.get(i))));
-      for (int i=0;i<main.size();i++,idx++) b.step(wrapForMetrics(idx, labelOf(mainLabels,i), castFn(main.get(i))));
-      for (int i=0;i<post.size();i++,idx++) b.step(wrapForMetrics(idx, labelOf(postLabels,i), castFn(post.get(i))));
-      compiledTyped = b.to(outType);
+      List<ThrowingFn<Object,Object>> steps = new ArrayList<>();
+      for (int i=0;i<pre.size();i++,idx++)  steps.add(wrapForMetrics(idx, labelOf(preLabels,i), castFn(pre.get(i))));
+      for (int i=0;i<main.size();i++,idx++) steps.add(wrapForMetrics(idx, labelOf(mainLabels,i), castFn(main.get(i))));
+      for (int i=0;i<post.size();i++,idx++) steps.add(wrapForMetrics(idx, labelOf(postLabels,i), castFn(post.get(i))));
+
+      @SuppressWarnings("unchecked")
+      Function<Exception,O> onErrorReturnForOut =
+          (Function<Exception,O>) (Function<?,?>) onErrorReturn;
+
+      compiledTyped = new CompiledTyped<>(name, shortCircuit, onErrorReturnForOut, steps);
     }
     @SuppressWarnings("unchecked")
-    var typed = (com.pipeline.core.Pipe<I,O>) compiledTyped;
+    var typed = (CompiledTyped<I,O>) compiledTyped;
     return typed;
+  }
+
+  public static final class CompiledTyped<I,O> {
+    private final String name;
+    private final boolean shortCircuit;
+    private final Function<Exception,O> onErrorReturn; // may be null
+    private final List<ThrowingFn<Object,Object>> steps;
+
+    private CompiledTyped(String name,
+                          boolean shortCircuit,
+                          Function<Exception,O> onErrorReturn,
+                          List<ThrowingFn<Object,Object>> steps) {
+      this.name = Objects.requireNonNull(name, "name");
+      this.shortCircuit = shortCircuit;
+      this.onErrorReturn = onErrorReturn;
+      this.steps = List.copyOf(steps);
+    }
+
+    @SuppressWarnings("unchecked")
+    public O run(I input) throws Exception {
+      Object cur = input;
+      for (int i = 0; i < steps.size(); i++) {
+        ThrowingFn<Object, Object> fn = steps.get(i);
+        try {
+          cur = fn.apply(cur);
+        } catch (Exception ex) {
+          if (shortCircuit) {
+            if (onErrorReturn != null) return onErrorReturn.apply(ex);
+            throw ex;
+          }
+          // continue-on-error: keep current value and continue
+        }
+      }
+      return (O) cur;
+    }
+
+    public String name() { return name; }
+    public boolean shortCircuit() { return shortCircuit; }
   }
 
   private String labelOf(List<String> labels, int i) {
@@ -289,6 +341,26 @@ public class Pipeline<I, C> {
       } catch (Exception ex) {
         if (s != null) s.onStepError(idx, label, ex);
         throw ex;
+      }
+    };
+  }
+
+  private <T> UnaryOperator<T> wrapForMetricsUnary(int idx, String label, ThrowingFn<T,T> fn) {
+    return a -> {
+      Metrics.RunScope s = currentRunScope.get();
+      long t0 = System.nanoTime();
+      if (s != null) s.onStepStart(idx, label);
+      try {
+        T out = fn.apply(a);
+        if (s != null) s.onStepEnd(idx, label, System.nanoTime()-t0, true);
+        return out;
+      } catch (Exception ex) {
+        if (s != null) {
+          s.onStepError(idx, label, ex);
+          s.onStepEnd(idx, label, System.nanoTime()-t0, false);
+        }
+        if (ex instanceof RuntimeException re) throw re;
+        throw new RuntimeException(ex);
       }
     };
   }
@@ -426,6 +498,9 @@ public class Pipeline<I, C> {
 
   @SuppressWarnings("unchecked")
   private void push(Section sec, ThrowingFn<?,?> fn, String label, Class<?> expectedIn) {
+    if (expectedIn == null && label != null) {
+      expectedIn = inferInputType(fn);
+    }
     ThrowingFn<?,?> wrapped = (label == null) ? fn : label(fn, label);
     switch (sec) {
       case PRE -> { pre.add(wrapped); preLabels.add(label); preInTypes.add(expectedIn); }
@@ -442,15 +517,16 @@ public class Pipeline<I, C> {
         JsonNode beansNode = root.get("beans");
         if (!beansNode.isObject()) throw new IllegalArgumentException("'beans' must be an object");
         var it = beansNode.fields();
-        while (it.hasNext()) {
-          var e = it.next();
-          String id = e.getKey();
-          if ("this".equals(id) || "self".equals(id)) {
-            throw new IllegalArgumentException("Bean id '" + id + "' is reserved");
-          }
-          beans.put(id, createBean(e.getValue()));
-        }
-      }
+	        while (it.hasNext()) {
+	          var e = it.next();
+	          String id = e.getKey();
+	          String key = id.startsWith("@") ? id.substring(1) : id;
+	          if ("this".equals(key) || "self".equals(key)) {
+	            throw new IllegalArgumentException("Bean id '" + id + "' is reserved");
+	          }
+	          beans.put(key, createBean(e.getValue()));
+	        }
+	      }
 
       String type = root.path("type").asText("unary");
       if (root.has("pipeline")) this.name = root.get("pipeline").asText(name);
@@ -746,7 +822,7 @@ public class Pipeline<I, C> {
   }
 
   private static ThrowingFn<?,?> makeRemoteFn(JsonNode r, Class<?> inClass, Class<?> outClass) {
-    var spec = new HttpStep.RemoteSpec<>();
+    var spec = new HttpStep.RemoteSpecTyped<>();
     spec.endpoint = req(r, "endpoint").asText();
     spec.timeoutMillis = r.path("timeoutMillis").asInt(1000);
     spec.retries = r.path("retries").asInt(0);
@@ -770,7 +846,7 @@ public class Pipeline<I, C> {
     }
 
     @SuppressWarnings("unchecked")
-    ThrowingFn<?,?> fn = (ThrowingFn<?,?>) HttpStep.jsonPost(spec);
+    ThrowingFn<?,?> fn = (ThrowingFn<?,?>) HttpStep.jsonPostTyped(spec);
     return fn;
   }
 
@@ -790,4 +866,62 @@ public class Pipeline<I, C> {
   }
   @SuppressWarnings({"rawtypes","unchecked"})
   private static <A,B> ThrowingFn<A,B> castFn(ThrowingFn<?,?> fn) { return (ThrowingFn) fn; }
+
+  private void validateOrIgnoreNull(String label) {
+    if (label == null) return;
+    validateNewLabel(label);
+  }
+
+  private Object resolveBean(String idOrTarget) {
+    if (idOrTarget == null) throw new IllegalArgumentException("Bean id must be non-null");
+    String key = idOrTarget.strip();
+    if (key.startsWith("@")) key = key.substring(1);
+    if (key.isBlank()) throw new IllegalArgumentException("Bean id must be non-empty");
+    Object bean = beans.get(key);
+    if (bean == null) throw new IllegalArgumentException("Unknown bean id: " + idOrTarget);
+    return bean;
+  }
+
+  private static Object createBean(JsonNode spec) {
+    if (spec == null || spec.isNull()) return null;
+    try {
+      if (spec.isTextual()) {
+        return instantiateBean(spec.asText());
+      }
+      if (spec.isObject()) {
+        if (spec.has("class")) return instantiateBean(spec.get("class").asText());
+        if (spec.has("$class")) return instantiateBean(spec.get("$class").asText());
+        if (spec.has("$local")) return instantiateBean(spec.get("$local").asText());
+      }
+      throw new IllegalArgumentException("Unsupported bean spec: " + spec.toString());
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to create bean from spec: " + spec.toString(), e);
+    }
+  }
+
+  private static Object instantiateBean(String fqcn) {
+    try {
+      Class<?> c = loadClass(fqcn);
+      var ctor = c.getDeclaredConstructor();
+      ctor.setAccessible(true);
+      return ctor.newInstance();
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to instantiate bean " + fqcn, e);
+    }
+  }
+
+  private static Class<?> inferInputType(ThrowingFn<?, ?> fn) {
+    if (fn == null) return null;
+    for (Method m : fn.getClass().getMethods()) {
+      if (!"apply".equals(m.getName())) continue;
+      if (m.getParameterCount() != 1) continue;
+      if (m.isBridge()) continue;
+      Class<?> in = m.getParameterTypes()[0];
+      if (in == Object.class) continue;
+      return in;
+    }
+    return null;
+  }
 }

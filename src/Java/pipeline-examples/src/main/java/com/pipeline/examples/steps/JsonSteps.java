@@ -6,6 +6,11 @@ import java.util.*;
 public final class JsonSteps {
   private static final ObjectMapper M = new ObjectMapper();
   private JsonSteps() {}
-  public static String toJson(List<Map<String,String>> rows) throws Exception { return M.writeValueAsString(rows); }
+  public static String toJson(List<Map<String,String>> rows) {
+    try {
+      return M.writeValueAsString(rows);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 }
-

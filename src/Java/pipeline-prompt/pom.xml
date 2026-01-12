@@ -5,6 +5,7 @@
     <groupId>io.github.nectario</groupId>
     <artifactId>pipeline-services</artifactId>
     <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
   </parent>
   <artifactId>pipeline-prompt</artifactId>
   <name>pipeline-prompt</name>

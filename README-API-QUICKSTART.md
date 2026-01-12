@@ -1,34 +1,48 @@
-# API Quickstart (Programmatic + JSON in the same class)
+# `pipeline-api` Quickstart (Programmatic + JSON)
 
-This add-on introduces a small `pipeline-api` module with a **zero-ceremony** class:
+`pipeline-api` provides a higher-level facade (`com.pipeline.api.Pipeline<I,C>`) that can:
+- Mix programmatic steps + JSON in the same pipeline
+- Support labels/jumps/beans (`@this` / `@self`)
+- Seal to a compiled runner on first run (when jumps are disabled)
 
-- `com.pipeline.api.Pipeline<T>` — programmatic unary pipelines (seal on first run), with **inline JSON** support.
-
-## Install (module & deps)
-
-1) Add `<module>pipeline-api</module>` to the parent `pom.xml` modules list.
-2) In `pipeline-examples/pom.xml`, add:
-
-```xml
-<dependency>
-  <groupId>io.github.nectario</groupId>
-  <artifactId>pipeline-api</artifactId>
-  <version>${project.version}</version>
-</dependency>
-```
-
-## Use
+## Unary (no type changes)
 
 ```java
-// Pure JSON
-Pipeline<String> p1 = new Pipeline<>(Files.readString(Path.of("pipeline-examples/src/main/resources/pipelines/normalize_name.json")));
-System.out.println(p1.run("  john   SMITH  "));
+import com.pipeline.api.Pipeline;
+import com.pipeline.examples.steps.TextSteps;
 
-// Mix JSON + method refs
-Pipeline<String> p2 = new Pipeline<String>(com.pipeline.examples.steps.TextSteps::strip)
-    .addPipelineConfig(json)
-    .addAction(com.pipeline.examples.steps.TextSteps::normalizeWhitespace);
-System.out.println(p2.run("  aLiCe   deLANEY  "));
+Pipeline<String, String> p = Pipeline.<String>named("normalize_name", /*shortCircuit=*/true)
+    .addAction(TextSteps::strip)
+    .addAction(TextSteps::normalizeWhitespace);
+
+System.out.println(p.run("  john   SMITH  "));
 ```
 
-> `$prompt` steps are **generated at build time** by your existing prompt codegen (e.g., `CodegenMain`) and compiled as normal classes. No runtime LLM calls.
+## Typed (type changes)
+If any action changes the value type, use `run(input, Out.class)`:
+
+```java
+import com.pipeline.api.Pipeline;
+import com.pipeline.examples.steps.CsvSteps;
+import com.pipeline.examples.steps.JsonSteps;
+
+var p = Pipeline.<String>named("csv_to_json", /*shortCircuit=*/true)
+    .addAction(CsvSteps::parse)    // String -> List<Map<...>>
+    .addAction(JsonSteps::toJson); // List<Map<...>> -> String
+
+String out = p.run("name,age\nNektarios,49\nTheodore,7", String.class);
+System.out.println(out);
+```
+
+## JSON (inline or path)
+
+```java
+import com.pipeline.api.Pipeline;
+
+// From a JSON string (or a file path)
+var p = new Pipeline<String, String>(jsonOrPath)
+    .addAction(s -> s + "!");
+
+System.out.println(p.run("hello"));
+```
+

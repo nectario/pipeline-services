@@ -5,6 +5,7 @@
     <groupId>io.github.nectario</groupId>
     <artifactId>pipeline-services</artifactId>
     <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
   </parent>
   <artifactId>pipeline-disruptor</artifactId>
   <name>pipeline-disruptor</name>
@@ -25,4 +26,3 @@
     </dependency>
   </dependencies>
 </project>
-

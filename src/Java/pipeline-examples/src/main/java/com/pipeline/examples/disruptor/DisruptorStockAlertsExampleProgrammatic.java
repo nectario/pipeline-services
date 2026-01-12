@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 public final class DisruptorStockAlertsExampleProgrammatic {
 
   /** Typed pipeline built in code: MarketDataEvent -> Enriched -> Alert */
-  static Pipeline<MarketDataEvent, MarketDataEvent> buildPipeline() {
+  static Pipeline<MarketDataEvent, Alerts.Alert> buildPipeline() {
     return new Pipeline<MarketDataEvent, MarketDataEvent>()
         .metrics(new LoggingMetrics())
         .enableJumps(false) // no jumps needed here
@@ -25,8 +25,8 @@ public final class DisruptorStockAlertsExampleProgrammatic {
   }
 
   static final class AlertingHandler implements EventHandler<MarketDataEvent> {
-    private final Pipeline<MarketDataEvent, MarketDataEvent> pipeline;
-    AlertingHandler(Pipeline<MarketDataEvent, MarketDataEvent> pipeline) { this.pipeline = pipeline; }
+    private final Pipeline<MarketDataEvent, Alerts.Alert> pipeline;
+    AlertingHandler(Pipeline<MarketDataEvent, Alerts.Alert> pipeline) { this.pipeline = pipeline; }
     @Override public void onEvent(MarketDataEvent ev, long seq, boolean endOfBatch) throws Exception {
       var out = pipeline.run(ev, Alerts.Alert.class);
       if (!"NONE".equals(out.level)) {

@@ -1,6 +1,6 @@
 # Built-in Metrics & Logging
 
-This PR wires **metrics** into the Pipeline façade:
+`pipeline-api` supports optional **per-run/step** metrics:
 
 - **Per run**: `pipeline.start` / `pipeline.end` (duration, success/error)
 - **Per step**: `step.start` / `step.end` (duration), `step.error`
@@ -9,6 +9,7 @@ This PR wires **metrics** into the Pipeline façade:
 ### How to enable
 
 ```java
+import com.pipeline.api.Pipeline;
 import com.pipeline.core.metrics.LoggingMetrics;
 
 var p = new Pipeline<String,String>()

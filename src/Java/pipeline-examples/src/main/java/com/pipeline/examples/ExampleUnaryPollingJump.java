@@ -8,7 +8,7 @@ public final class ExampleUnaryPollingJump {
   private ExampleUnaryPollingJump() {}
 
   public static void run() throws Exception {
-    var p = com.pipeline.api.Pipeline.<String,String>named("await_job", false)
+    var p = com.pipeline.api.Pipeline.<String>named("await_job", false)
         .enableJumps(true)
         .sleeper(ms -> {})                          // no real sleep in example
         .addAction("await", Availability::awaitJob) // self-loop

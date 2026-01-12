@@ -11,7 +11,7 @@ public class MetricsCompiledPathTest {
   @Test
   void compiledPathReportsSteps() throws Exception {
     var m = new TestMetrics();
-    var p = com.pipeline.api.Pipeline.<String,String>named("compiled", true)
+    var p = com.pipeline.api.Pipeline.<String>named("compiled", true)
         .metrics(m)
         .addAction("a", s -> s + "a")
         .addAction("b", s -> s + "b"); // jumps disabled -> core compiled path

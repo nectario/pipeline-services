@@ -6,6 +6,7 @@
     <groupId>io.github.nectario</groupId>
     <artifactId>pipeline-services</artifactId>
     <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../../pom.xml</relativePath>
   </parent>
   <artifactId>pipeline-core</artifactId>
   <name>pipeline-core</name>
@@ -45,4 +46,3 @@
     </plugins>
   </build>
 </project>
-

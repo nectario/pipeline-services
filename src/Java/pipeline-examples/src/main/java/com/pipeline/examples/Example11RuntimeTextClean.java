@@ -10,9 +10,9 @@ public final class Example11RuntimeTextClean {
   public static void run() {
     var rt = new RuntimePipeline<>("runtime_text_clean", /*shortCircuit=*/false, "  Hello   World  ");
     rt.addPreAction(PolicySteps::rateLimit);
-    rt.addStep(TextSteps::strip);
-    rt.addStep(TextSteps::normalizeWhitespace);
-    rt.addStep(TextSteps::truncateAt280);  // explicit ShortCircuit inside;
+    rt.addAction(TextSteps::strip);
+    rt.addAction(TextSteps::normalizeWhitespace);
+    rt.addAction(TextSteps::truncateAt280);
     rt.addPostAction(PolicySteps::audit);
 
     System.out.println("[ex11-runtime] -> " + rt.value());

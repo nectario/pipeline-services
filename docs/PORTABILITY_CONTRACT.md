@@ -1,145 +1,107 @@
-# Pipeline Services — Portability Contract (v1.0)
+# Pipeline Services — Portability Contract (v2)
 
-This document is the **source of truth** for implementing and porting Pipeline Services across programming languages.
-It defines the observable behavior, configuration surface, and interfaces that **every language port MUST implement**.
+This document is the source of truth for implementing Pipeline Services across languages (Java, Python, Mojo, …).
+It defines observable behavior and the minimal API surface a port should expose.
 
 ## 1. Core Abstractions
 
-### 1.1 Step
-- **Signature:** Unary step with the contract `T -> T` (in dynamically-typed languages, accept/return opaque values).
-- **Allowed outcomes:**
-  1. **Return** a value of type `T` (the new pipeline value).
-  2. **Short-circuit:** signal early completion with a final value.
-  3. **Jump:** signal a jump to a **label** (optionally with a delay).
-  4. **Error:** raise/throw an error.
-- **Side effects:** Allowed but discouraged; must not corrupt pipeline state if the step fails.
+### 1.1 `StepAction<C>` + `StepControl<C>`
 
-### 1.2 Pipeline (unary, labeled)
-- A pipeline is an ordered list of labeled steps.
-- **Labels**: Unique per pipeline; empty label allowed (non-addressable).
-- **`before_each` / `after_each`**: optional lists of unary steps applied to the current value before/after every main step.
-- **Jumps**: A step may request a **jump** to a **target label** (immediate or after `delayMillis`).
-- **Short-circuit**: A step may **short-circuit** and finish the pipeline with the provided value.
-- **Guardrails**:
-  - `max_jumps` per run (default **1000**; ports MAY expose a setter).
-  - **No jumps into `pre`** (if the language separates pre/steps/post in the runtime) — see §2.4.
-- **Run options**: `run(input, start_label?, run_id?)`.
-  - `start_label` must refer to an existing label in `steps` (not `pre`). If not present, start at index `0`.
-  - `run_id` is an opaque string for metrics correlation.
+Ports should support two step shapes:
+- **Unary**: `C -> C` (simple transforms)
+- **Control-aware**: `(C, control) -> C` (explicit short-circuit + error recording)
 
-### 1.3 Typed Pipe (I → O)
-- A simple linear pipeline without labels/jumps.
-- Short-circuit semantics apply.
-- Type enforcement is **compile-time** in statically typed languages; dynamic languages MAY rely on duck typing.
+`StepControl<C>` provides:
+- `shortCircuit()`: request early termination of MAIN actions
+- `isShortCircuited()`: query current state
+- `recordError(ctx, exception) -> ctx`: record an error and optionally return an updated ctx (via callback hook)
+- `errors() -> [PipelineError]`: the accumulated errors
 
-### 1.4 Runtime Pipeline
-- Imperative variant with `add_pre`, `step`, `add_post`, `reset`, `value`.
-- Short-circuit semantics apply.
-- Jumps are **not required** in the runtime variant.
+### 1.2 `Pipeline<C>`
+
+A pipeline has three ordered phases:
+- **pre**: runs once (always runs fully)
+- **main**: runs once (stops early if short-circuited)
+- **post**: runs once (always runs fully)
+
+Pipelines are configured with:
+- `name: String`
+- `shortCircuitOnException: boolean` (default `true`)
+- optional `onError(ctx, error) -> ctx` callback (default: no-op passthrough)
+
+### 1.3 `PipelineResult<C>` + `PipelineError`
+
+Executing a pipeline returns:
+- `context: C` (final value)
+- `shortCircuited: boolean`
+- `errors: [PipelineError]` (may be empty)
+
+`PipelineError` should include at least:
+- pipeline name
+- phase (`pre|main|post`)
+- index + step label/name (if available)
+- captured exception/error value
 
 ## 2. Control Flow Semantics
 
-### 2.1 Short-circuit
-- Invoked by a **dedicated signal** (exception or structured return depending on language).
-- Sets the **pipeline value** and **terminates** the run successfully.
+### 2.1 Explicit short-circuit
+If a MAIN step calls `control.shortCircuit()`:
+- MAIN stops after the current step completes
+- POST still executes fully
+- The result reports `shortCircuited=true`
 
-### 2.2 Jump
-- Invoked by a **dedicated signal** (exception or structured return).
-- Contains `label: String` and optional `delayMillis: Int`.
-- On jump: increment `jump_count`; if `jump_count > max_jumps` → **error** and terminate per short-circuit policy.
-- **Label resolution** is against the **main steps** (not `pre`).
+### 2.2 Exception handling (`shortCircuitOnException`)
+If a step throws/raises an exception:
+- The error is recorded (append to `errors`)
+- The `onError(ctx, error)` callback is invoked to optionally update the ctx
+- If `shortCircuitOnException=true`, MAIN is short-circuited
+- If `shortCircuitOnException=false`, MAIN continues
 
-### 2.3 Error Handling
-- If `short_circuit = true`: first unhandled step error **terminates** the run with error.
-- If `short_circuit = false`: record error, **continue** with the current value unchanged.
+Ports should not require checked/declared exceptions on steps (Java: no checked throws on `StepAction`).
 
-### 2.4 Pre/Post Execution
-- `pre` steps execute **once** before the first main step.
-- `post` steps execute **once** after the last main step.
-- Jumps **MUST NOT** target `pre` and **MUST** target a label in the main `steps` section.
+### 2.3 Pre/Post execution
+- PRE always runs fully, even if `control.shortCircuit()` is set during PRE
+- MAIN runs only if not already short-circuited
+- POST always runs fully, even if short-circuited during MAIN
 
-## 3. Metrics
+(Ports MAY make this configurable later, but the default must match the above.)
 
-Every port MUST expose a `Metrics` interface and a default implementation. At minimum, the following events MUST be supported:
+## 3. JSON Configuration (Canonical)
 
-- `pipeline.start(name, runId, startLabel)`
-- `pipeline.end(name, runId, durationNanos, success, error?)`
-- `step.start(name, runId, index, label)`
-- `step.end(name, runId, index, label, durationNanos, success)`
-- `step.error(name, runId, index, label, error)`
-- `step.jump(name, runId, fromLabel, toLabel, delayMillis)`
-
-**Timing:** use a monotonic clock (e.g., `perf_counter_ns`) for durations.
-
-## 4. JSON Configuration (Canonical)
-
-Top-level object:
+Minimal canonical form:
 
 ```json
 {
   "pipeline": "name",
-  "type": "unary" | "typed",
-  "shortCircuit": true,
-  "pre": [ StepNode ],
-  "steps": [ StepNode ],
-  "post": [ StepNode ]
+  "type": "unary",
+  "shortCircuitOnException": true,
+  "steps": [
+    { "$local": "package.ClassImplementingUnaryOrStepAction" }
+  ]
 }
 ```
 
-**StepNode** is one of:
+Notes:
+- `shortCircuit` is an allowed legacy alias for `shortCircuitOnException`.
+- `$local` should resolve a class/type by name and instantiate it (no-arg ctor in Java).
+- A `$local` step may implement either the unary callable or the control-aware callable.
 
-- `{ "$local": "package.module.ClassWithApply", "label": "optional-label" }`
-- `{ "$method": { "ref": "package.module.Class#method" | "package.module:function", "target": "@this" | "@beanId" }, "label": "optional-label" }`
-- `{ "$prompt": { /* free-form spec */ } }`
-- `{ "$remote": { "endpoint": "...", "method": "POST|GET", "timeoutMillis": 1000, "retries": 0, "headers": {},
-                    "toJsonBean": "optionalBeanId", "fromJsonBean": "optionalBeanId" } }`
-- With an optional wrapper:
-  - `"jumpWhen": { "label": "target-label", "delayMillis": 0, "predicate": StepNode }`
+## 4. Extensions (Optional per port)
 
-**Beans & Instance Binding**
-- `@this` resolves to the loader instance.
-- `@beanId` resolves to an object supplied in the loader's bean map.
-- `$local` resolves `"ClassWithApply"` to an instance and calls `apply(x)`.
+### 4.1 Labeled jumps
+Some ports may provide labeled jumps (polling/workflows). If implemented:
+- steps can signal a jump to a label (optionally with delay)
+- there must be a guardrail `maxJumpsPerRun`
+- jumps into PRE are rejected
 
-## 5. Prompt Steps
+### 4.2 Prompt steps (LLM scaffolding)
+Ports may support build-time “prompt → code” generation. Runtime LLM calls are optional and must be explicit.
 
-Ports MUST accept a **callable adapter** named `llm_adapter` with interface:
+### 4.3 Remote steps
+Ports may provide a `RemoteSpec<C>` that maps `C` to request JSON and maps `(C, responseJson)` back to `C`.
 
-```
-adapter(input_value, prompt_spec_dict) -> output_value
-```
+## 5. Naming
 
-`prompt_spec_dict` SHOULD include: `name`, `goal`, `rules[]`, `examples[]`, `p50Micros` (optional).
+Public API names should match where possible:
+- `Pipeline`, `StepAction`, `StepControl`, `PipelineResult`, `PipelineError`, `PipelineJsonLoader`
 
-## 6. Remote Steps
-
-Define a `RemoteSpec` with: `endpoint: String`, `timeoutMillis: Int`, `retries: Int`, `headers: Map`, `method: "POST" | "GET"`, `to_json`, `from_json`.
-The runtime MUST call `to_json(input_value)` and then invoke the HTTP operation, decode via `from_json`.
-
-## 7. Disruptor Engine (Optional Module)
-
-- Single-consumer engine with a bounded queue.
-- `publish(payload)` enqueues without corrupting state if backpressure occurs (ports MAY block or raise on full).
-- `shutdown()` stops the worker; `close()` aliases to `shutdown()`.
-
-## 8. Guardrails and Defaults
-
-- `max_jumps` default: **1000**.
-- `shortCircuit` default: **true**.
-- JSON loader MUST validate unknown labels on `start_label` / jump targets and raise a clear error.
-
-## 9. Naming, Style, and Structure
-
-- Follow each language's canonical style (e.g., snake_case in Python, Mojo; PascalCase for `struct`/classes).
-- Public API names MUST match these identifiers where possible: `Pipeline`, `Pipe`, `RuntimePipeline`, `Metrics`, `LoggingMetrics`, `NoopMetrics`, `PipelineRegistry`, `PipelineJsonLoader`.
-
-## 10. Compliance Checklist
-
-- [ ] Implements §1–§4 core semantics
-- [ ] Metrics events (§3)
-- [ ] JSON forms (§4) incl. `jumpWhen`
-- [ ] Prompt adapter contract (§5)
-- [ ] Remote spec (§6)
-- [ ] Engine behavior (§7) if provided
-- [ ] Defaults (§8)
-- [ ] Label & `pre`/`post` rules (§2.4)

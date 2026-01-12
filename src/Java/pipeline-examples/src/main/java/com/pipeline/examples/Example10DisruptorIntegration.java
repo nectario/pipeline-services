@@ -8,12 +8,10 @@ public final class Example10DisruptorIntegration {
   private Example10DisruptorIntegration() {}
 
   public static void run() throws Exception {
-    var p = new Pipeline.Builder<String>("ex10-clean")
-        .shortCircuit(false)
-        .step(TextSteps::strip)
-        .step(TextSteps::normalizeWhitespace)
-        .step(TextSteps::truncateAt280)
-        .build();
+    var p = new Pipeline<String>("ex10-clean", /*shortCircuitOnException=*/false)
+        .addAction(TextSteps::strip)
+        .addAction(TextSteps::normalizeWhitespace)
+        .addAction(TextSteps::truncateAt280);
 
     try (DisruptorEngine<String> engine = new DisruptorEngine<>("ex10", 1024, p)) {
       for (int i = 0; i < 50; i++) {
@@ -24,4 +22,3 @@ public final class Example10DisruptorIntegration {
     System.out.println("[ex10] disruptor processed ~50 messages");
   }
 }
-

@@ -15,29 +15,41 @@ final class PipelineTest {
     }
 
     @Test
-    void shortCircuitTrueReturnsLastGood() {
-        var p = Pipeline.build("t1", true,
-                (String s) -> s + "A",
-                (String s) -> { throw new RuntimeException("boom"); },
-                (String s) -> s + "B");
-        assertEquals("XA", p.run("X"));
+    void shortCircuitOnExceptionTrueStopsAndCaptures() {
+        var p = new Pipeline<String>("t1", true)
+            .addAction(s -> s + "A")
+            .addAction((s, control) -> { throw new RuntimeException("boom"); })
+            .addAction(s -> s + "B");
+
+        PipelineResult<String> r = p.execute("X");
+        assertEquals("XA", r.context());
+        assertTrue(r.shortCircuited());
+        assertEquals(1, r.errors().size());
+        assertEquals("boom", r.errors().getFirst().exception().getMessage());
     }
 
     @Test
-    void shortCircuitFalseContinues() {
-        var p = Pipeline.build("t2", false,
-                (String s) -> s + "A",
-                (String s) -> { throw new RuntimeException("boom"); },
-                (String s) -> s + "B");
-        assertEquals("XAB", p.run("X"));
+    void shortCircuitOnExceptionFalseContinuesAndCaptures() {
+        var p = new Pipeline<String>("t2", false)
+            .addAction(s -> s + "A")
+            .addAction((s, control) -> { throw new RuntimeException("boom"); })
+            .addAction(s -> s + "B");
+
+        PipelineResult<String> r = p.execute("X");
+        assertEquals("XAB", r.context());
+        assertFalse(r.shortCircuited());
+        assertEquals(1, r.errors().size());
     }
 
     @Test
-    void nowReturnsImmediately() {
-        var p = Pipeline.build("t3", true,
-                (String s) -> ShortCircuit.now("END"),
-                (String s) -> s + "B");
-        assertEquals("END", p.run("X"));
+    void explicitShortCircuitStopsMainActions() {
+        var p = new Pipeline<String>("t3", true)
+            .addAction((s, control) -> { control.shortCircuit(); return "END"; })
+            .addAction(s -> s + "B");
+
+        PipelineResult<String> r = p.execute("X");
+        assertEquals("END", r.context());
+        assertTrue(r.shortCircuited());
+        assertTrue(r.errors().isEmpty());
     }
 }
-

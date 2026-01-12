@@ -9,7 +9,7 @@ public class JumpEngineGuardsTest {
 
   @Test
   void cannotJumpIntoPre() throws Exception {
-    var p = Pipeline.<String,String>named("no_pre_jump", false)
+    var p = Pipeline.<String>named("no_pre_jump", false)
         .enableJumps(true)
         .sleeper(ms -> {})
         .before("init", s -> s + "#init")
@@ -21,7 +21,7 @@ public class JumpEngineGuardsTest {
 
   @Test
   void maxJumpsGuardTrips() {
-    var p = Pipeline.<String,String>named("guard", false)
+    var p = Pipeline.<String>named("guard", false)
         .enableJumps(true)
         .maxJumpsPerRun(2)
         .sleeper(ms -> {})

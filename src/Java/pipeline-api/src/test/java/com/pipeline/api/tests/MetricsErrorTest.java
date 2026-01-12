@@ -9,11 +9,12 @@ public class MetricsErrorTest {
   @Test
   void errorRecordedAndShortCircuited() {
     var m = new TestMetrics();
-    var p = com.pipeline.api.Pipeline.<String,String>named("err", true).metrics(m)
+    var p = com.pipeline.api.Pipeline.<String>named("err", true).metrics(m)
         .addAction("ok", s -> s + "ok")
-        .addAction("boom", s -> { throw new IllegalStateException("x"); });
+        .addAction("boom", (com.pipeline.core.ThrowingFn<String, String>) s -> { throw new IllegalStateException("x"); });
 
-    Exception ex = assertThrows(Exception.class, () -> p.run(""));
+    String out = assertDoesNotThrow(() -> p.run(""));
+    assertEquals("ok", out);
     assertTrue(m.events.stream().anyMatch(e -> e.startsWith("step.error:1:boom:IllegalStateException")));
     assertTrue(m.events.stream().anyMatch(e -> e.equals("pipeline.end:false")));
   }

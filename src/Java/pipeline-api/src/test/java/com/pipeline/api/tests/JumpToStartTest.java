@@ -11,7 +11,7 @@ public class JumpToStartTest {
   @Test
   void startAtLabelSkipsEarlierSteps() throws Exception {
     AtomicInteger a = new AtomicInteger(), b = new AtomicInteger(), c = new AtomicInteger();
-    var p = Pipeline.<String,String>named("start_label", false)
+    var p = Pipeline.<String>named("start_label", false)
         .enableJumps(true)
         .sleeper(ms -> {})
         .addAction("a", s -> { a.incrementAndGet(); return s + "a"; })

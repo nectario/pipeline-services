@@ -10,14 +10,12 @@ public final class Example07ListDedupSort {
   private Example07ListDedupSort() {}
 
   public static void run() {
-    var p = new Pipeline.Builder<List<String>>("ex07")
-        .step(ListSteps::nonEmptyOrShortCircuit)
-        .step(ListSteps::dedup)
-        .step(ListSteps::sortNatural)
-        .build();
+    var p = new Pipeline<List<String>>("ex07", /*shortCircuitOnException=*/true)
+        .addAction(ListSteps::nonEmptyOrShortCircuit)
+        .addAction(ListSteps::dedup)
+        .addAction(ListSteps::sortNatural);
 
     List<String> out = p.run(Arrays.asList("orange","apple","orange"));
     System.out.println("[ex07] => " + out);
   }
 }
-

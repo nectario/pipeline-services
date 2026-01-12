@@ -13,7 +13,7 @@ public class JumpEngineUnaryTest {
   @Test
   void selfLoopUnaryStopsAndReturns() throws Exception {
     AtomicInteger attempts = new AtomicInteger();
-    var p = Pipeline.<String,String>named("unary_loop", false)
+    var p = Pipeline.<String>named("unary_loop", false)
         .enableJumps(true)
         .sleeper(ms -> {}) // don't actually sleep
         .addAction("await", s -> {

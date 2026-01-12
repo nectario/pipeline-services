@@ -12,14 +12,14 @@ public final class Example13RuntimeResetAndFreeze {
     // Build incrementally at runtime
     var rt = new RuntimePipeline<>("adhoc_session", /*shortCircuit=*/false, "   First   Input   ");
     rt.addPreAction(PolicySteps::rateLimit);
-    rt.addStep(TextSteps::strip);
-    rt.addStep(TextSteps::normalizeWhitespace);
+    rt.addAction(TextSteps::strip);
+    rt.addAction(TextSteps::normalizeWhitespace);
     rt.addPostAction(PolicySteps::audit);
     System.out.println("[ex13-runtime] session1 -> " + rt.value());
 
     // Start another session with a different input
     rt.reset("   Second     Input   ");
-    rt.addStep(TextSteps::truncateAt280); // may short-circuit if very long
+    rt.addAction(TextSteps::truncateAt280);
     System.out.println("[ex13-runtime] session2 -> " + rt.value());
 
     // Freeze the recorded steps (pre/main/post) into a reusable immutable Pipeline

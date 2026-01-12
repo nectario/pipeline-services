@@ -12,12 +12,13 @@
   <url>https://github.com/nectario/pipeline-services</url>
 
   <modules>
-    <module>pipeline-core</module>
-    <module>pipeline-config</module>
-    <module>pipeline-remote</module>
-    <module>pipeline-prompt</module>
-    <module>pipeline-disruptor</module>
-    <module>pipeline-examples</module>
+    <module>src/Java/pipeline-core</module>
+    <module>src/Java/pipeline-config</module>
+    <module>src/Java/pipeline-remote</module>
+    <module>src/Java/pipeline-prompt</module>
+    <module>src/Java/pipeline-disruptor</module>
+    <module>src/Java/pipeline-api</module>
+    <module>src/Java/pipeline-examples</module>
   </modules>
 
   <properties>

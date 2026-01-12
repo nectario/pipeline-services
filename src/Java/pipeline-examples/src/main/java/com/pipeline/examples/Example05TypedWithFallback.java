@@ -1,6 +1,6 @@
 package com.pipeline.examples;
 
-import com.pipeline.core.Pipe;
+import com.pipeline.api.Pipeline;
 import com.pipeline.examples.steps.ErrorHandlers;
 import com.pipeline.examples.steps.QuoteSteps;
 
@@ -8,15 +8,12 @@ public final class Example05TypedWithFallback {
   private Example05TypedWithFallback() {}
 
   public static void run() throws Exception {
-    Pipe<QuoteSteps.Req, QuoteSteps.Res> pipe =
-        Pipe.<QuoteSteps.Req>named("ex05")
-            .shortCircuit(true)
-            .onErrorReturn(ErrorHandlers::quoteError)
-            .step(QuoteSteps::validate)
-            .step(QuoteSteps::price)
-            .to(QuoteSteps.Res.class);
+    var pipe = Pipeline.<QuoteSteps.Req>named("ex05", /*shortCircuit=*/true)
+        .addAction(QuoteSteps::validate)
+        .addAction(QuoteSteps::price)
+        .onErrorReturn(ErrorHandlers::quoteError);
 
-    var res = pipe.run(new QuoteSteps.Req("FAIL", 10));
+    var res = pipe.run(new QuoteSteps.Req("FAIL", 10), QuoteSteps.Res.class);
     System.out.println("[ex05] => " + res);
   }
 }

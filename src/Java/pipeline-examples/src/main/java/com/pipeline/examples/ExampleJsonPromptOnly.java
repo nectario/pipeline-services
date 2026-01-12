@@ -5,8 +5,9 @@ import com.pipeline.api.Pipeline;
 public final class ExampleJsonPromptOnly {
   private ExampleJsonPromptOnly() {}
 
-  public static void run() {
-    String json = """      { "pipeline":"normalize_name", "type":"unary", "shortCircuit":false,
+  public static void run() throws Exception {
+    String json = """
+      { "pipeline":"normalize_name", "type":"unary", "shortCircuit":false,
         "steps":[
           {"$local":"com.pipeline.examples.adapters.TextStripStep"},
           {"$prompt":{"class":"com.pipeline.generated.NormalizeName",
@@ -19,7 +20,7 @@ public final class ExampleJsonPromptOnly {
         ] }
     """;
 
-    Pipeline<String> p = new Pipeline<>(json);
+    Pipeline<String, String> p = new Pipeline<>(json);
     System.out.println("[json+prompt] -> " + p.run("   jOhN   SMITH   "));
   }
 }

@@ -8,8 +8,8 @@ public final class ExampleRuntimeImperative {
   public static void run() {
     var rt = new RuntimePipeline<>("adhoc_clean", /*shortCircuit=*/false, "  Hello   World  ");
     rt.addPreAction(PolicySteps::rateLimit);
-    rt.addStep(TextSteps::strip);
-    rt.addStep(TextSteps::normalizeWhitespace);
+    rt.addAction(TextSteps::strip);
+    rt.addAction(TextSteps::normalizeWhitespace);
     rt.addPostAction(PolicySteps::audit);
     System.out.println("[adhoc_clean] -> " + rt.value());
 
