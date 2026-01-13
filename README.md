@@ -14,6 +14,13 @@ This repo is organized around a shared, language-agnostic behavior contract (`do
   - Control-aware: `(C, control) → C` (explicit short-circuit + error recording)
 - A pipeline has three phases: `pre` → `main` → `post`.
 
+## Design goals
+- **Simplicity and clarity first**: the common path should read like a list of actions (method refs/lambdas or JSON).
+- **Portability by contract**: behavior is defined once in `docs/PORTABILITY_CONTRACT.md` and re-implemented per language.
+- **Robustness without ceremony**: exceptions are captured; stop-vs-continue is a pipeline setting; post-actions still run.
+- **Low-friction remote actions**: meaningful defaults (`remoteDefaults`) with per-action overrides; avoid repeating config.
+- **Metrics out of the box**: timings are captured and can be emitted via a post-action (keeps the core clean).
+
 ## Java modules (Maven)
 ```
 pipeline-core        # Pipeline<C>, StepAction<C>, StepControl<C>, PipelineResult<C>, RuntimePipeline<T>, metrics
@@ -28,6 +35,14 @@ pipeline-examples    # Runnable examples (+ main runner)
 ## Ports
 - Java (reference): `src/Java/` (Maven multi-module)
 - Mojo (experimental): `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
+
+## Why Mojo
+Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
+
+This repo’s Mojo port is intentionally conservative:
+- uses `struct` + top-level `fn` and avoids “clever” or exotic language features
+- favors readability and direct control flow over dense one-liners
+- keeps behavior aligned with the shared contract so semantics are comparable across languages
 
 ## Quick start
 
