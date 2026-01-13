@@ -1,14 +1,20 @@
 # Pipeline Services
-Functional pipeline framework for Java 21: local‑first execution, optional JSON config, optional remote actions, and build‑time prompt scaffolding (no runtime LLM calls).
+Portable, local‑first pipeline framework with reference implementations in multiple languages (currently Java + Mojo).
+
+This repo is organized around a shared, language-agnostic behavior contract (`docs/PORTABILITY_CONTRACT.md`) so ports can stay consistent on:
+- short-circuit semantics
+- exception capture vs continue
+- JSON pipeline configuration shape (`actions`, `$local`, `$remote`, `remoteDefaults`)
+- built-in timings/metrics hooks
 
 ## Core model (recommended)
-- A pipeline is `com.pipeline.core.Pipeline<C>` where each action is `C → C`.
-- Add actions in three ways:
-  - Method reference / lambda: `pipeline.addAction(UnaryOperator<C>)`
-  - Control‑aware action: `pipeline.addAction(StepAction<C>)`
-  - JSON config: `pipeline-config` (`PipelineJsonLoader`)
+- A pipeline is an ordered list of **actions** that transform a context value.
+- Two action shapes are supported across ports:
+  - Unary: `C → C`
+  - Control-aware: `(C, control) → C` (explicit short-circuit + error recording)
+- A pipeline has three phases: `pre` → `main` → `post`.
 
-## Modules
+## Java modules (Maven)
 ```
 pipeline-core        # Pipeline<C>, StepAction<C>, StepControl<C>, PipelineResult<C>, RuntimePipeline<T>, metrics
 pipeline-config      # Minimal JSON loader for unary String pipelines
@@ -19,7 +25,13 @@ pipeline-disruptor   # Runner wrapper (single-thread for now)
 pipeline-examples    # Runnable examples (+ main runner)
 ```
 
-## Build
+## Ports
+- Java (reference): `src/Java/` (Maven multi-module)
+- Mojo (experimental): `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
+
+## Quick start
+
+### Java (reference implementation)
 Requirements: Java 21+, Maven 3.9+ (wrapper included)
 
 ```bash
@@ -32,7 +44,7 @@ Run all examples:
 ./mvnw -q -pl pipeline-examples exec:java -Dexec.mainClass=com.pipeline.examples.ExamplesMain
 ```
 
-## Quick start (`Pipeline<C>`)
+Example (`Pipeline<C>`)
 
 ```java
 import com.pipeline.core.Pipeline;
@@ -57,7 +69,21 @@ PipelineResult<String> result = p.execute("  Hello   World  ");
 System.out.println(result.context());
 ```
 
-## Short-circuit + error semantics
+### Mojo (experimental port)
+Mojo toolchain lives under `pipeline_services/pixi.toml`.
+
+```bash
+cd pipeline_services
+pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example01_text_clean.mojo
+pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example02_json_loader.mojo
+pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example05_metrics_post_action.mojo
+```
+
+Notes:
+- The Mojo port is intentionally “boring”: `struct` + top-level `fn`, simple control flow, minimal language features.
+- JSON loading uses a registry for `$local` actions and supports `$remote` HTTP actions.
+
+## Semantics (portable)
 - Explicit short-circuit: inside a `StepAction<C>`, call `control.shortCircuit()`.
 - `shortCircuitOnException=true`: an action exception records an error and short-circuits MAIN actions.
 - `shortCircuitOnException=false`: an action exception records an error and continues.
@@ -65,8 +91,8 @@ System.out.println(result.context());
 - No checked exceptions in `StepAction<C>`; exceptions are captured in `PipelineResult<C>`.
 - Optional: attach errors to your context via `Pipeline.onError((ctx, err) -> /*return updated ctx*/)`; default is no-op.
 
-## JSON config (optional)
-`pipeline-config` is a minimal loader for unary **String** pipelines:
+## JSON config (portable shape)
+Canonical JSON form (across ports):
 
 ```json
 {
@@ -80,6 +106,12 @@ System.out.println(result.context());
 }
 ```
 
+Notes:
+- `"steps"` is accepted as a legacy alias for `"actions"`.
+- Root-level `"remoteDefaults"` can be used to avoid repeating remote configuration across many `"$remote"` actions.
+
+Java loader (`pipeline-config`) is intentionally minimal and currently targets unary **String** pipelines:
+
 ```java
 import com.pipeline.config.PipelineJsonLoader;
 
@@ -88,10 +120,6 @@ try (var in = getClass().getResourceAsStream("/pipelines/json_clean_text.json"))
   System.out.println(p.run("  Hello   World  "));
 }
 ```
-
-Notes:
-- `"steps"` is accepted as an alias for `"actions"` (both Java and Mojo loaders).
-- JSON pipelines may define root-level `"remoteDefaults"` and then reference remote actions via `"$remote"`.
 
 ## Remote action (HTTP)
 Use `pipeline-remote` to turn an HTTP call into a `StepAction<C>`:
@@ -139,11 +167,3 @@ Examples live in `pipeline-examples` and show:
 - HTTP remote step (`HttpStep`)
 - Jump engine + metrics (`pipeline-api`)
 - Runtime sessions (`RuntimePipeline<T>`)
-
-## Mojo port (experimental)
-The Mojo port lives in `src/Mojo/pipeline_services/` and uses `pixi` via `pipeline_services/pixi.toml`:
-
-```bash
-cd pipeline_services
-pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example01_text_clean.mojo
-```
