@@ -1,30 +1,25 @@
 # Porting Notes (Java → Mojo)
 
-## Design goals
-- Preserve the original API concepts (unary `Pipeline`, typed `Pipe`, runtime pipeline, metrics, JSON config, jumps, short-circuit).
-- Follow Mojo style rules: `fn`, typed parameters, `struct`, snake_case for functions/vars, PascalCase for structs, no `let`, readable code.
-- Avoid "fancy" one-liners and keep variable names descriptive.
+This describes the current Mojo port under `src/Mojo/pipeline_services/`.
 
-## Key differences driven by Mojo
-- **Errors**: Mojo uses a single `Error` type; `fn` doesn't raise by default. We mark functions that may raise with `raises` and use `try/except` where needed. citeturn1view0
-- **Control signals**: To keep step signatures as `T -> T`, we emulate Java's exceptions with thread-local flags and then raise a simple error. The pipeline inspects the thread-local signal to perform jumps and short-circuits.
-- **Collections**: We use the standard `List` and `Dict` where appropriate. citeturn2search1turn6search2
-- **Timing**: We use `perf_counter_ns` and `sleep` from the `time` module. citeturn2search2
-- **Python interop**: JSON parsing, dynamic imports, and HTTP calls use Python interop (`json`, `importlib`, `urllib`). citeturn5view0
+## High-level mapping
+- `pipeline-core` → `src/Mojo/pipeline_services/core/`
+- `pipeline-config` → `src/Mojo/pipeline_services/config/`
+- `pipeline-remote` → `src/Mojo/pipeline_services/remote/` (minimal helper)
+- `pipeline-prompt` → `src/Mojo/pipeline_services/prompt/` (stub)
+- `pipeline-disruptor` → `src/Mojo/pipeline_services/disruptor/` (stub)
+- examples → `src/Mojo/pipeline_services/examples/`
 
-## Module mapping
-- `pipeline-core` → `pipeline_services/core` (`pipeline.mojo`, `jumps.mojo`, `short_circuit.mojo`, `metrics.mojo`, `steps.mojo`, `registry.mojo`)
-- `pipeline-config` → `pipeline_services/config/json_loader.mojo`
-- `pipeline-remote` → `pipeline_services/remote/http_step.mojo`
-- `pipeline-prompt` → `pipeline_services/prompt/prompt.mojo`
-- `pipeline-disruptor` → `pipeline_services/disruptor/engine.mojo`
-- Examples → `pipeline_services/examples/*`
+## Key Mojo constraints (0.26.x)
+- Values are move-only by default; `Pipeline` conforms to `Movable` so loaders/builders can return it.
+- Avoid module-level mutable globals (toolchain limitations); registries are passed explicitly.
+- Avoid closures and nested function defs; actions are plain function pointers.
 
-## Verified docs links
-- Mojo changelog: https://docs.modular.com/mojo/changelog/  (opened successfully) citeturn0search12
-- Mojo API reference: https://docs.modular.com/mojo/lib/      (opened successfully) citeturn0search15
+## API differences vs Java
+- Context is `PythonObject` for now to keep the port small and to enable Python interop (JSON parsing, regex helpers, HTTP).
+- `$local` resolution uses `PipelineRegistry` instead of reflection-by-name.
+- The JSON loader supports `$remote` actions (string or object), plus root-level `remoteDefaults` to avoid repeating base URL/timeouts/headers.
+- Exceptions from steps are caught by the pipeline, recorded as `PipelineError`, and optionally mapped back into the context via `Pipeline.on_error_handler`.
 
-## Compatibility notes
-- The JSON loader preserves `$local`, `$method`, `$prompt`, `$remote`, and `jumpWhen` semantics.
-- Typed predicate results in `jumpWhen` are interpreted through Python truthiness; adapt as needed.
-- The Disruptor engine is a pragmatic port using Python `queue`/`threading` until Mojo exposes stable native equivalents.
+## Run
+See `src/Mojo/README.md` for `pixi` commands.

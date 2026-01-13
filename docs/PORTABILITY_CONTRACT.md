@@ -75,7 +75,7 @@ Minimal canonical form:
   "pipeline": "name",
   "type": "unary",
   "shortCircuitOnException": true,
-  "steps": [
+  "actions": [
     { "$local": "package.ClassImplementingUnaryOrStepAction" }
   ]
 }
@@ -83,8 +83,10 @@ Minimal canonical form:
 
 Notes:
 - `shortCircuit` is an allowed legacy alias for `shortCircuitOnException`.
+- `steps` is an allowed legacy alias for `actions`.
 - `$local` should resolve a class/type by name and instantiate it (no-arg ctor in Java).
 - A `$local` step may implement either the unary callable or the control-aware callable.
+ - Optional: ports may support `remoteDefaults` + `"$remote"` actions as a convenience for HTTP calls.
 
 ## 4. Extensions (Optional per port)
 
@@ -104,4 +106,3 @@ Ports may provide a `RemoteSpec<C>` that maps `C` to request JSON and maps `(C, 
 
 Public API names should match where possible:
 - `Pipeline`, `StepAction`, `StepControl`, `PipelineResult`, `PipelineError`, `PipelineJsonLoader`
-

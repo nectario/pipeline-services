@@ -13,5 +13,13 @@ public interface StepControl<C> {
   C recordError(C ctx, Exception exception);
 
   List<PipelineError> errors();
-}
 
+  /** Pipeline name for this run (best-effort; may be empty for custom controls). */
+  default String pipelineName() { return ""; }
+
+  /** Run start timestamp in nanos from the pipeline's clock (best-effort; may be 0). */
+  default long runStartNanos() { return 0L; }
+
+  /** Per-action timing captured by the pipeline runtime (best-effort; may be empty). */
+  default List<ActionTiming> actionTimings() { return List.of(); }
+}

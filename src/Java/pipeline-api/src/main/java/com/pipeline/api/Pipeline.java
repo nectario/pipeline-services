@@ -38,7 +38,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *  - Seals on first run to immutable core when jumps are disabled
  */
 public class Pipeline<I, C> {
-  private static final ObjectMapper M = new ObjectMapper();
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private String name = "pipeline";
   private boolean shortCircuit = true;
@@ -67,6 +67,14 @@ public class Pipeline<I, C> {
   private final ThreadLocal<Metrics.RunScope> currentRunScope = new ThreadLocal<>();
 
   public Pipeline<I,C> metrics(Metrics m) { this.metrics = (m == null) ? NoopMetrics.INSTANCE : m; return this; }
+
+  // ----- Remote defaults -----
+  private volatile HttpStep.RemoteDefaults remoteDefaults = new HttpStep.RemoteDefaults();
+  public Pipeline<I,C> remoteDefaults(HttpStep.RemoteDefaults defaults) {
+    ensureMutable();
+    this.remoteDefaults = (defaults == null) ? new HttpStep.RemoteDefaults() : defaults;
+    return this;
+  }
 
   // ----- Jump engine config -----
   private boolean jumpsEnabled = false;
@@ -511,7 +519,7 @@ public class Pipeline<I, C> {
 
   private void appendFromJson(String json) {
     try {
-      JsonNode root = M.readTree(json);
+      JsonNode root = OBJECT_MAPPER.readTree(json);
       // Beans
       if (root.has("beans")) {
         JsonNode beansNode = root.get("beans");
@@ -531,16 +539,19 @@ public class Pipeline<I, C> {
       String type = root.path("type").asText("unary");
       if (root.has("pipeline")) this.name = root.get("pipeline").asText(name);
       if (root.has("shortCircuit")) this.shortCircuit = root.get("shortCircuit").asBoolean(this.shortCircuit);
+      if (root.has("remoteDefaults")) this.remoteDefaults = parseRemoteDefaults(root.get("remoteDefaults"), this.remoteDefaults);
 
       if ("unary".equals(type)) {
         appendUnarySection(root.get("pre"),   Section.PRE);
-        appendUnarySection(root.get("steps"), Section.MAIN);
+        JsonNode mainNode = root.has("actions") ? root.get("actions") : root.get("steps");
+        appendUnarySection(mainNode, Section.MAIN);
         appendUnarySection(root.get("post"),  Section.POST);
       } else if ("typed".equals(type)) {
         appendTypedSection(root.get("pre"),   Section.PRE, null);
         Class<?> start = requireClass(root, "inType");
         Class<?> end   = optClass(root, "outType");
-        Class<?> current = appendTypedSection(root.get("steps"), Section.MAIN, start);
+        JsonNode mainNode = root.has("actions") ? root.get("actions") : root.get("steps");
+        Class<?> current = appendTypedSection(mainNode, Section.MAIN, start);
         Class<?> after  = appendTypedSection(root.get("post"),  Section.POST, current);
         if (end != null && after != null && !end.equals(after)) {
           throw new IllegalArgumentException("Typed pipeline outType mismatch. Expected " + end.getName() + " but got " + after.getName());
@@ -585,7 +596,7 @@ public class Pipeline<I, C> {
 
       } else if (s.has("$remote")) {
         JsonNode r = s.get("$remote");
-        fn = makeRemoteFn(r, String.class, String.class);
+        fn = makeRemoteFn(remoteDefaults, r, String.class, String.class);
 
       } else if (s.has("$method")) {
         JsonNode m = s.get("$method");
@@ -660,7 +671,7 @@ public class Pipeline<I, C> {
 
       } else if (s.has("$remote")) {
         JsonNode r = s.get("$remote");
-        fn = makeRemoteFn(r, in, out);
+        fn = makeRemoteFn(remoteDefaults, r, in, out);
 
       } else {
         throw new IllegalArgumentException("Unsupported typed step: " + s.toString());
@@ -821,23 +832,34 @@ public class Pipeline<I, C> {
     }
   }
 
-  private static ThrowingFn<?,?> makeRemoteFn(JsonNode r, Class<?> inClass, Class<?> outClass) {
+  private static ThrowingFn<?,?> makeRemoteFn(HttpStep.RemoteDefaults defaults,
+                                              JsonNode remoteNode,
+                                              Class<?> inClass,
+                                              Class<?> outClass) {
     var spec = new HttpStep.RemoteSpecTyped<>();
-    spec.endpoint = req(r, "endpoint").asText();
-    spec.timeoutMillis = r.path("timeoutMillis").asInt(1000);
-    spec.retries = r.path("retries").asInt(0);
-    spec.headers = Collections.emptyMap();
+    String endpointOrPath = parseRemoteEndpointOrPath(remoteNode);
+    spec.endpoint = defaults.resolveEndpoint(endpointOrPath);
+    spec.timeoutMillis = remoteNode.path("timeoutMillis").asInt(defaults.timeoutMillis);
+    spec.retries = remoteNode.path("retries").asInt(defaults.retries);
+    spec.headers = defaults.mergeHeaders(parseStringMap(remoteNode.get("headers")));
+    spec.client = defaults.client;
 
-    String serde = r.path("serde").asText("string");
-    if ("jackson".equals(serde)) {
+    String serde = remoteNode.path("serde").asText(null);
+    if (serde == null || serde.isBlank()) serde = defaults.serde;
+    if (serde == null || serde.isBlank()) {
+      serde = (inClass == String.class && outClass == String.class) ? "string" : "jackson";
+    }
+    if ("json".equalsIgnoreCase(serde)) serde = "jackson";
+
+    if ("jackson".equalsIgnoreCase(serde)) {
       spec.toJson = obj -> {
-        try { return (obj == null) ? "null" : M.writeValueAsString(obj); }
+        try { return (obj == null) ? "null" : OBJECT_MAPPER.writeValueAsString(obj); }
         catch (Exception e) { throw new RuntimeException(e); }
       };
       spec.fromJson = body -> {
         try {
           if (outClass == String.class) return body;
-          return M.readValue(body, outClass);
+          return OBJECT_MAPPER.readValue(body, outClass);
         } catch (Exception e) { throw new RuntimeException(e); }
       };
     } else {
@@ -846,8 +868,46 @@ public class Pipeline<I, C> {
     }
 
     @SuppressWarnings("unchecked")
-    ThrowingFn<?,?> fn = (ThrowingFn<?,?>) HttpStep.jsonPostTyped(spec);
+    ThrowingFn<?,?> fn = (ThrowingFn<?,?>) ("GET".equalsIgnoreCase(remoteNode.path("method").asText(defaults.method))
+        ? HttpStep.jsonGetTyped(spec)
+        : HttpStep.jsonPostTyped(spec));
     return fn;
+  }
+
+  private static HttpStep.RemoteDefaults parseRemoteDefaults(JsonNode node, HttpStep.RemoteDefaults base) {
+    if (node == null || node.isNull() || !node.isObject()) return base;
+    HttpStep.RemoteDefaults defaults = new HttpStep.RemoteDefaults();
+    defaults.baseUrl = node.path("baseUrl").asText(node.path("endpointBase").asText(base.baseUrl));
+    defaults.timeoutMillis = node.path("timeoutMillis").asInt(base.timeoutMillis);
+    defaults.retries = node.path("retries").asInt(base.retries);
+    defaults.method = node.path("method").asText(base.method);
+    defaults.serde = node.path("serde").asText(base.serde);
+    defaults.headers = base.mergeHeaders(parseStringMap(node.get("headers")));
+    defaults.client = base.client;
+    return defaults;
+  }
+
+  private static String parseRemoteEndpointOrPath(JsonNode remoteNode) {
+    if (remoteNode == null || remoteNode.isNull()) {
+      throw new IllegalArgumentException("$remote must be a string or object");
+    }
+    if (remoteNode.isTextual()) return remoteNode.asText();
+    if (!remoteNode.isObject()) throw new IllegalArgumentException("Unsupported $remote spec: " + remoteNode);
+    if (remoteNode.has("endpoint")) return req(remoteNode, "endpoint").asText();
+    if (remoteNode.has("path")) return req(remoteNode, "path").asText();
+    throw new IllegalArgumentException("Missing required $remote field: endpoint|path");
+  }
+
+  private static Map<String,String> parseStringMap(JsonNode node) {
+    if (node == null || node.isNull()) return Collections.emptyMap();
+    if (!node.isObject()) throw new IllegalArgumentException("Expected object for map field: " + node);
+    Map<String,String> out = new LinkedHashMap<>();
+    var it = node.fields();
+    while (it.hasNext()) {
+      var entry = it.next();
+      out.put(entry.getKey(), entry.getValue().asText());
+    }
+    return out;
   }
 
   // Label wrapper (friendly toString)

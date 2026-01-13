@@ -1,5 +1,6 @@
 package com.pipeline.remote.http;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pipeline.core.StepAction;
 import com.pipeline.core.ThrowingFn;
 
@@ -9,12 +10,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 public final class HttpStep {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private HttpStep() {}
 
     public static <C> StepAction<C> jsonPost(RemoteSpec<C> spec) {
@@ -47,9 +50,7 @@ public final class HttpStep {
 
     private static <C> C invoke(RemoteSpec<C> spec, String method, C ctx) throws IOException, InterruptedException {
         validateSpec(spec);
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(spec.timeoutMillis))
-                .build();
+        HttpClient client = (spec.client != null) ? spec.client : HttpClient.newHttpClient();
 
         String body = spec.toJson.apply(ctx);
         HttpRequest.Builder b = HttpRequest.newBuilder()
@@ -95,9 +96,7 @@ public final class HttpStep {
 
     private static <I, O> O invokeTyped(RemoteSpecTyped<I, O> spec, String method, I in) throws IOException, InterruptedException {
         validateSpec(spec);
-        HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(spec.timeoutMillis))
-            .build();
+        HttpClient client = (spec.client != null) ? spec.client : HttpClient.newHttpClient();
 
         String body = spec.toJson.apply(in);
         HttpRequest.Builder b = HttpRequest.newBuilder()
@@ -160,6 +159,7 @@ public final class HttpStep {
         public int timeoutMillis = 1000;
         public int retries = 0;
         public Map<String, String> headers = Map.of();
+        public HttpClient client = HttpClient.newHttpClient();
         public Function<C, String> toJson;          // C -> JSON body or query string
         public BiFunction<C, String, C> fromJson;   // (C, body) -> updated context
     }
@@ -169,7 +169,99 @@ public final class HttpStep {
         public int timeoutMillis = 1000;
         public int retries = 0;
         public Map<String, String> headers = Map.of();
+        public HttpClient client = HttpClient.newHttpClient();
         public Function<I, String> toJson;   // I -> JSON body or query string
         public Function<String, O> fromJson; // JSON -> O
+    }
+
+    /** Shared defaults so you don't repeat endpoint base, timeouts, retries, headers, and client wiring. */
+    public static final class RemoteDefaults {
+        public String baseUrl;
+        public int timeoutMillis = 1000;
+        public int retries = 0;
+        public Map<String, String> headers = Map.of();
+        public String method = "POST"; // POST | GET
+        public String serde;           // null | "string" | "jackson"
+        public HttpClient client = HttpClient.newHttpClient();
+
+        public String resolveEndpoint(String endpointOrPath) {
+            String v = Objects.requireNonNull(endpointOrPath, "endpointOrPath").strip();
+            if (v.startsWith("http://") || v.startsWith("https://")) return v;
+            if (baseUrl == null || baseUrl.isBlank()) return v;
+            String b = baseUrl.strip();
+            if (b.endsWith("/") && v.startsWith("/")) return b + v.substring(1);
+            if (!b.endsWith("/") && !v.startsWith("/")) return b + "/" + v;
+            return b + v;
+        }
+
+        public Map<String, String> mergeHeaders(Map<String, String> overrides) {
+            Map<String, String> base = (headers == null) ? Map.of() : headers;
+            if (overrides == null || overrides.isEmpty()) return base;
+            Map<String, String> merged = new LinkedHashMap<>(base);
+            merged.putAll(overrides);
+            return Map.copyOf(merged);
+        }
+
+        public <C> RemoteSpec<C> spec(String endpointOrPath,
+                                      Function<C, String> toJson,
+                                      BiFunction<C, String, C> fromJson) {
+            RemoteSpec<C> spec = new RemoteSpec<>();
+            spec.endpoint = resolveEndpoint(endpointOrPath);
+            spec.timeoutMillis = timeoutMillis;
+            spec.retries = retries;
+            spec.headers = mergeHeaders(null);
+            spec.client = client;
+            spec.toJson = toJson;
+            spec.fromJson = fromJson;
+            return spec;
+        }
+
+        public <C> StepAction<C> action(String endpointOrPath,
+                                        Function<C, String> toJson,
+                                        BiFunction<C, String, C> fromJson) {
+            RemoteSpec<C> spec = spec(endpointOrPath, toJson, fromJson);
+            if ("GET".equalsIgnoreCase(method)) return jsonGet(spec);
+            return jsonPost(spec);
+        }
+
+        public <I, O> RemoteSpecTyped<I, O> typedSpec(String endpointOrPath,
+                                                      Function<I, String> toJson,
+                                                      Function<String, O> fromJson) {
+            RemoteSpecTyped<I, O> spec = new RemoteSpecTyped<>();
+            spec.endpoint = resolveEndpoint(endpointOrPath);
+            spec.timeoutMillis = timeoutMillis;
+            spec.retries = retries;
+            spec.headers = mergeHeaders(null);
+            spec.client = client;
+            spec.toJson = toJson;
+            spec.fromJson = fromJson;
+            return spec;
+        }
+
+        public <I, O> ThrowingFn<I, O> fn(String endpointOrPath,
+                                          Function<I, String> toJson,
+                                          Function<String, O> fromJson) {
+            RemoteSpecTyped<I, O> spec = typedSpec(endpointOrPath, toJson, fromJson);
+            if ("GET".equalsIgnoreCase(method)) return jsonGetTyped(spec);
+            return jsonPostTyped(spec);
+        }
+
+        public <I, O> ThrowingFn<I, O> jacksonFn(String endpointOrPath, Class<O> outClass) {
+            Objects.requireNonNull(outClass, "outClass");
+            return fn(endpointOrPath,
+                obj -> {
+                    try { return (obj == null) ? "null" : OBJECT_MAPPER.writeValueAsString(obj); }
+                    catch (Exception e) { throw new RuntimeException(e); }
+                },
+                body -> {
+                    try {
+                        if (outClass == String.class) return outClass.cast(body);
+                        return OBJECT_MAPPER.readValue(body, outClass);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            );
+        }
     }
 }

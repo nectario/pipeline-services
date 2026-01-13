@@ -73,7 +73,7 @@ System.out.println(result.context());
   "pipeline": "json_clean_text",
   "type": "unary",
   "shortCircuitOnException": true,
-  "steps": [
+  "actions": [
     { "$local": "com.pipeline.examples.adapters.TextStripStep" },
     { "$local": "com.pipeline.examples.adapters.TextNormalizeStep" }
   ]
@@ -88,6 +88,10 @@ try (var in = getClass().getResourceAsStream("/pipelines/json_clean_text.json"))
   System.out.println(p.run("  Hello   World  "));
 }
 ```
+
+Notes:
+- `"steps"` is accepted as an alias for `"actions"` (both Java and Mojo loaders).
+- JSON pipelines may define root-level `"remoteDefaults"` and then reference remote actions via `"$remote"`.
 
 ## Remote action (HTTP)
 Use `pipeline-remote` to turn an HTTP call into a `StepAction<C>`:
@@ -108,6 +112,8 @@ spec.fromJson = (ctx, body) -> new Ctx(ctx.q(), body);
 var p = new Pipeline<Ctx>("remote_demo", true).addAction(HttpStep.jsonPost(spec));
 Ctx out = p.run(new Ctx("hello", null));
 ```
+
+If you have many remote actions, use `HttpStep.RemoteDefaults` so you don’t repeat base URL, timeouts, retries, headers, and client wiring.
 
 ## Runtime / imperative sessions
 `RuntimePipeline<T>` is an imperative, single-threaded helper for REPL/tools:
@@ -134,3 +140,10 @@ Examples live in `pipeline-examples` and show:
 - Jump engine + metrics (`pipeline-api`)
 - Runtime sessions (`RuntimePipeline<T>`)
 
+## Mojo port (experimental)
+The Mojo port lives in `src/Mojo/pipeline_services/` and uses `pixi` via `pipeline_services/pixi.toml`:
+
+```bash
+cd pipeline_services
+pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example01_text_clean.mojo
+```

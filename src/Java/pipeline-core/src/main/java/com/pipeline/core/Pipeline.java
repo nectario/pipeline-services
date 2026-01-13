@@ -139,8 +139,10 @@ public final class Pipeline<C> {
     public PipelineResult<C> execute(C input) {
         var rec = Metrics.recorder();
 
+        long runStartNanos = System.nanoTime();
         C ctx = Objects.requireNonNull(input, "input");
         DefaultStepControl<C> control = new DefaultStepControl<>(name, onError);
+        control.beginRun(runStartNanos);
 
         // pre: always run all pre-actions
         ctx = runPhase(control, rec, StepPhase.PRE, ctx, preActions, /*stopOnShortCircuit=*/false);
@@ -153,7 +155,8 @@ public final class Pipeline<C> {
         // post: always run all post-actions
         ctx = runPhase(control, rec, StepPhase.POST, ctx, postActions, /*stopOnShortCircuit=*/false);
 
-        return new PipelineResult<>(ctx, control.isShortCircuited(), control.errors());
+        long totalNanos = System.nanoTime() - runStartNanos;
+        return new PipelineResult<>(ctx, control.isShortCircuited(), control.errors(), control.actionTimings(), totalNanos);
     }
 
     public String name() { return name; }
@@ -169,29 +172,37 @@ public final class Pipeline<C> {
         C ctx = start;
         for (int i = 0; i < list.size(); i++) {
             RegisteredAction<C> reg = list.get(i);
-            String stepName = formatStepName(phase, i, reg.name());
-            control.beginStep(phase, i, stepName);
+            String actionName = formatStepName(phase, i, reg.name());
+            control.beginStep(phase, i, actionName);
 
             boolean wasShortCircuited = control.isShortCircuited();
 
+            long actionStartNanos = System.nanoTime();
+            boolean actionSucceeded = true;
+            long elapsedNanos;
             try {
-                long t0 = System.nanoTime();
                 C next = reg.action().apply(ctx, control);
-                if (next == null) throw new IllegalStateException("Step returned null: " + stepName);
+                if (next == null) throw new IllegalStateException("Step returned null: " + actionName);
                 ctx = next;
-                rec.onStepSuccess(name, stepName, System.nanoTime() - t0);
             } catch (Exception ex) {
-                rec.onStepError(name, stepName, ex);
+                actionSucceeded = false;
+                rec.onStepError(name, actionName, ex);
                 ctx = control.recordError(ctx, ex);
                 if (shortCircuitOnException) {
                     control.shortCircuit();
-                    log.debug("short-circuit '{}' at {} due to exception", name, stepName, ex);
+                    log.debug("short-circuit '{}' at {} due to exception", name, actionName, ex);
+                }
+            } finally {
+                elapsedNanos = System.nanoTime() - actionStartNanos;
+                control.recordTiming(elapsedNanos, actionSucceeded);
+                if (actionSucceeded) {
+                    rec.onStepSuccess(name, actionName, elapsedNanos);
                 }
             }
 
             boolean isShortCircuitedNow = control.isShortCircuited();
             if (!wasShortCircuited && isShortCircuitedNow) {
-                rec.onShortCircuit(name, stepName);
+                rec.onShortCircuit(name, actionName);
             }
 
             if (stopOnShortCircuit && isShortCircuitedNow) break;
@@ -228,22 +239,32 @@ public final class Pipeline<C> {
         private final String pipelineName;
         private final BiFunction<C, PipelineError, C> onError;
         private final List<PipelineError> errors = new ArrayList<>();
+        private final List<ActionTiming> actionTimings = new ArrayList<>();
 
         private boolean shortCircuited;
 
         private StepPhase phase = StepPhase.MAIN;
         private int index = 0;
         private String stepName = "?";
+        private long runStartNanos;
 
         private DefaultStepControl(String pipelineName, BiFunction<C, PipelineError, C> onError) {
             this.pipelineName = Objects.requireNonNull(pipelineName, "pipelineName");
             this.onError = Objects.requireNonNull(onError, "onError");
         }
 
+        private void beginRun(long startNanos) {
+            this.runStartNanos = startNanos;
+        }
+
         private void beginStep(StepPhase phase, int index, String stepName) {
             this.phase = Objects.requireNonNull(phase, "phase");
             this.index = index;
             this.stepName = Objects.requireNonNull(stepName, "stepName");
+        }
+
+        private void recordTiming(long elapsedNanos, boolean success) {
+            actionTimings.add(new ActionTiming(phase, index, stepName, elapsedNanos, success));
         }
 
         @Override
@@ -268,6 +289,21 @@ public final class Pipeline<C> {
         @Override
         public List<PipelineError> errors() {
             return List.copyOf(errors);
+        }
+
+        @Override
+        public String pipelineName() {
+            return pipelineName;
+        }
+
+        @Override
+        public long runStartNanos() {
+            return runStartNanos;
+        }
+
+        @Override
+        public List<ActionTiming> actionTimings() {
+            return List.copyOf(actionTimings);
         }
     }
 }

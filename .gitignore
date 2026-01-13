@@ -6,3 +6,11 @@ target/
 .settings/
 *.iml
 
+# Codex/agent artifacts
+codex.txt
+docs/changes.md
+docs/Mojo_README.md
+
+# Large reference/material folders (keep local; avoid accidental public commits)
+UBS Work/
+archive/

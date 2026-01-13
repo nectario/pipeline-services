@@ -1,0 +1,11 @@
+[workspace]
+authors = ["Nektarios Kalogridis <mail@nektarios.com>"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+name = "pipeline_services"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+modular = ">=26.1.0.dev2026011105,<27"
