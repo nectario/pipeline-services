@@ -35,6 +35,7 @@ pipeline-examples    # Runnable examples (+ main runner)
 ## Ports
 - Java (reference): `src/Java/` (Maven multi-module)
 - Mojo (experimental): `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
+- Python (experimental): `src/Python/pipeline_services/` (runs via `python3 -m ...`)
 
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
@@ -93,6 +94,15 @@ pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example0
 
 Notes:
 - JSON loading uses a registry for `$local` actions and supports `$remote` HTTP actions.
+
+### Python (experimental port)
+```bash
+cd src/Python
+python3 -m pipeline_services.examples.example01_text_clean
+python3 -m pipeline_services.examples.example02_json_loader
+python3 -m pipeline_services.examples.example05_metrics_post_action
+python3 -m pipeline_services.examples.benchmark01_pipeline_run
+```
 
 ## Semantics (portable)
 - Explicit short-circuit: inside a `StepAction<C>`, call `control.shortCircuit()`.

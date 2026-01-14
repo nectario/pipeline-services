@@ -1,26 +1,32 @@
-import json
+import unittest
+
 from pipeline_services.config.json_loader import PipelineJsonLoader
-from pipeline_services.examples.finance_steps import FinanceSteps, Tick
+from pipeline_services.core.registry import PipelineRegistry
+from pipeline_services.examples.text_steps import normalize_whitespace, strip
 
-def test_json_unary_with_sections():
-    spec = {
-        "pipeline": "json_clean_text",
-        "type": "unary",
-        "shortCircuit": False,
-        "pre": [{"$local": "pipeline_services.examples.adapters_text.TextStripStep"}],
-        "steps": [
-            {"$local": "pipeline_services.examples.adapters_text.TextNormalizeStep"}
-        ],
-        "post": [{"$local": "pipeline_services.examples.adapters_text.TextStripStep"}]
-    }
-    p = PipelineJsonLoader()._build(spec)
-    assert p.run("  hi   there  ") == "hi there"
 
-class TextStripStep:
-    def apply(self, s: str) -> str:
-        return s.strip()
+class JsonLoaderTests(unittest.TestCase):
+    def test_load_steps_alias_actions(self) -> None:
+        registry = PipelineRegistry()
+        registry.register_unary("strip", strip)
+        registry.register_unary("normalize_whitespace", normalize_whitespace)
 
-class TextNormalizeStep:
-    def apply(self, s: str) -> str:
-        import re
-        return re.sub(r"\s+", " ", s)
+        json_text = """
+{
+  "pipeline": "t",
+  "type": "unary",
+  "actions": [
+    {"$local": "strip"},
+    {"$local": "normalize_whitespace"}
+  ]
+}
+"""
+        loader = PipelineJsonLoader()
+        pipeline = loader.load_str(json_text, registry)
+        output_value = pipeline.run("  Hello   JSON  ")
+        self.assertEqual(output_value, "Hello JSON")
+
+
+if __name__ == "__main__":
+    unittest.main()
+

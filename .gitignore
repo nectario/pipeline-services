@@ -6,6 +6,11 @@ target/
 .settings/
 *.iml
 
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # Codex/agent artifacts
 codex.txt
 docs/changes.md
