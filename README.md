@@ -39,10 +39,7 @@ pipeline-examples    # Runnable examples (+ main runner)
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
 
-This repo’s Mojo port is intentionally conservative:
-- uses `struct` + top-level `fn` and avoids “clever” or exotic language features
-- favors readability and direct control flow over dense one-liners
-- keeps behavior aligned with the shared contract so semantics are comparable across languages
+This repo includes a Mojo port that follows the shared behavior contract so semantics stay comparable across languages.
 
 ## Quick start
 
@@ -95,7 +92,6 @@ pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example0
 ```
 
 Notes:
-- The Mojo port is intentionally “boring”: `struct` + top-level `fn`, simple control flow, minimal language features.
 - JSON loading uses a registry for `$local` actions and supports `$remote` HTTP actions.
 
 ## Semantics (portable)
