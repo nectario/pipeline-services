@@ -11,6 +11,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Node / TypeScript
+node_modules/
+dist/
+
 # Codex/agent artifacts
 codex.txt
 docs/changes.md

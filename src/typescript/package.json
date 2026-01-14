@@ -2,13 +2,13 @@
   "name": "pipeline-services-ts",
   "version": "1.0.0",
   "type": "module",
-  "description": "Pipeline Services \u2014 TypeScript port (pre/main/post sections, labels & jumps, metrics, JSON loader, prompt and remote steps, disruptor engine).",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "Pipeline Services — TypeScript port aligned with the Mojo/Python pipeline_services package (pre/actions/post, shortCircuitOnException, JSON loader with $local/$remote, remoteDefaults, timings/metrics).",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "test": "node --test --loader ts-node/esm tests/run-tests.ts"
+    "test": "npm run build && node --test dist/tests"
   },
   "keywords": [
     "pipeline",
@@ -17,5 +17,9 @@
     "java",
     "typescript"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.6.3"
+  }
 }

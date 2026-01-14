@@ -1,5 +1,5 @@
 # Pipeline Services
-Portable, local‑first pipeline framework with reference implementations in multiple languages (currently Java + Mojo).
+Portable, local‑first pipeline framework with reference implementations in multiple languages (Java, Mojo, Python, TypeScript).
 
 This repo is organized around a shared, language-agnostic behavior contract (`docs/PORTABILITY_CONTRACT.md`) so ports can stay consistent on:
 - short-circuit semantics
@@ -36,6 +36,7 @@ pipeline-examples    # Runnable examples (+ main runner)
 - Java (reference): `src/Java/` (Maven multi-module)
 - Mojo (experimental): `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
 - Python (experimental): `src/Python/pipeline_services/` (runs via `python3 -m ...`)
+- TypeScript (experimental): `src/typescript/` (npm package)
 
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
@@ -65,7 +66,7 @@ import com.pipeline.core.PipelineResult;
 import com.pipeline.examples.steps.PolicySteps;
 import com.pipeline.examples.steps.TextSteps;
 
-Pipeline<String> p = new Pipeline<>("clean_text", /*shortCircuitOnException=*/true)
+Pipeline<String> pipeline = new Pipeline<>("clean_text", /*shortCircuitOnException=*/true)
     .addPreAction(PolicySteps::rateLimit)
     .addAction(TextSteps::strip)
     .addAction(TextSteps::normalizeWhitespace)
@@ -78,7 +79,7 @@ Pipeline<String> p = new Pipeline<>("clean_text", /*shortCircuitOnException=*/tr
     })
     .addPostAction(PolicySteps::audit);
 
-PipelineResult<String> result = p.execute("  Hello   World  ");
+PipelineResult<String> result = pipeline.execute("  Hello   World  ");
 System.out.println(result.context());
 ```
 
@@ -102,6 +103,15 @@ python3 -m pipeline_services.examples.example01_text_clean
 python3 -m pipeline_services.examples.example02_json_loader
 python3 -m pipeline_services.examples.example05_metrics_post_action
 python3 -m pipeline_services.examples.benchmark01_pipeline_run
+```
+
+### TypeScript (experimental port)
+```bash
+cd src/typescript
+npm install
+npm run build
+npm test
+node dist/src/pipeline_services/examples/example01_text_clean.js
 ```
 
 ## Semantics (portable)
@@ -137,8 +147,8 @@ Java loader (`pipeline-config`) is intentionally minimal and currently targets u
 import com.pipeline.config.PipelineJsonLoader;
 
 try (var in = getClass().getResourceAsStream("/pipelines/json_clean_text.json")) {
-  var p = PipelineJsonLoader.loadUnary(in);
-  System.out.println(p.run("  Hello   World  "));
+  var pipeline = PipelineJsonLoader.loadUnary(in);
+  System.out.println(pipeline.run("  Hello   World  "));
 }
 ```
 
@@ -158,8 +168,8 @@ spec.retries = 1;
 spec.toJson = ctx -> "{\"q\":\"" + ctx.q() + "\"}";
 spec.fromJson = (ctx, body) -> new Ctx(ctx.q(), body);
 
-var p = new Pipeline<Ctx>("remote_demo", true).addAction(HttpStep.jsonPost(spec));
-Ctx out = p.run(new Ctx("hello", null));
+var pipeline = new Pipeline<Ctx>("remote_demo", true).addAction(HttpStep.jsonPost(spec));
+Ctx out = pipeline.run(new Ctx("hello", null));
 ```
 
 If you have many remote actions, use `HttpStep.RemoteDefaults` so you don’t repeat base URL, timeouts, retries, headers, and client wiring.
@@ -171,10 +181,10 @@ If you have many remote actions, use `HttpStep.RemoteDefaults` so you don’t re
 import com.pipeline.core.RuntimePipeline;
 import com.pipeline.examples.steps.TextSteps;
 
-var rt = new RuntimePipeline<>("adhoc_text", /*shortCircuitOnException=*/false, "  Hello   World  ");
-rt.addAction(TextSteps::strip);
-rt.addAction(TextSteps::normalizeWhitespace);
-System.out.println(rt.value());
+var runtimePipeline = new RuntimePipeline<>("adhoc_text", /*shortCircuitOnException=*/false, "  Hello   World  ");
+runtimePipeline.addAction(TextSteps::strip);
+runtimePipeline.addAction(TextSteps::normalizeWhitespace);
+System.out.println(runtimePipeline.value());
 ```
 
 ## Advanced: labels + jumps + inline JSON (`pipeline-api`)

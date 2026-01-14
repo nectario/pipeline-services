@@ -1,50 +1,39 @@
-# Pipeline Services — TypeScript Port
+# Pipeline Services — TypeScript port
 
-**Status:** Complete, no TODOs. Conforms to the cross-language contract: pre/main/post sections, label uniqueness, jumps restricted to main, short-circuit, metrics (including `pipeline.start`), JSON loader (`$local/$method/$prompt/$remote/jumpWhen`), remote step with GET/POST semantics, and a single-consumer Disruptor-like engine with blocking backpressure.
+This TypeScript port is aligned with the Mojo/Python `pipeline_services` package and the shared semantics in `docs/PORTABILITY_CONTRACT.md`.
 
-## Install & Build
+## What’s implemented
+- `Pipeline` with `pre` / `actions` / `post`
+- two action shapes:
+  - unary: `(ctx) => ctx`
+  - control-aware: `(ctx, control) => ctx` (explicit short-circuit)
+- exception capture + `shortCircuitOnException` semantics (errors recorded; stop-vs-continue is configurable)
+- JSON loader with `$local` (via `PipelineRegistry`) and `$remote` (HTTP) actions
+- `RemoteDefaults` to avoid repeating base URL / timeout / retries / headers across many remote actions
+- `RuntimePipeline` for incremental/interactive building
+- `print_metrics` as a post-action (action timings and pipeline latency)
+
+## Install, build, test
 ```bash
+cd src/typescript
 npm install
 npm run build
+npm test
 ```
 
-## Quick Use
-```ts
-import { Pipeline, jumpNow, shortCircuit } from "pipeline-services-ts";
-
-const pipeline = new Pipeline<string>("demo")
-  .beforeEach((s) => s.trim())
-  .step((s) => s.trim(), { label: "trim", section: "main" })
-  .step((s) => { if (s.includes("-")) { jumpNow("trim"); } return s; }, { label: "check", section: "main" })
-  .step((s) => { if (s.length > 10) { shortCircuit(s.slice(0,10)); } return s; }, { label: "final", section: "main" });
-
-const result = await pipeline.run("  hello-world  ");
-// result: "helloworld" short-circuited at 10 chars, or re-trimmed via jump depending on the input.
+## Run examples
+```bash
+cd src/typescript
+node dist/src/pipeline_services/examples/example01_text_clean.js
+node dist/src/pipeline_services/examples/example02_json_loader.js
+node dist/src/pipeline_services/examples/example05_metrics_post_action.js
+node dist/src/pipeline_services/examples/benchmark01_pipeline_run.js
 ```
 
-## JSON Loader
-```ts
-import { PipelineJsonLoader } from "pipeline-services-ts";
+Remote example (requires a local HTTP server):
 
-const spec = {
-  pipeline: "json_clean_text",
-  type: "unary",
-  shortCircuit: true,
-  pre: [{ "$local": "src.examples.adapters_text.TextStripStep" }],
-  steps: [{ "$local": "src.examples.adapters_text.TextNormalizeStep" }],
-  post: [{ "$local": "src.examples.adapters_text.TextStripStep" }]
-};
-
-const loader = new PipelineJsonLoader();
-const p = await loader.build(spec) as Pipeline<string>;
-const out = await p.run("  hi   there  ");
-// -> "hi there"
+```bash
+cd src/typescript
+python3 -m http.server 8765 --bind 127.0.0.1 -d src/pipeline_services/examples/fixtures
+node dist/src/pipeline_services/examples/example04_json_loader_remote_get.js
 ```
-
-### `$local` and `$method` module paths
-- `$local`: `"package.module.ClassWithApply"` → imports `package/module` and instantiates `ClassWithApply`, then calls `apply(x)`.
-- `$method`: for class methods: `"package.module.Class#method"`; for free functions: `"package.module:function"`.
-  - Targets: `@this` (loader instance) or `@beanId` (resolved via loader options).
-
-## Remote step
-Uses global `fetch` (Node 18+ or browsers). GET encodes objects via `URLSearchParams`, POST sends JSON.
