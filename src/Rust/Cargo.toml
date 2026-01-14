@@ -1,0 +1,16 @@
+[package]
+name = "pipeline-services-rs"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Pipeline Services — Rust port aligned with the Mojo/Python/TypeScript contract-first ports."
+
+[lib]
+name = "pipeline_services"
+path = "src/lib.rs"
+
+[dependencies]
+reqwest = { version = "0.12.12", features = ["blocking"] }
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.122"
