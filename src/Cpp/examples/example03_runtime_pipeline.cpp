@@ -10,8 +10,8 @@ int main() {
     false,
     "  Hello   Runtime  "
   );
-  runtime_pipeline.add_action(pipeline_services::examples::strip);
-  runtime_pipeline.add_action(pipeline_services::examples::normalize_whitespace);
+  runtime_pipeline.addAction(pipeline_services::examples::strip);
+  runtime_pipeline.addAction(pipeline_services::examples::normalize_whitespace);
   std::cout << "runtimeValue=" << runtime_pipeline.value() << std::endl;
 
   const auto frozen_pipeline = runtime_pipeline.freeze();

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype>
 #include <fstream>
 #include <map>
 #include <stdexcept>
@@ -16,6 +17,15 @@ namespace pipeline_services::config {
 
 namespace detail {
 
+inline std::string toUpperAscii(std::string value) {
+  std::string output;
+  output.reserve(value.size());
+  for (unsigned char characterValue : value) {
+    output.push_back(static_cast<char>(std::toupper(characterValue)));
+  }
+  return output;
+}
+
 inline bool parse_short_circuit_on_exception(const nlohmann::json& spec_value) {
   if (spec_value.contains("shortCircuitOnException")) {
     return spec_value.at("shortCircuitOnException").get<bool>();
@@ -30,15 +40,15 @@ inline remote::RemoteDefaults parse_remote_defaults(const nlohmann::json& node_v
   remote::RemoteDefaults defaults = std::move(base);
 
   if (node_value.contains("baseUrl")) {
-    defaults.base_url = node_value.at("baseUrl").get<std::string>();
+    defaults.baseUrl = node_value.at("baseUrl").get<std::string>();
   } else if (node_value.contains("endpointBase")) {
-    defaults.base_url = node_value.at("endpointBase").get<std::string>();
+    defaults.baseUrl = node_value.at("endpointBase").get<std::string>();
   }
 
   if (node_value.contains("timeoutMillis")) {
-    defaults.timeout_millis = node_value.at("timeoutMillis").get<std::int32_t>();
+    defaults.timeoutMillis = node_value.at("timeoutMillis").get<std::int32_t>();
   } else if (node_value.contains("timeout_millis")) {
-    defaults.timeout_millis = node_value.at("timeout_millis").get<std::int32_t>();
+    defaults.timeoutMillis = node_value.at("timeout_millis").get<std::int32_t>();
   }
 
   if (node_value.contains("retries")) {
@@ -46,7 +56,7 @@ inline remote::RemoteDefaults parse_remote_defaults(const nlohmann::json& node_v
   }
 
   if (node_value.contains("method")) {
-    defaults.method = node_value.at("method").get<std::string>();
+    defaults.method = toUpperAscii(node_value.at("method").get<std::string>());
   }
 
   if (node_value.contains("headers")) {
@@ -55,7 +65,7 @@ inline remote::RemoteDefaults parse_remote_defaults(const nlohmann::json& node_v
     for (auto iter = headers_value.begin(); iter != headers_value.end(); ++iter) {
       headers_map[iter.key()] = iter.value().get<std::string>();
     }
-    defaults.headers = std::move(headers_map);
+    defaults.headers = defaults.mergeHeaders(headers_map);
   }
 
   return defaults;
@@ -66,7 +76,7 @@ inline remote::RemoteSpec<std::string> parse_remote_spec(
   const remote::RemoteDefaults& remote_defaults
 ) {
   if (remote_node.is_string()) {
-    return remote_defaults.to_spec<std::string>(remote_node.get<std::string>());
+    return remote_defaults.spec<std::string>(remote_node.get<std::string>());
   }
 
   if (!remote_node.is_object()) {
@@ -82,33 +92,25 @@ inline remote::RemoteSpec<std::string> parse_remote_spec(
     throw std::runtime_error("Missing required $remote field: endpoint|path");
   }
 
-  remote::RemoteSpec<std::string> remote_spec = remote_defaults.to_spec<std::string>(endpoint_value);
+  remote::RemoteSpec<std::string> remote_spec = remote_defaults.spec<std::string>(endpoint_value);
 
   if (remote_node.contains("timeoutMillis")) {
-    remote_spec.timeout_millis = remote_node.at("timeoutMillis").get<std::int32_t>();
+    remote_spec.timeoutMillis = remote_node.at("timeoutMillis").get<std::int32_t>();
   } else if (remote_node.contains("timeout_millis")) {
-    remote_spec.timeout_millis = remote_node.at("timeout_millis").get<std::int32_t>();
+    remote_spec.timeoutMillis = remote_node.at("timeout_millis").get<std::int32_t>();
   }
 
   if (remote_node.contains("retries")) {
     remote_spec.retries = remote_node.at("retries").get<std::int32_t>();
   }
 
-  if (remote_node.contains("method")) {
-    remote_spec.method = remote_node.at("method").get<std::string>();
-  }
-
   if (remote_node.contains("headers")) {
-    std::map<std::string, std::string> merged_headers;
-    if (remote_spec.headers.has_value()) {
-      merged_headers = remote_spec.headers.value();
-    }
-
     const auto& headers_value = remote_node.at("headers");
+    std::map<std::string, std::string> headers_override;
     for (auto iter = headers_value.begin(); iter != headers_value.end(); ++iter) {
-      merged_headers[iter.key()] = iter.value().get<std::string>();
+      headers_override[iter.key()] = iter.value().get<std::string>();
     }
-    remote_spec.headers = std::move(merged_headers);
+    remote_spec.headers = remote_defaults.mergeHeaders(headers_override);
   }
 
   return remote_spec;
@@ -121,26 +123,26 @@ inline void add_local(
   core::Pipeline<std::string>& pipeline,
   const core::PipelineRegistry<std::string>& registry
 ) {
-  if (registry.has_unary(local_ref)) {
-    auto unary_action = registry.get_unary(local_ref);
+  if (registry.hasUnary(local_ref)) {
+    auto unary_action = registry.getUnary(local_ref);
     if (section_name == "pre") {
-      pipeline.add_pre_action_named(display_name, unary_action);
+      pipeline.addPreAction(display_name, unary_action);
     } else if (section_name == "post") {
-      pipeline.add_post_action_named(display_name, unary_action);
+      pipeline.addPostAction(display_name, unary_action);
     } else {
-      pipeline.add_action_named(display_name, unary_action);
+      pipeline.addAction(display_name, unary_action);
     }
     return;
   }
 
-  if (registry.has_action(local_ref)) {
-    auto step_action = registry.get_action(local_ref);
+  if (registry.hasAction(local_ref)) {
+    auto step_action = registry.getAction(local_ref);
     if (section_name == "pre") {
-      pipeline.add_pre_action_named(display_name, step_action);
+      pipeline.addPreAction(display_name, step_action);
     } else if (section_name == "post") {
-      pipeline.add_post_action_named(display_name, step_action);
+      pipeline.addPostAction(display_name, step_action);
     } else {
-      pipeline.add_action_named(display_name, step_action);
+      pipeline.addAction(display_name, step_action);
     }
     return;
   }
@@ -150,16 +152,19 @@ inline void add_local(
 
 inline void add_remote(
   const remote::RemoteSpec<std::string>& spec,
+  const std::string& method,
   const std::string& display_name,
   const std::string& section_name,
   core::Pipeline<std::string>& pipeline
 ) {
+  const std::string normalized_method = toUpperAscii(method);
+  const auto remote_action = (normalized_method == "GET") ? remote::jsonGet(spec) : remote::jsonPost(spec);
   if (section_name == "pre") {
-    pipeline.add_pre_action_named(display_name, spec);
+    pipeline.addPreAction(display_name, remote_action);
   } else if (section_name == "post") {
-    pipeline.add_post_action_named(display_name, spec);
+    pipeline.addPostAction(display_name, remote_action);
   } else {
-    pipeline.add_action_named(display_name, spec);
+    pipeline.addAction(display_name, remote_action);
   }
 }
 
@@ -191,7 +196,11 @@ inline void add_step(
 
   if (node_value.contains("$remote")) {
     const remote::RemoteSpec<std::string> remote_spec = parse_remote_spec(node_value.at("$remote"), remote_defaults);
-    add_remote(remote_spec, display_name, section_name, pipeline);
+    std::string method = remote_defaults.method;
+    if (node_value.at("$remote").is_object() && node_value.at("$remote").contains("method")) {
+      method = node_value.at("$remote").at("method").get<std::string>();
+    }
+    add_remote(remote_spec, method, display_name, section_name, pipeline);
     return;
   }
 
@@ -234,6 +243,20 @@ public:
     const std::string& file_path,
     const core::PipelineRegistry<std::string>& registry
   ) const;
+
+  core::Pipeline<std::string> loadStr(
+    std::string_view jsonText,
+    const core::PipelineRegistry<std::string>& registry
+  ) const {
+    return load_str(jsonText, registry);
+  }
+
+  core::Pipeline<std::string> loadFile(
+    const std::string& filePath,
+    const core::PipelineRegistry<std::string>& registry
+  ) const {
+    return load_file(filePath, registry);
+  }
 };
 
 inline core::Pipeline<std::string> PipelineJsonLoader::load_str(

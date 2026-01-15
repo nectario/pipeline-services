@@ -10,9 +10,9 @@
 
 int main() {
   pipeline_services::core::Pipeline<std::string> pipeline("benchmark01_pipeline_run", true);
-  pipeline.add_action(pipeline_services::examples::strip);
-  pipeline.add_action(pipeline_services::examples::to_lower);
-  pipeline.add_action(pipeline_services::examples::append_marker);
+  pipeline.addAction(pipeline_services::examples::strip);
+  pipeline.addAction(pipeline_services::examples::to_lower);
+  pipeline.addAction(pipeline_services::examples::append_marker);
 
   const std::string input_value = "  Hello Benchmark  ";
   const std::size_t warmup_iterations = 1000;
@@ -33,11 +33,11 @@ int main() {
   std::size_t iteration_index = 0;
   while (iteration_index < iterations) {
     const auto result = pipeline.execute(input_value);
-    total_pipeline_nanos += result.total_nanos;
+    total_pipeline_nanos += result.totalNanos;
 
-    for (const auto& timing : result.timings) {
-      action_totals[timing.action_name] += timing.elapsed_nanos;
-      action_counts[timing.action_name] += 1;
+    for (const auto& timing : result.actionTimings) {
+      action_totals[timing.actionName] += timing.elapsedNanos;
+      action_counts[timing.actionName] += 1;
     }
 
     iteration_index += 1;

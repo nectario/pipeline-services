@@ -7,9 +7,9 @@
 
 int main() {
   pipeline_services::core::Pipeline<std::string> pipeline("example05_metrics_post_action", true);
-  pipeline.add_action(pipeline_services::examples::strip);
-  pipeline.add_action(pipeline_services::examples::normalize_whitespace);
-  pipeline.add_post_action(pipeline_services::core::print_metrics<std::string>);
+  pipeline.addAction(pipeline_services::examples::strip);
+  pipeline.addAction(pipeline_services::examples::normalize_whitespace);
+  pipeline.addPostAction(pipeline_services::core::printMetrics<std::string>);
 
   const std::string output_value = pipeline.run("  Hello   Metrics  ");
   std::cout << output_value << std::endl;

@@ -7,8 +7,8 @@
 
 int main() {
   pipeline_services::core::PipelineRegistry<std::string> registry;
-  registry.register_unary("strip", pipeline_services::examples::strip);
-  registry.register_unary("normalize_whitespace", pipeline_services::examples::normalize_whitespace);
+  registry.registerUnary("strip", pipeline_services::examples::strip);
+  registry.registerUnary("normalize_whitespace", pipeline_services::examples::normalize_whitespace);
 
   const std::string json_text = R"json(
 {
@@ -23,7 +23,7 @@ int main() {
 )json";
 
   pipeline_services::config::PipelineJsonLoader loader;
-  auto pipeline = loader.load_str(json_text, registry);
+  auto pipeline = loader.loadStr(json_text, registry);
   const std::string output_value = pipeline.run("  Hello   JSON  ");
   std::cout << output_value << std::endl;
   return 0;

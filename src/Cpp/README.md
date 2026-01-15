@@ -1,6 +1,6 @@
 # Pipeline Services — C++ port
 
-This C++ port is aligned with the Mojo/Python/TypeScript/Rust `pipeline_services` ports and the shared semantics in `docs/PORTABILITY_CONTRACT.md`.
+This C++ port follows the shared semantics in `docs/PORTABILITY_CONTRACT.md` and intentionally uses Java-style `camelCase` naming for the public API (`addAction`, `shortCircuit`, ...), so the ports stay easy to compare.
 
 ## Build and test
 ```bash

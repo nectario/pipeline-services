@@ -1,99 +1,113 @@
 #pragma once
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <map>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <type_traits>
+#include <utility>
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
+#include "pipeline_services/core/pipeline.hpp"
+
 namespace pipeline_services::remote {
 
 template <typename ContextType>
-std::string default_to_json(const ContextType& ctx) {
-  nlohmann::json json_value = ctx;
-  return json_value.dump();
+std::string defaultToJson(const ContextType& ctx) {
+  if constexpr (std::is_same_v<ContextType, std::string>) {
+    return ctx;
+  } else {
+    nlohmann::json jsonValue = ctx;
+    return jsonValue.dump();
+  }
 }
 
 template <typename ContextType>
-ContextType default_from_json(const ContextType& ctx, const std::string& response_body) {
+ContextType defaultFromJson(const ContextType& ctx, const std::string& responseBody) {
   (void)ctx;
   if constexpr (std::is_same_v<ContextType, std::string>) {
-    return response_body;
+    return responseBody;
   } else {
-    nlohmann::json json_value = nlohmann::json::parse(response_body);
-    return json_value.get<ContextType>();
+    nlohmann::json jsonValue = nlohmann::json::parse(responseBody);
+    return jsonValue.get<ContextType>();
   }
 }
 
 template <typename ContextType>
 struct RemoteSpec {
   std::string endpoint;
-  std::int32_t timeout_millis;
+  std::int32_t timeoutMillis;
   std::int32_t retries;
-  std::string method;
-  std::optional<std::map<std::string, std::string>> headers;
+  std::map<std::string, std::string> headers;
 
-  std::function<std::string(const ContextType&)> to_json;
-  std::function<ContextType(const ContextType&, const std::string&)> from_json;
+  std::function<std::string(const ContextType&)> toJson;
+  std::function<ContextType(const ContextType&, const std::string&)> fromJson;
 
-  explicit RemoteSpec(std::string endpoint_value)
-    : endpoint(std::move(endpoint_value)),
-      timeout_millis(1000),
+  explicit RemoteSpec(std::string endpointValue)
+    : endpoint(std::move(endpointValue)),
+      timeoutMillis(1000),
       retries(0),
-      method("POST"),
-      headers(std::nullopt),
-      to_json(default_to_json<ContextType>),
-      from_json(default_from_json<ContextType>) {}
+      headers(),
+      toJson(defaultToJson<ContextType>),
+      fromJson(defaultFromJson<ContextType>) {}
 };
 
 struct RemoteDefaults {
-  std::string base_url;
-  std::int32_t timeout_millis;
+  std::string baseUrl;
+  std::int32_t timeoutMillis;
   std::int32_t retries;
+  std::map<std::string, std::string> headers;
   std::string method;
-  std::optional<std::map<std::string, std::string>> headers;
 
   RemoteDefaults()
-    : base_url(""),
-      timeout_millis(1000),
+    : baseUrl(""),
+      timeoutMillis(1000),
       retries(0),
-      method("POST"),
-      headers(std::nullopt) {}
+      headers(),
+      method("POST") {}
 
-  std::string resolve_endpoint(const std::string& endpoint_or_path) const {
-    if (endpoint_or_path.rfind("http://", 0) == 0 || endpoint_or_path.rfind("https://", 0) == 0) {
-      return endpoint_or_path;
+  std::string resolveEndpoint(const std::string& endpointOrPath) const {
+    if (endpointOrPath.rfind("http://", 0) == 0 || endpointOrPath.rfind("https://", 0) == 0) {
+      return endpointOrPath;
     }
-    if (base_url.empty()) {
-      return endpoint_or_path;
+    if (baseUrl.empty()) {
+      return endpointOrPath;
     }
-    if (!base_url.empty() && base_url.back() == '/' && !endpoint_or_path.empty() && endpoint_or_path.front() == '/') {
-      return base_url + endpoint_or_path.substr(1);
+    if (!baseUrl.empty() && baseUrl.back() == '/' && !endpointOrPath.empty() && endpointOrPath.front() == '/') {
+      return baseUrl + endpointOrPath.substr(1);
     }
-    if (!base_url.empty() && base_url.back() != '/' && !endpoint_or_path.empty() && endpoint_or_path.front() != '/') {
-      return base_url + "/" + endpoint_or_path;
+    if (!baseUrl.empty() && baseUrl.back() != '/' && !endpointOrPath.empty() && endpointOrPath.front() != '/') {
+      return baseUrl + "/" + endpointOrPath;
     }
-    return base_url + endpoint_or_path;
+    return baseUrl + endpointOrPath;
+  }
+
+  std::map<std::string, std::string> mergeHeaders(const std::map<std::string, std::string>& overrides) const {
+    if (overrides.empty()) {
+      return headers;
+    }
+
+    std::map<std::string, std::string> merged = headers;
+    for (const auto& overrideItem : overrides) {
+      merged[overrideItem.first] = overrideItem.second;
+    }
+    return merged;
   }
 
   template <typename ContextType>
-  RemoteSpec<ContextType> to_spec(const std::string& endpoint_or_path) const {
-    const std::string resolved_endpoint = resolve_endpoint(endpoint_or_path);
-    RemoteSpec<ContextType> spec(resolved_endpoint);
-    spec.timeout_millis = timeout_millis;
-    spec.retries = retries;
-    spec.method = method;
-    spec.headers = headers;
-    return spec;
+  RemoteSpec<ContextType> spec(const std::string& endpointOrPath) const {
+    const std::string resolvedEndpoint = resolveEndpoint(endpointOrPath);
+    RemoteSpec<ContextType> remoteSpec(resolvedEndpoint);
+    remoteSpec.timeoutMillis = timeoutMillis;
+    remoteSpec.retries = retries;
+    remoteSpec.headers = headers;
+    return remoteSpec;
   }
 };
 
@@ -104,43 +118,43 @@ struct ParsedUrl {
   std::string path;
 };
 
-inline ParsedUrl parse_url(const std::string& endpoint) {
-  constexpr std::string_view http_prefix = "http://";
-  constexpr std::string_view https_prefix = "https://";
+inline ParsedUrl parseUrl(const std::string& endpoint) {
+  constexpr std::string_view httpPrefix = "http://";
+  constexpr std::string_view httpsPrefix = "https://";
 
-  std::string_view endpoint_view(endpoint);
+  std::string_view endpointView(endpoint);
   std::string scheme;
-  int default_port = 80;
+  int defaultPort = 80;
 
-  if (endpoint_view.rfind(http_prefix, 0) == 0) {
+  if (endpointView.rfind(httpPrefix, 0) == 0) {
     scheme = "http";
-    endpoint_view.remove_prefix(http_prefix.size());
-    default_port = 80;
-  } else if (endpoint_view.rfind(https_prefix, 0) == 0) {
+    endpointView.remove_prefix(httpPrefix.size());
+    defaultPort = 80;
+  } else if (endpointView.rfind(httpsPrefix, 0) == 0) {
     scheme = "https";
-    endpoint_view.remove_prefix(https_prefix.size());
-    default_port = 443;
+    endpointView.remove_prefix(httpsPrefix.size());
+    defaultPort = 443;
   } else {
     throw std::runtime_error("Unsupported URL scheme (expected http:// or https://): " + endpoint);
   }
 
-  const std::size_t slash_index = endpoint_view.find('/');
-  std::string_view host_port_view = endpoint_view;
-  std::string_view path_view = "/";
-  if (slash_index != std::string_view::npos) {
-    host_port_view = endpoint_view.substr(0, slash_index);
-    path_view = endpoint_view.substr(slash_index);
+  const std::size_t slashIndex = endpointView.find('/');
+  std::string_view hostPortView = endpointView;
+  std::string_view pathView = "/";
+  if (slashIndex != std::string_view::npos) {
+    hostPortView = endpointView.substr(0, slashIndex);
+    pathView = endpointView.substr(slashIndex);
   }
 
   std::string host;
-  int port = default_port;
-  const std::size_t colon_index = host_port_view.rfind(':');
-  if (colon_index != std::string_view::npos) {
-    host = std::string(host_port_view.substr(0, colon_index));
-    const std::string port_text = std::string(host_port_view.substr(colon_index + 1));
-    port = std::stoi(port_text);
+  int port = defaultPort;
+  const std::size_t colonIndex = hostPortView.rfind(':');
+  if (colonIndex != std::string_view::npos) {
+    host = std::string(hostPortView.substr(0, colonIndex));
+    const std::string portText = std::string(hostPortView.substr(colonIndex + 1));
+    port = std::stoi(portText);
   } else {
-    host = std::string(host_port_view);
+    host = std::string(hostPortView);
   }
 
   if (host.empty()) {
@@ -151,80 +165,123 @@ inline ParsedUrl parse_url(const std::string& endpoint) {
     .scheme = scheme,
     .host = host,
     .port = port,
-    .path = std::string(path_view),
+    .path = std::string(pathView),
   };
 }
 
-inline void sleep_ms(std::int32_t delay_millis) {
-  std::this_thread::sleep_for(std::chrono::milliseconds(delay_millis));
+inline std::string withQuery(const std::string& endpoint, const std::string& queryText) {
+  if (queryText.empty()) {
+    return endpoint;
+  }
+
+  if (endpoint.find('?') != std::string::npos) {
+    return endpoint + "&" + queryText;
+  }
+
+  return endpoint + "?" + queryText;
 }
 
 template <typename ContextType>
-ContextType http_step(const RemoteSpec<ContextType>& spec, const ContextType& input_value) {
-  const ParsedUrl parsed_url = parse_url(spec.endpoint);
+void validateSpec(const RemoteSpec<ContextType>& spec) {
+  if (spec.endpoint.empty()) {
+    throw std::invalid_argument("RemoteSpec.endpoint is required");
+  }
+  if (!spec.toJson) {
+    throw std::invalid_argument("RemoteSpec.toJson is required");
+  }
+  if (!spec.fromJson) {
+    throw std::invalid_argument("RemoteSpec.fromJson is required");
+  }
+}
 
-  if (parsed_url.scheme != "http") {
-    throw std::runtime_error("Only http:// endpoints are supported by this C++ port currently: " + spec.endpoint);
+template <typename ContextType>
+ContextType invoke(const RemoteSpec<ContextType>& spec, const std::string& methodName, const ContextType& ctx) {
+  validateSpec(spec);
+
+  const std::string body = spec.toJson(ctx);
+  std::string endpoint = spec.endpoint;
+  if (methodName == "GET") {
+    endpoint = withQuery(endpoint, body);
   }
 
-  httplib::Client client(parsed_url.host, parsed_url.port);
-  const int timeout_seconds = static_cast<int>(spec.timeout_millis / 1000);
-  const int timeout_microseconds = static_cast<int>((spec.timeout_millis % 1000) * 1000);
-  client.set_connection_timeout(timeout_seconds, timeout_microseconds);
-  client.set_read_timeout(timeout_seconds, timeout_microseconds);
-  client.set_write_timeout(timeout_seconds, timeout_microseconds);
-
-  httplib::Headers headers_value;
-  if (spec.headers.has_value()) {
-    for (const auto& header_item : spec.headers.value()) {
-      headers_value.insert(header_item);
-    }
+  const ParsedUrl parsedUrl = parseUrl(endpoint);
+  if (parsedUrl.scheme != "http") {
+    throw std::runtime_error("Only http:// endpoints are supported by this C++ port currently: " + endpoint);
   }
 
-  const std::string method_value = spec.method;
-  const std::string json_body = spec.to_json(input_value);
-  std::string last_error_message;
+  httplib::Client client(parsedUrl.host, parsedUrl.port);
+  const int timeoutSeconds = static_cast<int>(spec.timeoutMillis / 1000);
+  const int timeoutMicroseconds = static_cast<int>((spec.timeoutMillis % 1000) * 1000);
+  client.set_connection_timeout(timeoutSeconds, timeoutMicroseconds);
+  client.set_read_timeout(timeoutSeconds, timeoutMicroseconds);
+  client.set_write_timeout(timeoutSeconds, timeoutMicroseconds);
 
-  std::int32_t attempt_index = 0;
-  while (attempt_index < (spec.retries + 1)) {
-    bool should_retry = false;
+  httplib::Headers headersValue;
+  for (const auto& headerItem : spec.headers) {
+    headersValue.insert(headerItem);
+  }
+  headersValue.insert({"Content-Type", "application/json"});
+
+  std::string lastErrorMessage;
+  std::int32_t attemptIndex = 0;
+  while (attemptIndex <= spec.retries) {
     try {
-      if (method_value == "GET") {
-        const auto response = client.Get(parsed_url.path.c_str(), headers_value);
+      if (methodName == "GET") {
+        const auto response = client.Get(parsedUrl.path.c_str(), headersValue);
         if (!response) {
           throw std::runtime_error("HTTP request failed");
         }
         if (response->status < 200 || response->status >= 300) {
           throw std::runtime_error("HTTP " + std::to_string(response->status) + " body=" + response->body);
         }
-        return spec.from_json(input_value, response->body);
+        return spec.fromJson(ctx, response->body);
       }
 
-      if (method_value != "POST") {
-        throw std::runtime_error("Unsupported HTTP method: " + method_value);
+      if (methodName != "POST") {
+        throw std::runtime_error("Unsupported HTTP method: " + methodName);
       }
 
-      const auto response = client.Post(parsed_url.path.c_str(), headers_value, json_body, "application/json");
+      const auto response = client.Post(parsedUrl.path.c_str(), headersValue, body, "application/json");
       if (!response) {
         throw std::runtime_error("HTTP request failed");
       }
       if (response->status < 200 || response->status >= 300) {
         throw std::runtime_error("HTTP " + std::to_string(response->status) + " body=" + response->body);
       }
-      return spec.from_json(input_value, response->body);
+      return spec.fromJson(ctx, response->body);
     } catch (const std::exception& error) {
-      last_error_message = error.what() ? error.what() : "exception";
-      should_retry = attempt_index < spec.retries;
+      lastErrorMessage = error.what() ? error.what() : "exception";
     }
 
-    if (should_retry) {
-      const std::int32_t backoff_millis = 50 * (attempt_index + 1);
-      sleep_ms(backoff_millis);
-    }
-    attempt_index += 1;
+    attemptIndex += 1;
   }
 
-  throw std::runtime_error(last_error_message);
+  throw std::runtime_error(lastErrorMessage.empty() ? "HTTP request failed" : lastErrorMessage);
+}
+
+template <typename ContextType>
+struct HttpStepAction {
+  RemoteSpec<ContextType> spec;
+  std::string method;
+
+  ContextType operator()(ContextType ctx, pipeline_services::core::StepControl<ContextType>& control) const {
+    (void)control;
+    return invoke<ContextType>(spec, method, ctx);
+  }
+};
+
+template <typename ContextType>
+pipeline_services::core::StepAction<ContextType> jsonPost(RemoteSpec<ContextType> spec) {
+  HttpStepAction<ContextType> action{.spec = std::move(spec), .method = "POST"};
+  pipeline_services::core::StepAction<ContextType> stepAction = std::move(action);
+  return stepAction;
+}
+
+template <typename ContextType>
+pipeline_services::core::StepAction<ContextType> jsonGet(RemoteSpec<ContextType> spec) {
+  HttpStepAction<ContextType> action{.spec = std::move(spec), .method = "GET"};
+  pipeline_services::core::StepAction<ContextType> stepAction = std::move(action);
+  return stepAction;
 }
 
 }  // namespace pipeline_services::remote

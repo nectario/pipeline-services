@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <functional>
 #include <optional>
@@ -9,26 +10,40 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
-
-#include "pipeline_services/remote/http_step.hpp"
 
 namespace pipeline_services::core {
 
+enum class StepPhase {
+  PRE,
+  MAIN,
+  POST,
+};
+
+inline std::string stepPhaseToString(StepPhase phase) {
+  if (phase == StepPhase::PRE) {
+    return "pre";
+  }
+  if (phase == StepPhase::POST) {
+    return "post";
+  }
+  return "main";
+}
+
 struct PipelineError {
-  std::string pipeline;
-  std::string phase;
-  std::size_t index;
-  std::string action_name;
+  std::string pipelineName;
+  StepPhase phase;
+  std::size_t stepIndex;
+  std::string stepName;
   std::string message;
+  std::exception_ptr exception;
 };
 
 struct ActionTiming {
-  std::string phase;
+  StepPhase phase;
   std::size_t index;
-  std::string action_name;
-  std::int64_t elapsed_nanos;
+  std::string actionName;
+  std::int64_t elapsedNanos;
   bool success;
 };
 
@@ -42,183 +57,203 @@ template <typename ContextType>
 using StepAction = std::function<ContextType(ContextType, StepControl<ContextType>&)>;
 
 template <typename ContextType>
-using OnErrorFn = std::function<ContextType(ContextType, PipelineError)>;
+using OnErrorFn = std::function<ContextType(ContextType, const PipelineError&)>;
 
 template <typename ContextType>
-ContextType default_on_error(ContextType ctx, PipelineError error) {
+ContextType defaultOnError(ContextType ctx, const PipelineError& error) {
   (void)error;
   return ctx;
+}
+
+inline std::string safeExceptionToString(std::exception_ptr exception) {
+  if (!exception) {
+    return "unknown exception";
+  }
+
+  try {
+    std::rethrow_exception(exception);
+  } catch (const std::exception& error) {
+    return error.what() ? std::string(error.what()) : std::string("exception");
+  } catch (...) {
+    return "unknown exception";
+  }
+}
+
+inline std::string formatStepName(StepPhase phase, std::size_t index, const std::string& label) {
+  std::string prefix = "s";
+  if (phase == StepPhase::PRE) {
+    prefix = "pre";
+  } else if (phase == StepPhase::POST) {
+    prefix = "post";
+  }
+
+  if (label.empty()) {
+    return prefix + std::to_string(index);
+  }
+  return prefix + std::to_string(index) + ":" + label;
 }
 
 template <typename ContextType>
 class StepControl {
 public:
-  explicit StepControl(std::string pipeline_name, OnErrorFn<ContextType> on_error = default_on_error<ContextType>)
-    : pipeline_name_(std::move(pipeline_name)),
-      on_error_(std::move(on_error)),
+  explicit StepControl(std::string pipelineName, OnErrorFn<ContextType> onError = defaultOnError<ContextType>)
+    : pipelineName_(std::move(pipelineName)),
+      onError_(std::move(onError)),
       errors_(),
-      timings_(),
-      short_circuited_(false),
-      phase_("main"),
+      actionTimings_(),
+      shortCircuited_(false),
+      phase_(StepPhase::MAIN),
       index_(0),
-      action_name_("?"),
-      run_start_timepoint_(std::nullopt) {}
+      stepName_("?"),
+      runStartTimepoint_() {}
 
-  void begin_step(std::string phase, std::size_t index, std::string action_name) {
-    phase_ = std::move(phase);
-    index_ = index;
-    action_name_ = std::move(action_name);
+  void shortCircuit() {
+    shortCircuited_ = true;
   }
 
-  void begin_run() {
-    run_start_timepoint_ = std::chrono::steady_clock::now();
+  bool isShortCircuited() const {
+    return shortCircuited_;
   }
 
-  void reset() {
-    short_circuited_ = false;
-    errors_.clear();
-    timings_.clear();
-    phase_ = "main";
-    index_ = 0;
-    action_name_ = "?";
-    run_start_timepoint_ = std::nullopt;
-  }
-
-  void short_circuit() {
-    short_circuited_ = true;
-  }
-
-  bool is_short_circuited() const {
-    return short_circuited_;
-  }
-
-  ContextType record_error(ContextType ctx, std::string message) {
-    PipelineError pipeline_error{
-      .pipeline = pipeline_name_,
+  ContextType recordError(ContextType ctx, std::exception_ptr exception) {
+    PipelineError pipelineError{
+      .pipelineName = pipelineName_,
       .phase = phase_,
-      .index = index_,
-      .action_name = action_name_,
-      .message = std::move(message),
+      .stepIndex = index_,
+      .stepName = stepName_,
+      .message = safeExceptionToString(exception),
+      .exception = exception,
     };
-    errors_.push_back(pipeline_error);
-    return on_error_(std::move(ctx), pipeline_error);
-  }
-
-  void record_timing(std::int64_t elapsed_nanos, bool success) {
-    ActionTiming timing{
-      .phase = phase_,
-      .index = index_,
-      .action_name = action_name_,
-      .elapsed_nanos = elapsed_nanos,
-      .success = success,
-    };
-    timings_.push_back(std::move(timing));
-  }
-
-  std::int64_t run_elapsed_nanos() const {
-    if (!run_start_timepoint_.has_value()) {
-      return 0;
-    }
-    const auto now_timepoint = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(now_timepoint - run_start_timepoint_.value()).count();
-  }
-
-  const std::string& pipeline_name() const {
-    return pipeline_name_;
+    errors_.push_back(std::move(pipelineError));
+    return onError_(std::move(ctx), errors_.back());
   }
 
   const std::vector<PipelineError>& errors() const {
     return errors_;
   }
 
-  const std::vector<ActionTiming>& timings() const {
-    return timings_;
+  const std::string& pipelineName() const {
+    return pipelineName_;
+  }
+
+  std::int64_t runStartNanos() const {
+    if (!runStartTimepoint_.has_value()) {
+      return 0;
+    }
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(runStartTimepoint_.value().time_since_epoch()).count();
+  }
+
+  std::int64_t runElapsedNanos() const {
+    if (!runStartTimepoint_.has_value()) {
+      return 0;
+    }
+    const auto nowTimepoint = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(nowTimepoint - runStartTimepoint_.value()).count();
+  }
+
+  const std::vector<ActionTiming>& actionTimings() const {
+    return actionTimings_;
   }
 
 private:
-  std::string pipeline_name_;
-  OnErrorFn<ContextType> on_error_;
+  template <typename>
+  friend class Pipeline;
+
+  template <typename>
+  friend class RuntimePipeline;
+
+  void beginRun(std::chrono::steady_clock::time_point startTimepoint) {
+    runStartTimepoint_ = startTimepoint;
+  }
+
+  void beginStep(StepPhase phase, std::size_t index, std::string stepName) {
+    phase_ = phase;
+    index_ = index;
+    stepName_ = std::move(stepName);
+  }
+
+  void reset() {
+    shortCircuited_ = false;
+    errors_.clear();
+    actionTimings_.clear();
+    phase_ = StepPhase::MAIN;
+    index_ = 0;
+    stepName_ = "?";
+    runStartTimepoint_.reset();
+  }
+
+  void recordTiming(std::int64_t elapsedNanos, bool success) {
+    ActionTiming timing{
+      .phase = phase_,
+      .index = index_,
+      .actionName = stepName_,
+      .elapsedNanos = elapsedNanos,
+      .success = success,
+    };
+    actionTimings_.push_back(std::move(timing));
+  }
+
+  std::string pipelineName_;
+  OnErrorFn<ContextType> onError_;
   std::vector<PipelineError> errors_;
-  std::vector<ActionTiming> timings_;
-  bool short_circuited_;
+  std::vector<ActionTiming> actionTimings_;
+  bool shortCircuited_;
 
-  std::string phase_;
+  StepPhase phase_;
   std::size_t index_;
-  std::string action_name_;
+  std::string stepName_;
 
-  std::optional<std::chrono::steady_clock::time_point> run_start_timepoint_;
+  std::optional<std::chrono::steady_clock::time_point> runStartTimepoint_;
 };
 
 template <typename ContextType>
 struct PipelineResult {
   ContextType context;
-  bool short_circuited;
+  bool shortCircuited;
   std::vector<PipelineError> errors;
-  std::vector<ActionTiming> timings;
-  std::int64_t total_nanos;
+  std::vector<ActionTiming> actionTimings;
+  std::int64_t totalNanos;
 
-  bool has_errors() const {
+  bool hasErrors() const {
     return !errors.empty();
   }
 };
 
 template <typename ContextType>
-struct RegisteredAction {
-  std::string name;
-  std::variant<UnaryOperator<ContextType>, StepAction<ContextType>, remote::RemoteSpec<ContextType>> action;
+struct UnaryAdapter {
+  UnaryOperator<ContextType> unary;
+
+  ContextType operator()(ContextType ctx, StepControl<ContextType>& control) const {
+    (void)control;
+    return unary(std::move(ctx));
+  }
 };
 
 template <typename ContextType, typename CallableType>
-std::variant<UnaryOperator<ContextType>, StepAction<ContextType>, remote::RemoteSpec<ContextType>> to_action_variant(
-  CallableType callable
-) {
+StepAction<ContextType> toStepAction(CallableType callable) {
   if constexpr (std::is_invocable_r_v<ContextType, CallableType, ContextType, StepControl<ContextType>&>) {
-    StepAction<ContextType> step_action = std::move(callable);
-    return step_action;
+    StepAction<ContextType> stepAction = std::move(callable);
+    return stepAction;
   } else if constexpr (std::is_invocable_r_v<ContextType, CallableType, ContextType>) {
-    UnaryOperator<ContextType> unary_action = std::move(callable);
-    return unary_action;
+    UnaryOperator<ContextType> unaryAction = std::move(callable);
+    UnaryAdapter<ContextType> adapter{.unary = std::move(unaryAction)};
+    StepAction<ContextType> stepAction = std::move(adapter);
+    return stepAction;
   } else {
     throw std::invalid_argument("Action must be callable as (C)->C or (C, StepControl<C>&)->C");
   }
 }
 
-inline std::string format_action_name(const std::string& phase, std::size_t index, const std::string& name) {
-  std::string prefix = "s";
-  if (phase == "pre") {
-    prefix = "pre";
-  } else if (phase == "post") {
-    prefix = "post";
-  }
-
-  if (name.empty()) {
-    return prefix + std::to_string(index);
-  }
-  return prefix + std::to_string(index) + ":" + name;
-}
-
-inline std::string format_step_name(const std::string& phase, std::size_t index, const std::string& name) {
-  return format_action_name(phase, index, name);
-}
-
-inline std::string safe_error_to_string(const std::exception& error) {
-  return error.what() ? std::string(error.what()) : std::string("exception");
-}
-
-inline std::string safe_unknown_exception_to_string() {
-  return "unknown exception";
-}
-
 template <typename ContextType>
 class Pipeline {
 public:
-  Pipeline(std::string name, bool short_circuit_on_exception = true)
+  Pipeline(std::string name, bool shortCircuitOnException = true)
     : name_(std::move(name)),
-      short_circuit_on_exception_(short_circuit_on_exception),
-      on_error_(default_on_error<ContextType>),
-      pre_actions_(),
+      shortCircuitOnException_(shortCircuitOnException),
+      onError_(defaultOnError<ContextType>),
+      preActions_(),
       actions_(),
-      post_actions_() {
+      postActions_() {
     static_assert(std::is_copy_constructible_v<ContextType>, "Pipeline requires CopyConstructible context types");
   }
 
@@ -226,89 +261,57 @@ public:
     return name_;
   }
 
-  bool short_circuit_on_exception() const {
-    return short_circuit_on_exception_;
+  bool shortCircuitOnException() const {
+    return shortCircuitOnException_;
   }
 
-  Pipeline& on_error_handler(OnErrorFn<ContextType> handler) {
-    on_error_ = std::move(handler);
+  std::size_t size() const {
+    return actions_.size();
+  }
+
+  Pipeline& onError(OnErrorFn<ContextType> handler) {
+    onError_ = std::move(handler);
     return *this;
   }
 
   template <typename CallableType>
-  Pipeline& add_pre_action(CallableType callable) {
-    return add_pre_action_named("", std::move(callable));
+  Pipeline& addPreAction(CallableType callable) {
+    return addPreAction("", std::move(callable));
   }
 
   template <typename CallableType>
-  Pipeline& add_pre_action_named(std::string name, CallableType callable) {
-    pre_actions_.push_back(RegisteredAction<ContextType>{
-      .name = std::move(name),
-      .action = to_action_variant<ContextType>(std::move(callable)),
-    });
-    return *this;
-  }
-
-  Pipeline& add_pre_action(const remote::RemoteSpec<ContextType>& spec) {
-    return add_pre_action_named("", spec);
-  }
-
-  Pipeline& add_pre_action_named(std::string name, const remote::RemoteSpec<ContextType>& spec) {
-    pre_actions_.push_back(RegisteredAction<ContextType>{
-      .name = std::move(name),
-      .action = spec,
+  Pipeline& addPreAction(std::string actionName, CallableType callable) {
+    preActions_.push_back(RegisteredAction{
+      .name = std::move(actionName),
+      .action = toStepAction<ContextType>(std::move(callable)),
     });
     return *this;
   }
 
   template <typename CallableType>
-  Pipeline& add_action(CallableType callable) {
-    return add_action_named("", std::move(callable));
+  Pipeline& addAction(CallableType callable) {
+    return addAction("", std::move(callable));
   }
 
   template <typename CallableType>
-  Pipeline& add_action_named(std::string name, CallableType callable) {
-    actions_.push_back(RegisteredAction<ContextType>{
-      .name = std::move(name),
-      .action = to_action_variant<ContextType>(std::move(callable)),
-    });
-    return *this;
-  }
-
-  Pipeline& add_action(const remote::RemoteSpec<ContextType>& spec) {
-    return add_action_named("", spec);
-  }
-
-  Pipeline& add_action_named(std::string name, const remote::RemoteSpec<ContextType>& spec) {
-    actions_.push_back(RegisteredAction<ContextType>{
-      .name = std::move(name),
-      .action = spec,
+  Pipeline& addAction(std::string actionName, CallableType callable) {
+    actions_.push_back(RegisteredAction{
+      .name = std::move(actionName),
+      .action = toStepAction<ContextType>(std::move(callable)),
     });
     return *this;
   }
 
   template <typename CallableType>
-  Pipeline& add_post_action(CallableType callable) {
-    return add_post_action_named("", std::move(callable));
+  Pipeline& addPostAction(CallableType callable) {
+    return addPostAction("", std::move(callable));
   }
 
   template <typename CallableType>
-  Pipeline& add_post_action_named(std::string name, CallableType callable) {
-    post_actions_.push_back(RegisteredAction<ContextType>{
-      .name = std::move(name),
-      .action = to_action_variant<ContextType>(std::move(callable)),
-    });
-    return *this;
-  }
-
-  Pipeline& add_post_action(const remote::RemoteSpec<ContextType>& spec) {
-    return add_post_action_named("", spec);
-  }
-
-  Pipeline& add_post_action_named(std::string name, const remote::RemoteSpec<ContextType>& spec) {
-    post_actions_.push_back(RegisteredAction<ContextType>{
-      .name = std::move(name),
-      .action = spec,
+  Pipeline& addPostAction(std::string actionName, CallableType callable) {
+    postActions_.push_back(RegisteredAction{
+      .name = std::move(actionName),
+      .action = toStepAction<ContextType>(std::move(callable)),
     });
     return *this;
   }
@@ -319,108 +322,82 @@ public:
 
   PipelineResult<ContextType> execute(ContextType input_value) const {
     ContextType ctx = std::move(input_value);
-    StepControl<ContextType> control(name_, on_error_);
-    control.begin_run();
 
-    ctx = run_phase("pre", std::move(ctx), pre_actions_, control, false);
-    if (!control.is_short_circuited()) {
-      ctx = run_phase("main", std::move(ctx), actions_, control, true);
+    const auto runStartTimepoint = std::chrono::steady_clock::now();
+    StepControl<ContextType> control(name_, onError_);
+    control.beginRun(runStartTimepoint);
+
+    ctx = runPhase(control, StepPhase::PRE, std::move(ctx), preActions_, false);
+    if (!control.isShortCircuited()) {
+      ctx = runPhase(control, StepPhase::MAIN, std::move(ctx), actions_, true);
     }
-    ctx = run_phase("post", std::move(ctx), post_actions_, control, false);
+    ctx = runPhase(control, StepPhase::POST, std::move(ctx), postActions_, false);
 
-    const std::int64_t total_nanos = control.run_elapsed_nanos();
+    const auto totalNanos =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - runStartTimepoint).count();
     PipelineResult<ContextType> result{
       .context = std::move(ctx),
-      .short_circuited = control.is_short_circuited(),
+      .shortCircuited = control.isShortCircuited(),
       .errors = control.errors(),
-      .timings = control.timings(),
-      .total_nanos = total_nanos,
+      .actionTimings = control.actionTimings(),
+      .totalNanos = totalNanos,
     };
     return result;
   }
 
-  Pipeline& add_registered_pre_action(const RegisteredAction<ContextType>& registered_action) {
-    pre_actions_.push_back(registered_action);
-    return *this;
-  }
-
-  Pipeline& add_registered_action(const RegisteredAction<ContextType>& registered_action) {
-    actions_.push_back(registered_action);
-    return *this;
-  }
-
-  Pipeline& add_registered_post_action(const RegisteredAction<ContextType>& registered_action) {
-    post_actions_.push_back(registered_action);
-    return *this;
-  }
-
 private:
-  ContextType run_phase(
-    const std::string& phase,
-    ContextType start_ctx,
-    const std::vector<RegisteredAction<ContextType>>& actions,
+  struct RegisteredAction {
+    std::string name;
+    StepAction<ContextType> action;
+  };
+
+  ContextType runPhase(
     StepControl<ContextType>& control,
-    bool stop_on_short_circuit
+    StepPhase phase,
+    ContextType startContext,
+    const std::vector<RegisteredAction>& actions,
+    bool stopOnShortCircuit
   ) const {
-    ContextType ctx = std::move(start_ctx);
-    std::size_t step_index = 0;
-    while (step_index < actions.size()) {
-      const RegisteredAction<ContextType>& registered_action = actions.at(step_index);
-      const std::string action_name = format_action_name(phase, step_index, registered_action.name);
-      control.begin_step(phase, step_index, action_name);
+    ContextType ctx = std::move(startContext);
+    for (std::size_t index = 0; index < actions.size(); index += 1) {
+      const RegisteredAction& registeredAction = actions.at(index);
+      const std::string stepName = formatStepName(phase, index, registeredAction.name);
+      control.beginStep(phase, index, stepName);
 
-      const auto step_start_timepoint = std::chrono::steady_clock::now();
-      bool step_succeeded = true;
+      const auto stepStartTimepoint = std::chrono::steady_clock::now();
+      bool actionSucceeded = true;
 
-      const ContextType ctx_before_step = ctx;
+      const ContextType ctxBeforeStep = ctx;
       try {
-        if (std::holds_alternative<UnaryOperator<ContextType>>(registered_action.action)) {
-          const UnaryOperator<ContextType>& unary_action = std::get<UnaryOperator<ContextType>>(registered_action.action);
-          ctx = unary_action(ctx);
-        } else if (std::holds_alternative<StepAction<ContextType>>(registered_action.action)) {
-          const StepAction<ContextType>& step_action = std::get<StepAction<ContextType>>(registered_action.action);
-          ctx = step_action(ctx, control);
-        } else {
-          const remote::RemoteSpec<ContextType>& remote_spec =
-            std::get<remote::RemoteSpec<ContextType>>(registered_action.action);
-          ctx = remote::http_step(remote_spec, ctx);
-        }
-      } catch (const std::exception& error) {
-        step_succeeded = false;
-        ctx = control.record_error(ctx_before_step, safe_error_to_string(error));
-        if (short_circuit_on_exception_) {
-          control.short_circuit();
-        }
+        ctx = registeredAction.action(std::move(ctx), control);
       } catch (...) {
-        step_succeeded = false;
-        ctx = control.record_error(ctx_before_step, safe_unknown_exception_to_string());
-        if (short_circuit_on_exception_) {
-          control.short_circuit();
+        actionSucceeded = false;
+        ctx = control.recordError(ctxBeforeStep, std::current_exception());
+        if (shortCircuitOnException_) {
+          control.shortCircuit();
         }
       }
 
-      const auto step_end_timepoint = std::chrono::steady_clock::now();
-      const auto elapsed_nanos =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(step_end_timepoint - step_start_timepoint).count();
-      control.record_timing(elapsed_nanos, step_succeeded);
+      const auto stepEndTimepoint = std::chrono::steady_clock::now();
+      const auto elapsedNanos =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(stepEndTimepoint - stepStartTimepoint).count();
+      control.recordTiming(elapsedNanos, actionSucceeded);
 
-      if (stop_on_short_circuit && control.is_short_circuited()) {
+      if (stopOnShortCircuit && control.isShortCircuited()) {
         break;
       }
-
-      step_index += 1;
     }
 
     return ctx;
   }
 
   std::string name_;
-  bool short_circuit_on_exception_;
-  OnErrorFn<ContextType> on_error_;
+  bool shortCircuitOnException_;
+  OnErrorFn<ContextType> onError_;
 
-  std::vector<RegisteredAction<ContextType>> pre_actions_;
-  std::vector<RegisteredAction<ContextType>> actions_;
-  std::vector<RegisteredAction<ContextType>> post_actions_;
+  std::vector<RegisteredAction> preActions_;
+  std::vector<RegisteredAction> actions_;
+  std::vector<RegisteredAction> postActions_;
 };
 
 }  // namespace pipeline_services::core
