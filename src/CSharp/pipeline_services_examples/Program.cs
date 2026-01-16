@@ -38,6 +38,11 @@ public static class Program
             Example05MetricsPostAction.Run();
             return 0;
         }
+        if (string.Equals(command, "example06_mixed_local_remote", StringComparison.Ordinal))
+        {
+            Example06MixedLocalRemote.Run();
+            return 0;
+        }
         if (string.Equals(command, "benchmark01_pipeline_run", StringComparison.Ordinal))
         {
             Benchmark01PipelineRun.Run();
@@ -58,7 +63,7 @@ public static class Program
         Console.WriteLine("  example03_runtime_pipeline");
         Console.WriteLine("  example04_json_loader_remote_get");
         Console.WriteLine("  example05_metrics_post_action");
+        Console.WriteLine("  example06_mixed_local_remote");
         Console.WriteLine("  benchmark01_pipeline_run");
     }
 }
-

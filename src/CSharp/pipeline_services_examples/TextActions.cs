@@ -41,7 +41,7 @@ public static class TextActions
         {
             throw new ArgumentNullException(nameof(value));
         }
-        return value + "✓";
+        return value + "|";
     }
 
     public static string Upper(string value)

@@ -9,7 +9,7 @@ fn strip(text_value: PythonObject) raises -> PythonObject:
 fn normalize_whitespace(text_value: PythonObject) raises -> PythonObject:
     var text_string: String = String(text_value)
     var python_re_module = Python.import_module("re")
-    var normalized_value = python_re_module.sub("\\\\s+", " ", text_string).strip()
+    var normalized_value = python_re_module.sub("\\s+", " ", text_string).strip()
     return PythonObject(String(normalized_value))
 
 fn to_lower(text_value: PythonObject) raises -> PythonObject:
