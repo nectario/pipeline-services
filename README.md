@@ -1,5 +1,5 @@
 # Pipeline Services
-Portable, local‑first pipeline framework with reference implementations in multiple languages (Java, Mojo, Python, TypeScript, Rust, C++, Go).
+Portable, local‑first pipeline framework with reference implementations in multiple languages (Java, Mojo, Python, TypeScript, Rust, C++, Go, C#).
 
 This repo is organized around a shared, language-agnostic behavior contract (`docs/PORTABILITY_CONTRACT.md`) so ports can stay consistent on:
 - short-circuit semantics
@@ -34,12 +34,13 @@ pipeline-examples    # Runnable examples (+ main runner)
 
 ## Ports
 - Java (reference): `src/Java/` (Maven multi-module)
-- Mojo (experimental): `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
-- Python (experimental): `src/Python/pipeline_services/` (runs via `python3 -m ...`)
-- TypeScript (experimental): `src/typescript/` (npm package)
-- Rust (experimental): `src/Rust/` (Cargo crate)
-- C++ (experimental): `src/Cpp/` (C++20 + CMake)
-- Go (experimental): `src/Go/` (Go modules)
+- Mojo: `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
+- Python: `src/Python/pipeline_services/` (runs via `python3 -m ...`)
+- TypeScript: `src/typescript/` (npm package)
+- Rust: `src/Rust/` (Cargo crate)
+- C++: `src/Cpp/` (C++20 + CMake)
+- Go: `src/Go/` (Go modules)
+- C#: `src/CSharp/` (dotnet projects)
 
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
@@ -86,7 +87,7 @@ PipelineResult<String> result = pipeline.execute("  Hello   World  ");
 System.out.println(result.context());
 ```
 
-### Mojo (experimental port)
+### Mojo port
 Mojo toolchain lives under `pipeline_services/pixi.toml`.
 
 ```bash
@@ -99,7 +100,7 @@ pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example0
 Notes:
 - JSON loading uses a registry for `$local` actions and supports `$remote` HTTP actions.
 
-### Python (experimental port)
+### Python port
 ```bash
 cd src/Python
 python3 -m pipeline_services.examples.example01_text_clean
@@ -108,7 +109,7 @@ python3 -m pipeline_services.examples.example05_metrics_post_action
 python3 -m pipeline_services.examples.benchmark01_pipeline_run
 ```
 
-### TypeScript (experimental port)
+### TypeScript port
 ```bash
 cd src/typescript
 npm install
@@ -117,14 +118,14 @@ npm test
 node dist/src/pipeline_services/examples/example01_text_clean.js
 ```
 
-### Rust (experimental port)
+### Rust port
 ```bash
 cd src/Rust
 cargo test
 cargo run --example example01_text_clean
 ```
 
-### C++ (experimental port)
+### C++ port
 ```bash
 cd src/Cpp
 cmake -S . -B build
@@ -133,11 +134,18 @@ ctest --test-dir build
 ./build/example01_text_clean
 ```
 
-### Go (experimental port)
+### Go port
 ```bash
 cd src/Go
 go test ./...
 go run ./examples/example01_text_clean
+```
+
+### C# port
+```bash
+cd src/CSharp
+dotnet test ./pipeline_services_tests/PipelineServices.Tests.csproj
+dotnet run --project pipeline_services_examples -- example01_text_clean
 ```
 
 ## Semantics (portable)

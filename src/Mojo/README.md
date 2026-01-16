@@ -1,6 +1,6 @@
 # Pipeline Services — Mojo port
 
-This folder contains an experimental Mojo port of Pipeline Services, targeting Mojo `0.26.x` via `pixi`.
+This folder contains the Mojo port of Pipeline Services, targeting Mojo `0.26.x` via `pixi`.
 
 ## What’s implemented
 - Core runtime: `Pipeline`, `StepControl`, `PipelineResult`, `PipelineError`

@@ -18,6 +18,11 @@ dist/
 # C++ (CMake)
 src/Cpp/build*/
 
+# C# / .NET
+src/CSharp/**/bin/
+src/CSharp/**/obj/
+.vs/
+
 # Codex/agent artifacts
 codex.txt
 docs/changes.md
