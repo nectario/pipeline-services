@@ -1,5 +1,5 @@
 # Pipeline Services
-Portable, local‑first pipeline framework with reference implementations in multiple languages (Java, Mojo, Python, TypeScript, Rust, C++).
+Portable, local‑first pipeline framework with reference implementations in multiple languages (Java, Mojo, Python, TypeScript, Rust, C++, Go).
 
 This repo is organized around a shared, language-agnostic behavior contract (`docs/PORTABILITY_CONTRACT.md`) so ports can stay consistent on:
 - short-circuit semantics
@@ -39,6 +39,7 @@ pipeline-examples    # Runnable examples (+ main runner)
 - TypeScript (experimental): `src/typescript/` (npm package)
 - Rust (experimental): `src/Rust/` (Cargo crate)
 - C++ (experimental): `src/Cpp/` (C++20 + CMake)
+- Go (experimental): `src/Go/` (Go modules)
 
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
@@ -130,6 +131,13 @@ cmake -S . -B build
 cmake --build build -j
 ctest --test-dir build
 ./build/example01_text_clean
+```
+
+### Go (experimental port)
+```bash
+cd src/Go
+go test ./...
+go run ./examples/example01_text_clean
 ```
 
 ## Semantics (portable)
