@@ -46,8 +46,8 @@
   <rect x="562" y="138" width="88" height="26" rx="13" fill="#bbf7d0" stroke="#34d399"/>
   <text x="578" y="156" class="chipText">remote</text>
 
-  <rect x="658" y="138" width="74" height="26" rx="13" fill="#e9d5ff" stroke="#a78bfa"/>
-  <text x="676" y="156" class="chipText">AI</text>
+  <rect x="658" y="138" width="92" height="26" rx="13" fill="#e9d5ff" stroke="#a78bfa"/>
+  <text x="674" y="156" class="chipText">prompt</text>
 
   <text x="478" y="185" class="text">• unary: <tspan class="mono">C → C</tspan></text>
   <text x="478" y="208" class="text">• control-aware: <tspan class="mono">(C, control) → C</tspan></text>

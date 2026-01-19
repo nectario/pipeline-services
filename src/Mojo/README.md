@@ -17,7 +17,7 @@ This folder contains the Mojo port of Pipeline Services, targeting Mojo `0.26.x`
 - End-to-end benchmark example (`benchmark01_pipeline_run.mojo`)
 
 ## What’s stubbed / pending
-- Prompt + Disruptor modules are placeholders for the later “LLM” + async runner work
+- Prompt + Disruptor modules are placeholders for later prompt code generation + async runner work
 
 ## Layout
 - `src/Mojo/pipeline_services/core/` — core pipeline runtime

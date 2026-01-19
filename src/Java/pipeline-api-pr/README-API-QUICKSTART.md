@@ -31,4 +31,4 @@ Pipeline<String> p2 = new Pipeline<String>(com.pipeline.examples.steps.TextSteps
 System.out.println(p2.run("  aLiCe   deLANEY  "));
 ```
 
-> `$prompt` steps are **generated at build time** by your existing prompt codegen (e.g., `CodegenMain`) and compiled as normal classes. No runtime LLM calls.
+> `$prompt` steps are **generated at build time** by your existing prompt codegen (e.g., `CodegenMain`) and compiled as normal classes. No runtime prompt evaluation.

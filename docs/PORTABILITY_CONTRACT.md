@@ -96,8 +96,8 @@ Some ports may provide labeled jumps (polling/workflows). If implemented:
 - there must be a guardrail `maxJumpsPerRun`
 - jumps into PRE are rejected
 
-### 4.2 Prompt steps (LLM scaffolding)
-Ports may support build-time “prompt → code” generation. Runtime LLM calls are optional and must be explicit.
+### 4.2 Prompt steps (code generation)
+Ports may support build-time “prompt → code” generation. Runtime does not evaluate prompts implicitly.
 
 If implemented, the expected behavior is:
 - Source pipeline JSON may include `$prompt` steps (prompt spec is preserved in source JSON).

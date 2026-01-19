@@ -23,8 +23,8 @@ src/CSharp/**/bin/
 src/CSharp/**/obj/
 .vs/
 
-# Codex/agent artifacts
-codex.txt
+# Local development artifacts
+local_notes.txt
 docs/changes.md
 docs/Mojo_README.md
 
