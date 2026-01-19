@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-label="Prompt to code flow: source pipeline JSON with $prompt is compiled into per-language generated actions and compiled pipeline JSON.">
+  <defs>
+    <style>
+      .title { font: 700 24px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 500 15px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #6b7280; }
+      .heading { font: 700 16px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .text { font: 500 14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .muted { fill: #6b7280; }
+      .mono { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; fill: #111827; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#6b7280"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="420" fill="#ffffff"/>
+
+  <text x="40" y="48" class="title">Prompt-to-code (compile phase)</text>
+  <text x="40" y="76" class="subtitle">$prompt stays as source-of-truth; compiled JSON and generated code are language-native artifacts</text>
+
+  <!-- Source pipeline JSON -->
+  <rect x="40" y="110" width="340" height="170" rx="18" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="64" y="142" class="heading">Source pipeline JSON</text>
+  <text x="64" y="166" class="text muted">pipelines/&lt;name&gt;.json</text>
+  <text x="64" y="198" class="mono">{</text>
+  <text x="64" y="220" class="mono">  "actions": [</text>
+  <text x="64" y="242" class="mono">    { "$prompt": "normalize_name" }</text>
+  <text x="64" y="264" class="mono">  ]</text>
+  <text x="64" y="286" class="mono">}</text>
+
+  <!-- Codegen tool -->
+  <rect x="440" y="140" width="320" height="110" rx="18" fill="#e5e7eb" stroke="#9ca3af" stroke-width="2"/>
+  <text x="464" y="176" class="heading">Prompt compiler</text>
+  <text x="464" y="200" class="mono">tools/prompt_codegen.py</text>
+  <text x="464" y="224" class="text muted">rewrites $prompt → $local</text>
+
+  <!-- Outputs -->
+  <rect x="820" y="110" width="340" height="170" rx="18" fill="#dbeafe" stroke="#60a5fa" stroke-width="2"/>
+  <text x="844" y="142" class="heading">Compiled pipeline JSON (per language)</text>
+  <text x="844" y="166" class="text muted">pipelines/generated/&lt;lang&gt;/&lt;name&gt;.json</text>
+  <text x="844" y="198" class="mono">{</text>
+  <text x="844" y="220" class="mono">  "actions": [</text>
+  <text x="844" y="242" class="mono">    { "$local": "prompt:normalize_name" }</text>
+  <text x="844" y="264" class="mono">  ]</text>
+  <text x="844" y="286" class="mono">}</text>
+
+  <rect x="820" y="290" width="340" height="110" rx="18" fill="#dcfce7" stroke="#34d399" stroke-width="2"/>
+  <text x="844" y="322" class="heading">Generated action code (per language)</text>
+  <text x="844" y="346" class="text muted">src/&lt;lang&gt;/.../generated/...</text>
+  <text x="844" y="370" class="text muted">registered as prompt:&lt;id&gt;</text>
+
+  <!-- Runtime loader -->
+  <rect x="440" y="290" width="320" height="110" rx="18" fill="#f3f4f6" stroke="#d1d5db" stroke-width="2"/>
+  <text x="464" y="322" class="heading">Runtime loader</text>
+  <text x="464" y="346" class="text">if source contains <tspan class="mono">$prompt</tspan>, load compiled JSON</text>
+  <text x="464" y="370" class="text muted">if compiled missing: throw “run prompt codegen”</text>
+
+  <!-- Arrows -->
+  <line x1="380" y1="195" x2="440" y2="195" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="760" y1="195" x2="820" y2="195" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="380" y1="310" x2="440" y2="345" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="760" y1="345" x2="820" y2="195" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+</svg>

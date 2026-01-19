@@ -35,6 +35,8 @@ This repo is organized around a shared, language-agnostic behavior contract (`do
   - Control-aware: `(C, control) → C` (explicit short-circuit + error recording)
 - A pipeline has three phases: `pre` → `main` → `post`.
 
+![Pipeline execution model](docs/images/pipeline-execution-model.svg)
+
 ## Design goals
 - **Simplicity and clarity first**: the common path should read like a list of actions (method refs/lambdas or JSON).
 - **Portability by contract**: behavior is defined once in `docs/PORTABILITY_CONTRACT.md` and re-implemented per language.
@@ -62,6 +64,8 @@ pipeline-examples    # Runnable examples (+ main runner)
 - C++: `src/Cpp/` (C++20 + CMake)
 - Go: `src/Go/` (Go modules)
 - C#: `src/CSharp/` (dotnet projects)
+
+![Portability contract](docs/images/portability-contract.svg)
 
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
@@ -147,6 +151,9 @@ cargo run --example example01_text_clean
 ```
 
 ## Prompt-to-code (LLM compile)
+
+![Prompt-to-code flow](docs/images/prompt-to-code-flow.svg)
+
 Pipelines can include `$prompt` actions in the **source** JSON. `$prompt` is a compile-time directive: a prompt compiler generates:
 - Per-language **compiled pipelines**: `pipelines/generated/<lang>/<pipeline>.json` (with `$prompt → $local` rewrites)
 - Per-language **generated actions** (code) that implement the prompt contract
