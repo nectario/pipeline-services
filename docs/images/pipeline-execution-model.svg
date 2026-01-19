@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-label="Pipeline execution model with preActions, actions, and postActions.">
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="320" viewBox="0 0 1320 320" role="img" aria-label="Pipeline execution model with preActions, actions, and postActions.">
   <defs>
     <style>
       .title { font: 700 24px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
       .subtitle { font: 500 15px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #6b7280; }
-      .heading { font: 700 18px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .heading { font: 800 20px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
       .text { font: 500 15px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
       .muted { fill: #6b7280; }
       .boxStroke { stroke-width: 2; }
-      .chipText { font: 700 13px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .chipText { font: 800 14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
       .mono { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; fill: #111827; }
     </style>
     <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
@@ -15,19 +15,19 @@
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1200" height="320" fill="#ffffff"/>
+  <rect x="0" y="0" width="1320" height="320" fill="#ffffff"/>
 
   <text x="40" y="48" class="title">Pipeline execution model</text>
   <text x="40" y="76" class="subtitle">preActions → actions → postActions, with explicit short-circuit and consistent error capture</text>
 
   <!-- Boxes -->
-  <rect x="40" y="110" width="300" height="160" rx="18" fill="#f3f4f6" stroke="#d1d5db" class="boxStroke"/>
-  <rect x="450" y="90" width="300" height="200" rx="18" fill="#dbeafe" stroke="#93c5fd" class="boxStroke"/>
-  <rect x="860" y="110" width="300" height="160" rx="18" fill="#f3f4f6" stroke="#d1d5db" class="boxStroke"/>
+  <rect x="40" y="110" width="340" height="160" rx="18" fill="#f3f4f6" stroke="#d1d5db" class="boxStroke"/>
+  <rect x="490" y="90" width="340" height="200" rx="18" fill="#dbeafe" stroke="#93c5fd" class="boxStroke"/>
+  <rect x="940" y="110" width="340" height="160" rx="18" fill="#f3f4f6" stroke="#d1d5db" class="boxStroke"/>
 
   <!-- Arrows -->
-  <line x1="340" y1="190" x2="450" y2="190" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="750" y1="190" x2="860" y2="190" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="380" y1="190" x2="490" y2="190" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="830" y1="190" x2="940" y2="190" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Pre -->
   <text x="68" y="145" class="heading">preActions</text>
@@ -37,28 +37,28 @@
   <text x="68" y="246" class="text muted">always runs</text>
 
   <!-- Main actions -->
-  <text x="478" y="125" class="heading">actions</text>
+  <text x="518" y="125" class="heading">actions</text>
 
   <!-- Chips -->
-  <rect x="478" y="138" width="76" height="26" rx="13" fill="#bfdbfe" stroke="#60a5fa"/>
-  <text x="496" y="156" class="chipText">local</text>
+  <rect x="518" y="138" width="76" height="26" rx="13" fill="#bfdbfe" stroke="#60a5fa"/>
+  <text x="536" y="156" class="chipText">local</text>
 
-  <rect x="562" y="138" width="88" height="26" rx="13" fill="#bbf7d0" stroke="#34d399"/>
-  <text x="578" y="156" class="chipText">remote</text>
+  <rect x="602" y="138" width="88" height="26" rx="13" fill="#bbf7d0" stroke="#34d399"/>
+  <text x="618" y="156" class="chipText">remote</text>
 
-  <rect x="658" y="138" width="92" height="26" rx="13" fill="#e9d5ff" stroke="#a78bfa"/>
-  <text x="674" y="156" class="chipText">prompt</text>
+  <rect x="698" y="138" width="92" height="26" rx="13" fill="#e9d5ff" stroke="#a78bfa"/>
+  <text x="714" y="156" class="chipText">prompt</text>
 
-  <text x="478" y="185" class="text">• unary: <tspan class="mono">C → C</tspan></text>
-  <text x="478" y="208" class="text">• control-aware: <tspan class="mono">(C, control) → C</tspan></text>
-  <text x="478" y="231" class="text">• explicit short-circuit: <tspan class="mono">control.shortCircuit()</tspan></text>
-  <text x="478" y="254" class="text">• stop-vs-continue: <tspan class="mono">shortCircuitOnException</tspan></text>
-  <text x="478" y="277" class="text muted">errors captured into a result object</text>
+  <text x="518" y="185" class="text">• unary: <tspan class="mono">C → C</tspan></text>
+  <text x="518" y="208" class="text">• control-aware: <tspan class="mono">(C, control) → C</tspan></text>
+  <text x="518" y="231" class="text">• explicit short-circuit: <tspan class="mono">control.shortCircuit()</tspan></text>
+  <text x="518" y="254" class="text">• stop-vs-continue: <tspan class="mono">shortCircuitOnException</tspan></text>
+  <text x="518" y="277" class="text muted">errors captured into a result object</text>
 
   <!-- Post -->
-  <text x="888" y="145" class="heading">postActions</text>
-  <text x="888" y="174" class="text">• metrics export / tracing</text>
-  <text x="888" y="198" class="text">• audit / persistence</text>
-  <text x="888" y="222" class="text">• cleanup / notifications</text>
-  <text x="888" y="246" class="text muted">always runs</text>
+  <text x="968" y="145" class="heading">postActions</text>
+  <text x="968" y="174" class="text">• metrics export / tracing</text>
+  <text x="968" y="198" class="text">• audit / persistence</text>
+  <text x="968" y="222" class="text">• cleanup / notifications</text>
+  <text x="968" y="246" class="text muted">always runs</text>
 </svg>
