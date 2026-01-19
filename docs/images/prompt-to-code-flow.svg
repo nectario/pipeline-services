@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-label="Prompt-to-code: a prompt-based pipeline with mixed action types compiles into a per-language pipeline where prompt actions become generated local actions.">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="720" viewBox="0 0 1400 720" role="img" aria-label="Prompt-to-code: a prompt-based pipeline with mixed action types compiles into a per-language pipeline where prompt actions become generated local actions.">
   <defs>
     <style>
       .title { font: 700 28px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
@@ -10,15 +10,12 @@
       .box { stroke-width: 2; }
     </style>
 
-    <marker id="arrowRight" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-      <path d="M0,0 L12,6 L0,12 Z" fill="#6b7280"/>
-    </marker>
-    <marker id="arrowDown" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-      <path d="M0,0 L12,6 L0,12 Z" fill="#6b7280"/>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#6b7280"/>
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1200" height="560" fill="#ffffff"/>
+  <rect x="0" y="0" width="1400" height="720" fill="#ffffff"/>
 
   <text x="40" y="56" class="title">Prompt-to-code: mix actions, keep prompts small</text>
   <text x="40" y="90" class="subtitle">Pipelines can be mostly local/remote actions with a few prompt actions; generation turns prompts into language-native code</text>
@@ -34,64 +31,64 @@
   <text x="470" y="121" class="chipText">Generated local</text>
 
   <!-- Top: prompt-based pipeline -->
-  <rect x="40" y="140" width="1120" height="170" rx="18" fill="#ffffff" stroke="#d1d5db" class="box"/>
-  <text x="64" y="176" class="heading">Prompt-based pipeline (source)</text>
-  <text x="64" y="204" class="text muted">local + remote + prompt actions (small LLM surface area)</text>
+  <rect x="40" y="160" width="1320" height="200" rx="18" fill="#ffffff" stroke="#d1d5db" class="box"/>
+  <text x="64" y="196" class="heading">Prompt-based pipeline (source)</text>
+  <text x="64" y="224" class="text muted">local + remote + prompt actions (small LLM surface area)</text>
 
   <!-- Top pipeline actions (left → right) -->
-  <rect x="90" y="226" width="180" height="52" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="106" y="258" class="text">validate + normalize</text>
+  <rect x="90" y="270" width="170" height="60" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <text x="106" y="306" class="text">validate + normalize</text>
 
-  <rect x="300" y="226" width="180" height="52" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
-  <text x="316" y="258" class="text">enrich (lookup)</text>
+  <rect x="335" y="270" width="170" height="60" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
+  <text x="351" y="306" class="text">enrich (lookup)</text>
 
-  <rect x="510" y="226" width="180" height="52" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
-  <text x="526" y="258" class="text">prompt: classify</text>
+  <rect x="580" y="270" width="170" height="60" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
+  <text x="596" y="306" class="text">prompt: classify</text>
 
-  <rect x="720" y="226" width="180" height="52" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="736" y="258" class="text">apply rules</text>
+  <rect x="825" y="270" width="170" height="60" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <text x="841" y="306" class="text">apply rules</text>
 
-  <rect x="930" y="226" width="180" height="52" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
-  <text x="946" y="258" class="text">prompt: rewrite</text>
+  <rect x="1070" y="270" width="170" height="60" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
+  <text x="1086" y="306" class="text">prompt: rewrite</text>
 
   <!-- Top pipeline arrows -->
-  <line x1="270" y1="252" x2="300" y2="252" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
-  <line x1="480" y1="252" x2="510" y2="252" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
-  <line x1="690" y1="252" x2="720" y2="252" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
-  <line x1="900" y1="252" x2="930" y2="252" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
+  <line x1="260" y1="300" x2="335" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="505" y1="300" x2="580" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="750" y1="300" x2="825" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="995" y1="300" x2="1070" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
 
   <!-- Code generation (downwards) -->
-  <text x="600" y="330" class="heading" text-anchor="middle">code generation</text>
-  <line x1="600" y1="342" x2="600" y2="356" stroke="#6b7280" stroke-width="3.2" marker-end="url(#arrowDown)"/>
-  <text x="600" y="366" class="text muted" text-anchor="middle">prompt actions → generated code</text>
+  <text x="700" y="410" class="heading" text-anchor="middle">code generation</text>
+  <line x1="700" y1="430" x2="700" y2="470" stroke="#6b7280" stroke-width="3.4" marker-end="url(#arrow)"/>
+  <text x="700" y="488" class="text muted" text-anchor="middle">prompt actions → generated code</text>
 
   <!-- Bottom: compiled pipeline -->
-  <rect x="40" y="370" width="1120" height="170" rx="18" fill="#ffffff" stroke="#d1d5db" class="box"/>
-  <text x="64" y="406" class="heading">Compiled pipeline (per language)</text>
-  <text x="64" y="434" class="text muted">prompt actions become generated local actions (reviewable + testable)</text>
+  <rect x="40" y="500" width="1320" height="200" rx="18" fill="#ffffff" stroke="#d1d5db" class="box"/>
+  <text x="64" y="536" class="heading">Compiled pipeline (per language)</text>
+  <text x="64" y="564" class="text muted">prompt actions become generated local actions (reviewable + testable)</text>
 
   <!-- Bottom pipeline actions (left → right) -->
-  <rect x="90" y="456" width="180" height="52" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="106" y="488" class="text">validate + normalize</text>
+  <rect x="90" y="610" width="170" height="60" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <text x="106" y="646" class="text">validate + normalize</text>
 
-  <rect x="300" y="456" width="180" height="52" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
-  <text x="316" y="488" class="text">enrich (lookup)</text>
+  <rect x="335" y="610" width="170" height="60" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
+  <text x="351" y="646" class="text">enrich (lookup)</text>
 
-  <rect x="510" y="456" width="180" height="52" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
-  <text x="526" y="488" class="text">generated: classify</text>
+  <rect x="580" y="610" width="170" height="60" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
+  <text x="596" y="646" class="text">generated: classify</text>
 
-  <rect x="720" y="456" width="180" height="52" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="736" y="488" class="text">apply rules</text>
+  <rect x="825" y="610" width="170" height="60" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <text x="841" y="646" class="text">apply rules</text>
 
-  <rect x="930" y="456" width="180" height="52" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
-  <text x="946" y="488" class="text">generated: rewrite</text>
+  <rect x="1070" y="610" width="170" height="60" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
+  <text x="1086" y="646" class="text">generated: rewrite</text>
 
   <!-- Bottom pipeline arrows -->
-  <line x1="270" y1="482" x2="300" y2="482" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
-  <line x1="480" y1="482" x2="510" y2="482" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
-  <line x1="690" y1="482" x2="720" y2="482" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
-  <line x1="900" y1="482" x2="930" y2="482" stroke="#6b7280" stroke-width="2.6" marker-end="url(#arrowRight)"/>
+  <line x1="260" y1="640" x2="335" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="505" y1="640" x2="580" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="750" y1="640" x2="825" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="995" y1="640" x2="1070" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
 
   <!-- Footnote -->
-  <text x="40" y="554" class="text muted">Conceptual view: prompts remain in source pipelines; compiled pipelines reference generated actions per target language.</text>
+  <text x="40" y="714" class="text muted">Conceptual view: prompts remain in source pipelines; compiled pipelines reference generated actions per target language.</text>
 </svg>
