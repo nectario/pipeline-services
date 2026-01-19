@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use crate::core::pipeline::Pipeline;
 use crate::core::registry::PipelineRegistry;
@@ -14,12 +15,38 @@ impl PipelineJsonLoader {
   pub fn load_str(&self, json_text: &str, registry: &PipelineRegistry<String>) -> Result<Pipeline<String>, String> {
     let spec: serde_json::Value =
       serde_json::from_str(json_text).map_err(|error| format!("Invalid JSON: {error}"))?;
+    if spec_contains_prompt_steps(&spec) {
+      return Err(
+        "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON under pipelines/generated/rust/."
+          .to_string(),
+      );
+    }
     self.build_from_spec(&spec, registry)
   }
 
   pub fn load_file(&self, file_path: &str, registry: &PipelineRegistry<String>) -> Result<Pipeline<String>, String> {
     let text_value = std::fs::read_to_string(file_path)
       .map_err(|error| format!("Failed to read file '{file_path}': {error}"))?;
+
+    let spec: serde_json::Value =
+      serde_json::from_str(&text_value).map_err(|error| format!("Invalid JSON: {error}"))?;
+    let pipeline_name = spec
+      .as_object()
+      .and_then(|spec_object| spec_object.get("pipeline").and_then(|value| value.as_str()))
+      .unwrap_or("pipeline")
+      .to_string();
+
+    if spec_contains_prompt_steps(&spec) {
+      let compiled_path = resolve_compiled_pipeline_path(file_path, &pipeline_name, "rust")?;
+      let compiled_text = std::fs::read_to_string(&compiled_path).map_err(|error| {
+        format!(
+          "Pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: {} ({error})",
+          compiled_path.display()
+        )
+      })?;
+      return self.load_str(&compiled_text, registry);
+    }
+
     self.load_str(&text_value, registry)
   }
 
@@ -108,6 +135,13 @@ fn add_step(
     .as_object()
     .ok_or_else(|| "Each action must be a JSON object".to_string())?;
 
+  if node_object.get("$prompt").is_some() {
+    return Err(
+      "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references."
+        .to_string(),
+    );
+  }
+
   let display_name = node_object
     .get("name")
     .and_then(|value| value.as_str())
@@ -173,7 +207,63 @@ fn add_local(
     return Ok(());
   }
 
+  if local_ref.starts_with("prompt:") {
+    return Err(format!(
+      "Prompt-generated action is missing from the registry: {local_ref}. Run prompt codegen and register generated actions."
+    ));
+  }
+
   Err(format!("Unknown $local reference: {local_ref}"))
+}
+
+fn spec_contains_prompt_steps(spec: &serde_json::Value) -> bool {
+  let spec_object = match spec.as_object() {
+    Some(value) => value,
+    None => return false,
+  };
+
+  for section_name in ["pre", "actions", "steps", "post"] {
+    let nodes_value = match spec_object.get(section_name) {
+      Some(value) => value,
+      None => continue,
+    };
+    let nodes = match nodes_value.as_array() {
+      Some(value) => value,
+      None => continue,
+    };
+    for node_value in nodes {
+      if let Some(node_object) = node_value.as_object() {
+        if node_object.get("$prompt").is_some() {
+          return true;
+        }
+      }
+    }
+  }
+
+  false
+}
+
+fn resolve_compiled_pipeline_path(
+  source_file_path: &str,
+  pipeline_name: &str,
+  language_name: &str,
+) -> Result<PathBuf, String> {
+  let source_path = Path::new(source_file_path)
+    .canonicalize()
+    .map_err(|error| format!("Failed to resolve pipeline path '{source_file_path}': {error}"))?;
+
+  let mut current_dir = source_path.parent().map(Path::to_path_buf);
+  while let Some(dir_value) = current_dir {
+    if dir_value.file_name().and_then(|value| value.to_str()) == Some("pipelines") {
+      return Ok(dir_value.join("generated").join(language_name).join(format!("{pipeline_name}.json")));
+    }
+    current_dir = dir_value.parent().map(Path::to_path_buf);
+  }
+
+  Err(format!(
+    "Pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: {} (expected the file to be under a 'pipelines' directory).",
+    source_path.display()
+  ))
 }
 
 fn add_remote(spec: RemoteSpec, display_name: &str, section_name: &str, pipeline: &mut Pipeline<String>) {
@@ -293,4 +383,3 @@ fn parse_remote_defaults(node: &serde_json::Value, base: RemoteDefaults) -> Resu
 
   Ok(defaults)
 }
-

@@ -12,16 +12,33 @@ struct PipelineJsonLoader:
     fn load_str(self, json_text: String, mut registry: PipelineRegistry) raises -> Pipeline:
         var json_module = Python.import_module("json")
         var spec = json_module.loads(json_text)
+        if spec_contains_prompt_steps(spec):
+            raise "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON under pipelines/generated/mojo/."
         return self.build_from_spec(spec, registry)
 
     fn load_file(self, file_path: String, mut registry: PipelineRegistry) raises -> Pipeline:
         var builtins_module = Python.import_module("builtins")
-        var file_object = builtins_module.open(file_path, "r", encoding = "utf-8")
+        var file_object = builtins_module.open(file_path, "r", encoding = PythonObject("utf-8"))
         var text_value = file_object.read()
         file_object.close()
-        return self.load_str(String(text_value), registry)
+        var json_module = Python.import_module("json")
+        var spec = json_module.loads(String(text_value))
+        var pipeline_name = String(spec.get("pipeline", "pipeline"))
+        if spec_contains_prompt_steps(spec):
+            var compiled_path = resolve_compiled_pipeline_path(file_path, pipeline_name, "mojo")
+            var os_module = Python.import_module("os")
+            if not Bool(os_module.path.exists(compiled_path)):
+                raise "Pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: " + compiled_path
+            var compiled_file = builtins_module.open(compiled_path, "r", encoding = PythonObject("utf-8"))
+            var compiled_text = compiled_file.read()
+            compiled_file.close()
+            return self.load_str(String(compiled_text), registry)
+        return self.build_from_spec(spec, registry)
 
     fn build_from_spec(self, spec: PythonObject, mut registry: PipelineRegistry) raises -> Pipeline:
+        if spec_contains_prompt_steps(spec):
+            raise "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON under pipelines/generated/mojo/."
+
         var pipeline_name = String(spec.get("pipeline", "pipeline"))
         var pipeline_type = String(spec.get("type", "unary"))
 
@@ -72,6 +89,9 @@ struct PipelineJsonLoader:
                 mut pipeline: Pipeline,
                 mut registry: PipelineRegistry,
                 remote_defaults: RemoteDefaults) raises -> None:
+        if node.get("$prompt") is not None:
+            raise "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references."
+
         var display_name = ""
         var name_value = node.get("name")
         if name_value is not None:
@@ -120,6 +140,9 @@ struct PipelineJsonLoader:
             else:
                 pipeline.add_action_named(display_name, step_action)
             return
+
+        if local_ref.startswith("prompt:"):
+            raise "Prompt-generated action is missing from the registry: " + local_ref + ". Run prompt codegen and register generated actions."
 
         raise "Unknown $local reference: " + local_ref
 
@@ -200,3 +223,28 @@ struct PipelineJsonLoader:
             pipeline.add_post_action_named(display_name, spec)
         else:
             pipeline.add_action_named(display_name, spec)
+
+
+fn spec_contains_prompt_steps(spec: PythonObject) raises -> Bool:
+    for section_name in ["pre", "actions", "steps", "post"]:
+        var nodes_value = spec.get(section_name)
+        if nodes_value is None:
+            continue
+        for node in nodes_value:
+            if node is not None and node.get("$prompt") is not None:
+                return True
+    return False
+
+
+fn resolve_compiled_pipeline_path(source_file_path: String, pipeline_name: String, language_name: String) raises -> String:
+    var pathlib_module = Python.import_module("pathlib")
+    var source_path = pathlib_module.Path(source_file_path).resolve()
+    var current_dir = source_path.parent
+    while True:
+        if String(current_dir.name) == "pipelines":
+            var compiled_path = current_dir / "generated" / language_name / (pipeline_name + ".json")
+            return String(compiled_path)
+        if current_dir.parent == current_dir:
+            break
+        current_dir = current_dir.parent
+    raise "Pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: " + String(source_path)

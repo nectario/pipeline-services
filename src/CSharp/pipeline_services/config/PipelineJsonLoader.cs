@@ -23,6 +23,11 @@ public sealed class PipelineJsonLoader
 
         using JsonDocument document = JsonDocument.Parse(jsonText);
         JsonElement root = document.RootElement;
+        if (SpecContainsPromptSteps(root))
+        {
+            throw new InvalidOperationException(
+                "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON under pipelines/generated/csharp/.");
+        }
 
         string pipelineName = GetRequiredString(root, "pipeline");
         string typeName = GetOptionalString(root, "type", "unary");
@@ -58,6 +63,24 @@ public sealed class PipelineJsonLoader
         }
 
         string jsonText = File.ReadAllText(filePath);
+        using JsonDocument document = JsonDocument.Parse(jsonText);
+        JsonElement root = document.RootElement;
+        string pipelineName = GetRequiredString(root, "pipeline");
+
+        if (SpecContainsPromptSteps(root))
+        {
+            string compiledPath = ResolveCompiledPipelinePath(filePath, pipelineName, "csharp");
+            if (!File.Exists(compiledPath))
+            {
+                throw new InvalidOperationException(
+                    "Pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: " +
+                    compiledPath);
+            }
+
+            string compiledText = File.ReadAllText(compiledPath);
+            return LoadString(compiledText, registry);
+        }
+
         return LoadString(jsonText, registry);
     }
 
@@ -108,6 +131,12 @@ public sealed class PipelineJsonLoader
         PipelineRegistry<string> registry,
         HttpStep.RemoteDefaults remoteDefaults)
     {
+        if (actionElement.TryGetProperty("$prompt", out JsonElement promptElement) && promptElement.ValueKind != JsonValueKind.Undefined)
+        {
+            throw new InvalidOperationException(
+                "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references.");
+        }
+
         string displayName = GetOptionalString(actionElement, "name", "");
         if (string.IsNullOrWhiteSpace(displayName))
         {
@@ -152,6 +181,13 @@ public sealed class PipelineJsonLoader
             StepAction<string> action = registry.GetAction(localRef);
             AddStepAction(action, displayName, sectionName, pipeline);
             return;
+        }
+
+        if (localRef.StartsWith("prompt:", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Prompt-generated action is missing from the registry: " + localRef +
+                ". Run prompt codegen and register generated actions.");
         }
 
         throw new InvalidOperationException("Unknown $local reference: " + localRef);
@@ -264,6 +300,51 @@ public sealed class PipelineJsonLoader
         }
 
         throw new InvalidOperationException("Missing required $remote field: endpoint|path");
+    }
+
+    private static bool SpecContainsPromptSteps(JsonElement root)
+    {
+        string[] sections = new[] { "pre", "actions", "steps", "post" };
+        foreach (string sectionName in sections)
+        {
+            if (!root.TryGetProperty(sectionName, out JsonElement sectionElement))
+            {
+                continue;
+            }
+            if (sectionElement.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+            foreach (JsonElement actionElement in sectionElement.EnumerateArray())
+            {
+                if (actionElement.ValueKind == JsonValueKind.Object &&
+                    actionElement.TryGetProperty("$prompt", out JsonElement promptElement) &&
+                    promptElement.ValueKind != JsonValueKind.Undefined &&
+                    promptElement.ValueKind != JsonValueKind.Null)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static string ResolveCompiledPipelinePath(string sourceFilePath, string pipelineName, string languageName)
+    {
+        string fullPath = Path.GetFullPath(sourceFilePath);
+        DirectoryInfo? currentDirectory = new FileInfo(fullPath).Directory;
+        while (currentDirectory != null)
+        {
+            if (string.Equals(currentDirectory.Name, "pipelines", StringComparison.OrdinalIgnoreCase))
+            {
+                return Path.Combine(currentDirectory.FullName, "generated", languageName, pipelineName + ".json");
+            }
+            currentDirectory = currentDirectory.Parent;
+        }
+
+        throw new InvalidOperationException(
+            "Pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: " +
+            fullPath + " (expected the file to be under a 'pipelines' directory).");
     }
 
     private static IDictionary<string, string> ParseHeaders(JsonElement remoteElement)
@@ -421,4 +502,3 @@ public sealed class PipelineJsonLoader
         return body;
     }
 }
-

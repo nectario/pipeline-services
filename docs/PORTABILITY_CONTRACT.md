@@ -84,9 +84,9 @@ Minimal canonical form:
 Notes:
 - `shortCircuit` is an allowed legacy alias for `shortCircuitOnException`.
 - `steps` is an allowed legacy alias for `actions`.
-- `$local` should resolve a class/type by name and instantiate it (no-arg ctor in Java).
-- A `$local` step may implement either the unary callable or the control-aware callable.
- - Optional: ports may support `remoteDefaults` + `"$remote"` actions as a convenience for HTTP calls.
+- `$local` identifies a local action. Ports may resolve it via a registry (common) or reflection (common in Java/C#).
+- A `$local` action may be either unary (`C → C`) or control-aware (`(C, control) → C`).
+- Optional: ports may support `remoteDefaults` + `"$remote"` actions as a convenience for HTTP calls.
 
 ## 4. Extensions (Optional per port)
 
@@ -98,6 +98,14 @@ Some ports may provide labeled jumps (polling/workflows). If implemented:
 
 ### 4.2 Prompt steps (LLM scaffolding)
 Ports may support build-time “prompt → code” generation. Runtime LLM calls are optional and must be explicit.
+
+If implemented, the expected behavior is:
+- Source pipeline JSON may include `$prompt` steps (prompt spec is preserved in source JSON).
+- A prompt compiler generates per-language compiled pipelines at `pipelines/generated/<lang>/<pipeline>.json` by rewriting `$prompt → $local`.
+- Loaders treat `$prompt` as compile-time only:
+  - `load_file`: if the source file contains `$prompt`, automatically load the compiled JSON for the current language; if missing, throw a clear “run prompt codegen” error.
+  - `load_str`: if the spec contains `$prompt`, throw a clear “run prompt codegen” error (no implicit filesystem lookup).
+- Regeneration moves previous generated files to `pipelines/generated_backups/` (ignored by git), then replaces them.
 
 ### 4.3 Remote steps
 Ports may provide a `RemoteSpec<C>` that maps `C` to request JSON and maps `(C, responseJson)` back to `C`.

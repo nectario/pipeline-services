@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"pipeline-services-go/pipeline_services/core"
@@ -23,6 +24,9 @@ func (loader PipelineJsonLoader) LoadStr(jsonText string, registry *core.Pipelin
 	if unmarshalError != nil {
 		return nil, unmarshalError
 	}
+	if specContainsPromptSteps(spec) {
+		return nil, errors.New("pipeline contains $prompt steps; run prompt codegen and load the compiled JSON under pipelines/generated/go/")
+	}
 	return loader.buildFromSpec(spec, registry)
 }
 
@@ -31,7 +35,37 @@ func (loader PipelineJsonLoader) LoadFile(filePath string, registry *core.Pipeli
 	if readError != nil {
 		return nil, readError
 	}
-	return loader.LoadStr(string(fileBytes), registry)
+
+	jsonText := string(fileBytes)
+	var spec map[string]any
+	unmarshalError := json.Unmarshal([]byte(jsonText), &spec)
+	if unmarshalError != nil {
+		return nil, unmarshalError
+	}
+
+	pipelineName := "pipeline"
+	if value, found := spec["pipeline"]; found {
+		if nameText, ok := value.(string); ok && nameText != "" {
+			pipelineName = nameText
+		}
+	}
+
+	if specContainsPromptSteps(spec) {
+		compiledPath, compiledPathError := resolveCompiledPipelinePath(filePath, pipelineName, "go")
+		if compiledPathError != nil {
+			return nil, compiledPathError
+		}
+		compiledBytes, compiledReadError := os.ReadFile(compiledPath)
+		if compiledReadError != nil {
+			return nil, fmt.Errorf(
+				"pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: %s",
+				compiledPath,
+			)
+		}
+		return loader.LoadStr(string(compiledBytes), registry)
+	}
+
+	return loader.LoadStr(jsonText, registry)
 }
 
 func (loader PipelineJsonLoader) buildFromSpec(spec map[string]any, registry *core.PipelineRegistry[string]) (*core.Pipeline[string], error) {
@@ -136,6 +170,12 @@ func addStep(
 	registry *core.PipelineRegistry[string],
 	remoteDefaults remote.RemoteDefaults,
 ) error {
+	if node["$prompt"] != nil {
+		return errors.New(
+			"runtime does not execute $prompt steps; run prompt codegen to produce a compiled pipeline JSON with $local references",
+		)
+	}
+
 	displayName := ""
 	if value, found := node["name"]; found {
 		if nameText, ok := value.(string); ok {
@@ -201,6 +241,13 @@ func addLocal(
 			pipeline.AddActionNamed(displayName, stepAction)
 		}
 		return nil
+	}
+
+	if strings.HasPrefix(localRef, "prompt:") {
+		return fmt.Errorf(
+			"prompt-generated action is missing from the registry: %s. Run prompt codegen and register generated actions",
+			localRef,
+		)
 	}
 
 	return fmt.Errorf("unknown $local reference: %s", localRef)
@@ -352,4 +399,54 @@ func parseRemoteDefaults(node map[string]any, base remote.RemoteDefaults) remote
 	}
 
 	return defaults
+}
+
+func specContainsPromptSteps(spec map[string]any) bool {
+	sectionNames := []string{"pre", "actions", "steps", "post"}
+	for sectionIndex := 0; sectionIndex < len(sectionNames); sectionIndex++ {
+		sectionName := sectionNames[sectionIndex]
+		nodesValue := spec[sectionName]
+		if nodesValue == nil {
+			continue
+		}
+		nodesArray, ok := nodesValue.([]any)
+		if !ok {
+			continue
+		}
+		for nodeIndex := 0; nodeIndex < len(nodesArray); nodeIndex++ {
+			nodeValue := nodesArray[nodeIndex]
+			nodeMap, ok := nodeValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if nodeMap["$prompt"] != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func resolveCompiledPipelinePath(sourceFilePath string, pipelineName string, languageName string) (string, error) {
+	absoluteSourcePath, absoluteError := filepath.Abs(sourceFilePath)
+	if absoluteError != nil {
+		return "", fmt.Errorf("failed to resolve pipeline path '%s': %w", sourceFilePath, absoluteError)
+	}
+
+	currentDir := filepath.Dir(absoluteSourcePath)
+	for {
+		if filepath.Base(currentDir) == "pipelines" {
+			return filepath.Join(currentDir, "generated", languageName, pipelineName+".json"), nil
+		}
+		nextDir := filepath.Dir(currentDir)
+		if nextDir == currentDir {
+			break
+		}
+		currentDir = nextDir
+	}
+
+	return "", fmt.Errorf(
+		"pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: %s (expected the file to be under a 'pipelines' directory)",
+		absoluteSourcePath,
+	)
 }

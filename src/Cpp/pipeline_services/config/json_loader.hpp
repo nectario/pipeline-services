@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <stdexcept>
@@ -116,6 +117,47 @@ inline remote::RemoteSpec<std::string> parse_remote_spec(
   return remote_spec;
 }
 
+inline bool specContainsPromptSteps(const nlohmann::json& spec_value) {
+  for (const std::string section_name : {"pre", "actions", "steps", "post"}) {
+    if (!spec_value.contains(section_name)) {
+      continue;
+    }
+    const nlohmann::json& nodes_value = spec_value.at(section_name);
+    if (!nodes_value.is_array()) {
+      continue;
+    }
+    for (const auto& node_value : nodes_value) {
+      if (node_value.is_object() && node_value.contains("$prompt")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+inline std::filesystem::path resolveCompiledPipelinePath(
+  const std::filesystem::path& source_file_path,
+  const std::string& pipeline_name,
+  const std::string& language_name
+) {
+  std::filesystem::path absolute_source_path = std::filesystem::absolute(source_file_path);
+  std::filesystem::path current_dir = absolute_source_path.parent_path();
+  while (!current_dir.empty()) {
+    if (current_dir.filename() == "pipelines") {
+      return current_dir / "generated" / language_name / (pipeline_name + ".json");
+    }
+    const std::filesystem::path parent_dir = current_dir.parent_path();
+    if (parent_dir == current_dir) {
+      break;
+    }
+    current_dir = parent_dir;
+  }
+
+  throw std::runtime_error(
+    "Pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: " +
+    absolute_source_path.string() + " (expected the file to be under a 'pipelines' directory)");
+}
+
 inline void add_local(
   const std::string& local_ref,
   const std::string& display_name,
@@ -145,6 +187,12 @@ inline void add_local(
       pipeline.addAction(display_name, step_action);
     }
     return;
+  }
+
+  if (local_ref.rfind("prompt:", 0) == 0) {
+    throw std::runtime_error(
+      "Prompt-generated action is missing from the registry: " + local_ref +
+      ". Run prompt codegen and register generated actions.");
   }
 
   throw std::runtime_error("Unknown $local reference: " + local_ref);
@@ -177,6 +225,11 @@ inline void add_step(
 ) {
   if (!node_value.is_object()) {
     throw std::runtime_error("Each action must be a JSON object");
+  }
+
+  if (node_value.contains("$prompt")) {
+    throw std::runtime_error(
+      "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references.");
   }
 
   std::string display_name;
@@ -265,6 +318,11 @@ inline core::Pipeline<std::string> PipelineJsonLoader::load_str(
 ) const {
   const nlohmann::json spec_value = nlohmann::json::parse(json_text);
 
+  if (detail::specContainsPromptSteps(spec_value)) {
+    throw std::runtime_error(
+      "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON under pipelines/generated/cpp/.");
+  }
+
   const std::string pipeline_name = spec_value.value("pipeline", "pipeline");
   const std::string pipeline_type = spec_value.value("type", "unary");
   if (pipeline_type != "unary") {
@@ -304,6 +362,31 @@ inline core::Pipeline<std::string> PipelineJsonLoader::load_file(
   file_text.reserve(static_cast<std::size_t>(input_stream.tellg()));
   input_stream.seekg(0, std::ios::beg);
   file_text.assign((std::istreambuf_iterator<char>(input_stream)), std::istreambuf_iterator<char>());
+
+  const nlohmann::json spec_value = nlohmann::json::parse(file_text);
+  const std::string pipeline_name = spec_value.value("pipeline", std::filesystem::path(file_path).stem().string());
+
+  if (detail::specContainsPromptSteps(spec_value)) {
+    const std::filesystem::path compiled_path =
+      detail::resolveCompiledPipelinePath(std::filesystem::path(file_path), pipeline_name, "cpp");
+    if (!std::filesystem::exists(compiled_path)) {
+      throw std::runtime_error(
+        "Pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: " +
+        compiled_path.string());
+    }
+
+    std::ifstream compiled_stream(compiled_path);
+    if (!compiled_stream.is_open()) {
+      throw std::runtime_error("Failed to open compiled pipeline file: " + compiled_path.string());
+    }
+    std::string compiled_text;
+    compiled_stream.seekg(0, std::ios::end);
+    compiled_text.reserve(static_cast<std::size_t>(compiled_stream.tellg()));
+    compiled_stream.seekg(0, std::ios::beg);
+    compiled_text.assign((std::istreambuf_iterator<char>(compiled_stream)), std::istreambuf_iterator<char>());
+
+    return load_str(compiled_text, registry);
+  }
 
   return load_str(file_text, registry);
 }

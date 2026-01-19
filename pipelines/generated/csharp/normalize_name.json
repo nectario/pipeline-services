@@ -1,0 +1,13 @@
+{
+  "pipeline": "normalize_name",
+  "type": "unary",
+  "shortCircuitOnException": true,
+  "steps": [
+    {
+      "$local": "strip"
+    },
+    {
+      "$local": "prompt:normalize_name"
+    }
+  ]
+}

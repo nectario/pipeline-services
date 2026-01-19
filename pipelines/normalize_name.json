@@ -1,0 +1,23 @@
+{
+  "pipeline": "normalize_name",
+  "type": "unary",
+  "shortCircuitOnException": true,
+  "steps": [
+    { "$local": "strip" },
+    {
+      "$prompt": {
+        "name": "normalize_name",
+        "goal": "Normalize human names to Title Case.",
+        "rules": [
+          "Collapse internal whitespace to single spaces",
+          "Title-case each token (first letter uppercase, rest lowercase)"
+        ],
+        "examples": [
+          { "in": "  john   SMITH ", "out": "John Smith" },
+          { "in": "ALICE    deLANEY", "out": "Alice Delaney" }
+        ]
+      }
+    }
+  ]
+}
+

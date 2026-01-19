@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..core.pipeline import Pipeline
@@ -16,11 +17,30 @@ class PipelineJsonLoader:
         return self.build_from_spec(spec, registry)
 
     def load_file(self, file_path: str, registry: PipelineRegistry) -> Pipeline:
-        with open(file_path, "r", encoding="utf-8") as file_object:
-            text_value = file_object.read()
-        return self.load_str(text_value, registry)
+        text_value = Path(file_path).read_text(encoding="utf-8")
+        spec = json.loads(text_value)
+        pipeline_name = str(spec.get("pipeline", Path(file_path).stem))
+
+        if spec_contains_prompt_steps(spec):
+            compiled_path = resolve_compiled_pipeline_path(file_path, pipeline_name, language_name="python")
+            if not Path(compiled_path).exists():
+                raise ValueError(
+                    "Pipeline contains $prompt steps but compiled JSON was not found. "
+                    "Run prompt codegen. Expected compiled pipeline at: "
+                    + compiled_path
+                )
+            compiled_text = Path(compiled_path).read_text(encoding="utf-8")
+            return self.load_str(compiled_text, registry)
+
+        return self.build_from_spec(spec, registry)
 
     def build_from_spec(self, spec: Dict[str, Any], registry: PipelineRegistry) -> Pipeline:
+        if spec_contains_prompt_steps(spec):
+            raise ValueError(
+                "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON "
+                "under pipelines/generated/python/."
+            )
+
         pipeline_name = str(spec.get("pipeline", "pipeline"))
         pipeline_type = str(spec.get("type", "unary"))
 
@@ -75,6 +95,12 @@ class PipelineJsonLoader:
         registry: PipelineRegistry,
         remote_defaults: RemoteDefaults,
     ) -> None:
+        if node.get("$prompt") is not None:
+            raise ValueError(
+                "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON "
+                "with $local references."
+            )
+
         display_name = ""
         name_value = node.get("name")
         if name_value is not None:
@@ -125,6 +151,13 @@ class PipelineJsonLoader:
             else:
                 pipeline.add_action_named(display_name, step_action)
             return
+
+        if local_ref.startswith("prompt:"):
+            raise ValueError(
+                "Prompt-generated action is missing from the registry: "
+                + local_ref
+                + ". Run prompt codegen and register generated actions (pipeline_services.generated.register_generated_actions)."
+            )
 
         raise ValueError("Unknown $local reference: " + local_ref)
 
@@ -201,3 +234,34 @@ class PipelineJsonLoader:
         else:
             pipeline.add_action_named(display_name, spec)
 
+
+def spec_contains_prompt_steps(spec: Any) -> bool:
+    if not isinstance(spec, dict):
+        return False
+    for section_name in ("pre", "actions", "steps", "post"):
+        nodes = spec.get(section_name)
+        if not isinstance(nodes, list):
+            continue
+        for node in nodes:
+            if isinstance(node, dict) and node.get("$prompt") is not None:
+                return True
+    return False
+
+
+def resolve_compiled_pipeline_path(source_file_path: str, pipeline_name: str, language_name: str) -> str:
+    source_path = Path(source_file_path).resolve()
+    pipelines_root: Optional[Path] = None
+    for parent_path in (source_path.parent, *source_path.parents):
+        if parent_path.name == "pipelines":
+            pipelines_root = parent_path
+            break
+
+    if pipelines_root is None:
+        raise ValueError(
+            "Pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: "
+            + str(source_path)
+            + " (expected the file to be under a 'pipelines' directory)."
+        )
+
+    compiled_path = pipelines_root / "generated" / language_name / f"{pipeline_name}.json"
+    return str(compiled_path)

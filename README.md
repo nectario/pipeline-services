@@ -26,7 +26,7 @@ This repo is organized around a shared, language-agnostic behavior contract (`do
 pipeline-core        # Pipeline<C>, StepAction<C>, StepControl<C>, PipelineResult<C>, RuntimePipeline<T>, metrics
 pipeline-config      # Minimal JSON loader for unary String pipelines
 pipeline-remote      # HTTP action adapter (json GET/POST)
-pipeline-prompt      # Prompt builder + codegen entrypoint scaffold (build-time)
+pipeline-prompt      # Prompt-to-code generated actions (optional check-in) + Java helpers
 pipeline-api         # Higher-level facade (labels/jumps/beans/inline JSON + optional metrics)
 pipeline-disruptor   # Runner wrapper (single-thread for now)
 pipeline-examples    # Runnable examples (+ main runner)
@@ -124,6 +124,32 @@ cd src/Rust
 cargo test
 cargo run --example example01_text_clean
 ```
+
+## Prompt-to-code (LLM compile)
+Pipelines can include `$prompt` actions in the **source** JSON. `$prompt` is a compile-time directive: a prompt compiler generates:
+- Per-language **compiled pipelines**: `pipelines/generated/<lang>/<pipeline>.json` (with `$prompt → $local` rewrites)
+- Per-language **generated actions** (code) that implement the prompt contract
+
+Run prompt compilation:
+
+```bash
+python3 tools/prompt_codegen.py --pipelines-dir pipelines
+```
+
+Runtime behavior:
+- If a source pipeline file has **no** `$prompt`, loaders run it directly.
+- If a source pipeline file **has** `$prompt`, loaders automatically load the compiled JSON from `pipelines/generated/<lang>/...`.
+- If compiled JSON is missing, loaders throw a clear “run prompt codegen” error.
+
+Registering generated actions (per port):
+- Java: `com.pipeline.generated.PromptGeneratedActions.register(registry)`
+- Python: `pipeline_services.generated.register_generated_actions(registry)`
+- TypeScript: `register_generated_actions(registry)` from `pipeline_services/generated`
+- Rust: `pipeline_services::generated::register_generated_actions(&mut registry)`
+- Go: `generated.RegisterGeneratedActions(registry)`
+- C++: `pipeline_services::generated::registerGeneratedActions(registry)`
+- Mojo: `registry = pipeline_services.generated.register_generated_actions(registry)`
+- C#: `PipelineServices.Generated.PromptGeneratedActions.Register(registry)`
 
 ### C++ port
 ```bash

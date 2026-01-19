@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 import { Pipeline } from "../core/pipeline.js";
 import { PipelineRegistry } from "../core/registry.js";
@@ -12,10 +13,33 @@ export class PipelineJsonLoader {
 
   async load_file(file_path: string, registry: PipelineRegistry): Promise<Pipeline> {
     const text_value = await readFile(file_path, { encoding: "utf-8" });
-    return this.load_str(text_value, registry);
+    const spec = JSON.parse(text_value) as Record<string, unknown>;
+    const pipeline_name = String(spec["pipeline"] ?? path.parse(file_path).name);
+
+    if (spec_contains_prompt_steps(spec)) {
+      const compiled_path = resolve_compiled_pipeline_path(file_path, pipeline_name, "typescript");
+      let compiled_text: string;
+      try {
+        compiled_text = await readFile(compiled_path, { encoding: "utf-8" });
+      } catch {
+        throw new Error(
+          "Pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: " +
+            compiled_path,
+        );
+      }
+      return this.load_str(compiled_text, registry);
+    }
+
+    return this.build_from_spec(spec, registry);
   }
 
   build_from_spec(spec: Record<string, unknown>, registry: PipelineRegistry): Pipeline {
+    if (spec_contains_prompt_steps(spec)) {
+      throw new Error(
+        "Pipeline contains $prompt steps. Run prompt codegen and load the compiled JSON under pipelines/generated/typescript/.",
+      );
+    }
+
     const pipeline_name = String(spec["pipeline"] ?? "pipeline");
     const pipeline_type = String(spec["type"] ?? "unary");
 
@@ -76,6 +100,12 @@ export class PipelineJsonLoader {
     registry: PipelineRegistry,
     remote_defaults: RemoteDefaults,
   ): void {
+    if (node["$prompt"] != null) {
+      throw new Error(
+        "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references.",
+      );
+    }
+
     let display_name = "";
     const name_value = node["name"];
     if (name_value != null) {
@@ -133,6 +163,14 @@ export class PipelineJsonLoader {
         pipeline.add_action_named(display_name, step_action);
       }
       return;
+    }
+
+    if (local_ref.startsWith("prompt:")) {
+      throw new Error(
+        "Prompt-generated action is missing from the registry: " +
+          local_ref +
+          ". Run prompt codegen and register generated actions (pipeline_services/generated).",
+      );
     }
 
     throw new Error("Unknown $local reference: " + local_ref);
@@ -233,3 +271,41 @@ export class PipelineJsonLoader {
   }
 }
 
+function spec_contains_prompt_steps(spec: unknown): boolean {
+  if (spec == null || typeof spec !== "object") {
+    return false;
+  }
+  const spec_object = spec as Record<string, unknown>;
+  for (const section_name of ["pre", "actions", "steps", "post"]) {
+    const nodes = spec_object[section_name] as Array<Record<string, unknown>> | undefined;
+    if (nodes == null) {
+      continue;
+    }
+    for (const node of nodes) {
+      if (node != null && node["$prompt"] != null) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function resolve_compiled_pipeline_path(source_file_path: string, pipeline_name: string, language_name: string): string {
+  const absolute_source_path = path.resolve(source_file_path);
+  let current_dir = path.dirname(absolute_source_path);
+  while (true) {
+    if (path.basename(current_dir) === "pipelines") {
+      return path.join(current_dir, "generated", language_name, pipeline_name + ".json");
+    }
+    const next_dir = path.dirname(current_dir);
+    if (next_dir === current_dir) {
+      break;
+    }
+    current_dir = next_dir;
+  }
+  throw new Error(
+    "Pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: " +
+      absolute_source_path +
+      " (expected the file to be under a 'pipelines' directory).",
+  );
+}

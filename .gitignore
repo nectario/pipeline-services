@@ -28,6 +28,9 @@ codex.txt
 docs/changes.md
 docs/Mojo_README.md
 
+# Prompt codegen backups (never check in)
+pipelines/generated_backups/
+
 # Large reference/material folders (keep local; avoid accidental public commits)
 UBS Work/
 archive/

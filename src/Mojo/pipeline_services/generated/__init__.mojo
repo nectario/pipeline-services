@@ -1,0 +1,1 @@
+from .prompt_actions import register_generated_actions
