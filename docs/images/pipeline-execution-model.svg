@@ -30,37 +30,34 @@
   <line x1="830" y1="250" x2="940" y2="250" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Pre -->
-  <text x="68" y="185" class="heading">preActions</text>
-  <text x="68" y="214" class="text">• validation / policy</text>
-  <text x="68" y="238" class="text">• guardrails / rate limits</text>
-  <text x="68" y="262" class="text">• early metrics hooks</text>
-  <text x="68" y="286" class="text muted">always runs</text>
+  <text x="210" y="185" class="heading" text-anchor="middle">preActions</text>
+  <text x="210" y="214" class="text" text-anchor="middle">• validation / policy</text>
+  <text x="210" y="238" class="text" text-anchor="middle">• guardrails / rate limits</text>
+  <text x="210" y="262" class="text" text-anchor="middle">• early metrics hooks</text>
+  <text x="210" y="286" class="text muted" text-anchor="middle">always runs</text>
 
   <!-- Main actions -->
-  <text x="518" y="165" class="heading">actions</text>
+  <text x="660" y="165" class="heading" text-anchor="middle">actions</text>
 
   <!-- Chips -->
   <rect x="518" y="178" width="76" height="30" rx="15" fill="#bfdbfe" stroke="#60a5fa"/>
-  <text x="536" y="200" class="chipText">local</text>
+  <text x="556" y="193" class="chipText" text-anchor="middle" dominant-baseline="middle">local</text>
 
   <rect x="602" y="178" width="88" height="30" rx="15" fill="#bbf7d0" stroke="#34d399"/>
-  <text x="618" y="200" class="chipText">remote</text>
+  <text x="646" y="193" class="chipText" text-anchor="middle" dominant-baseline="middle">remote</text>
 
   <rect x="698" y="178" width="92" height="30" rx="15" fill="#e9d5ff" stroke="#a78bfa"/>
-  <text x="714" y="200" class="chipText">prompt</text>
+  <text x="744" y="193" class="chipText" text-anchor="middle" dominant-baseline="middle">prompt</text>
 
-  <text x="518" y="232" class="text">• unary: <tspan class="mono">C → C</tspan></text>
-  <text x="518" y="254" class="text">• control-aware: <tspan class="mono">(C, control) → C</tspan></text>
-  <text x="518" y="276" class="text">• explicit short-circuit:</text>
-  <text x="538" y="298" class="mono">control.shortCircuit()</text>
-  <text x="518" y="320" class="text">• stop-vs-continue:</text>
-  <text x="538" y="342" class="mono">shortCircuitOnException</text>
-  <text x="518" y="364" class="text muted">errors captured into a result object</text>
+  <text x="660" y="232" class="text" text-anchor="middle">• unary: <tspan class="mono">C → C</tspan></text>
+  <text x="660" y="254" class="text" text-anchor="middle">• explicit short-circuit</text>
+  <text x="660" y="276" class="text" text-anchor="middle">• stop-vs-continue:</text>
+  <text x="660" y="298" class="mono" text-anchor="middle">shortCircuitOnException</text>
 
   <!-- Post -->
-  <text x="968" y="185" class="heading">postActions</text>
-  <text x="968" y="214" class="text">• metrics export / tracing</text>
-  <text x="968" y="238" class="text">• audit / persistence</text>
-  <text x="968" y="262" class="text">• cleanup / notifications</text>
-  <text x="968" y="286" class="text muted">always runs</text>
+  <text x="1110" y="185" class="heading" text-anchor="middle">postActions</text>
+  <text x="1110" y="214" class="text" text-anchor="middle">• metrics export / tracing</text>
+  <text x="1110" y="238" class="text" text-anchor="middle">• audit / persistence</text>
+  <text x="1110" y="262" class="text" text-anchor="middle">• cleanup / notifications</text>
+  <text x="1110" y="286" class="text muted" text-anchor="middle">always runs</text>
 </svg>

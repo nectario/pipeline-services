@@ -33,28 +33,28 @@
 
   <!-- Top: prompt-based pipeline -->
   <rect x="40" y="201" width="1320" height="302" rx="18" fill="#ffffff" stroke="#d1d5db" class="box"/>
-  <text x="64" y="246" class="heading">Prompt-based pipeline (source)</text>
-  <text x="64" y="281" class="text muted">local + remote + prompt actions (small generation surface area)</text>
+  <text x="700" y="246" class="heading" text-anchor="middle">Prompt-based pipeline (source)</text>
+  <text x="700" y="281" class="text muted" text-anchor="middle">local + remote + prompt actions (small generation surface area)</text>
 
   <!-- Top pipeline actions (left → right) -->
   <rect x="90" y="339" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="106" y="371" class="text">validate + normalize</text>
+  <text x="190" y="376.5" class="text" text-anchor="middle" dominant-baseline="middle">validate + normalize</text>
   <text x="190" y="442" class="typeLabel" text-anchor="middle">Local Action</text>
 
   <rect x="340" y="339" width="200" height="75" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
-  <text x="356" y="371" class="text">enrich (lookup)</text>
+  <text x="440" y="376.5" class="text" text-anchor="middle" dominant-baseline="middle">enrich (lookup)</text>
   <text x="440" y="442" class="typeLabel" text-anchor="middle">Remote Action</text>
 
   <rect x="590" y="339" width="200" height="75" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
-  <text x="606" y="371" class="text">prompt: classify</text>
+  <text x="690" y="376.5" class="text" text-anchor="middle" dominant-baseline="middle">prompt: classify</text>
   <text x="690" y="442" class="typeLabel" text-anchor="middle">Prompt Action</text>
 
   <rect x="840" y="339" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="856" y="371" class="text">apply rules</text>
+  <text x="940" y="376.5" class="text" text-anchor="middle" dominant-baseline="middle">apply rules</text>
   <text x="940" y="442" class="typeLabel" text-anchor="middle">Local Action</text>
 
   <rect x="1090" y="339" width="200" height="75" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
-  <text x="1106" y="371" class="text">prompt: rewrite</text>
+  <text x="1190" y="376.5" class="text" text-anchor="middle" dominant-baseline="middle">prompt: rewrite</text>
   <text x="1190" y="442" class="typeLabel" text-anchor="middle">Prompt Action</text>
 
   <!-- Top pipeline arrows -->
@@ -70,28 +70,28 @@
 
   <!-- Bottom: compiled pipeline -->
   <rect x="40" y="628" width="1320" height="302" rx="18" fill="#ffffff" stroke="#d1d5db" class="box"/>
-  <text x="64" y="673" class="heading">Compiled pipeline (per language)</text>
-  <text x="64" y="708" class="text muted">prompt actions become generated local actions (reviewable + testable)</text>
+  <text x="700" y="673" class="heading" text-anchor="middle">Compiled pipeline (per language)</text>
+  <text x="700" y="708" class="text muted" text-anchor="middle">prompt actions become generated local actions (reviewable + testable)</text>
 
   <!-- Bottom pipeline actions (left → right) -->
   <rect x="90" y="766" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="106" y="798" class="text">validate + normalize</text>
+  <text x="190" y="803.5" class="text" text-anchor="middle" dominant-baseline="middle">validate + normalize</text>
   <text x="190" y="869" class="typeLabel" text-anchor="middle">Local Action</text>
 
   <rect x="340" y="766" width="200" height="75" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
-  <text x="356" y="798" class="text">enrich (lookup)</text>
+  <text x="440" y="803.5" class="text" text-anchor="middle" dominant-baseline="middle">enrich (lookup)</text>
   <text x="440" y="869" class="typeLabel" text-anchor="middle">Remote Action</text>
 
   <rect x="590" y="766" width="200" height="75" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
-  <text x="606" y="798" class="text">generated: classify</text>
+  <text x="690" y="803.5" class="text" text-anchor="middle" dominant-baseline="middle">generated: classify</text>
   <text x="690" y="869" class="typeLabel" text-anchor="middle">Generated Local Action</text>
 
   <rect x="840" y="766" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="856" y="798" class="text">apply rules</text>
+  <text x="940" y="803.5" class="text" text-anchor="middle" dominant-baseline="middle">apply rules</text>
   <text x="940" y="869" class="typeLabel" text-anchor="middle">Local Action</text>
 
   <rect x="1090" y="766" width="200" height="75" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
-  <text x="1106" y="798" class="text">generated: rewrite</text>
+  <text x="1190" y="803.5" class="text" text-anchor="middle" dominant-baseline="middle">generated: rewrite</text>
   <text x="1190" y="869" class="typeLabel" text-anchor="middle">Generated Local Action</text>
 
   <!-- Bottom pipeline arrows -->
