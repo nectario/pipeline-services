@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-label="Portability contract drives consistent pipeline semantics across language ports.">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 320" role="img" aria-label="Portability contract drives consistent pipeline semantics across language ports.">
   <defs>
     <style>
       .title { font: 700 24px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
@@ -12,7 +12,7 @@
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1200" height="320" fill="#ffffff"/>
+  <rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
 
   <text x="40" y="48" class="title">Portability by contract</text>
   <text x="40" y="76" class="subtitle">One shared behavior spec keeps ports aligned on semantics, config shape, and defaults</text>
