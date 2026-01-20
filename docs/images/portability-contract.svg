@@ -1,9 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 320" role="img" aria-label="Portability contract drives consistent pipeline semantics across language ports.">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840" role="img" aria-label="Portability by contract: one shared behavior spec keeps pipeline ports aligned across languages.">
   <defs>
     <style>
       .title { font: 700 24px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
       .subtitle { font: 500 15px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #6b7280; }
       .heading { font: 700 16px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .text { font: 500 14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
+      .muted { fill: #6b7280; }
       .mono { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; fill: #111827; }
       .box { stroke-width: 2; }
     </style>
@@ -12,48 +14,54 @@
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+  <rect x="0" y="0" width="1200" height="840" fill="#ffffff"/>
 
   <text x="40" y="48" class="title">Portability by contract</text>
   <text x="40" y="76" class="subtitle">One shared behavior spec keeps ports aligned on semantics, config shape, and defaults</text>
 
-  <!-- Center contract -->
-  <rect x="470" y="120" width="260" height="90" rx="18" fill="#ede9fe" stroke="#a78bfa" class="box"/>
-  <text x="494" y="155" class="heading">Behavior contract</text>
-  <text x="494" y="178" class="mono">docs/PORTABILITY_CONTRACT.md</text>
+  <!-- Contract (center) -->
+  <rect x="450" y="200" width="300" height="520" rx="18" fill="#ede9fe" stroke="#a78bfa" class="box"/>
+  <text x="474" y="240" class="heading">Behavior contract</text>
+  <text x="474" y="266" class="mono">docs/PORTABILITY_CONTRACT.md</text>
+  <text x="474" y="310" class="text muted">short-circuit • errors • config</text>
+  <text x="474" y="334" class="text muted">remote defaults • metrics</text>
 
-  <!-- Language boxes -->
-  <rect x="90" y="120" width="160" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="122" y="154" class="heading">Java</text>
+  <!-- Left column -->
+  <rect x="70" y="225" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="95" y="268" class="heading">Java</text>
 
-  <rect x="90" y="200" width="160" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="116" y="234" class="heading">Python</text>
+  <rect x="70" y="355" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="95" y="398" class="heading">Python</text>
 
-  <rect x="280" y="60" width="190" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="304" y="94" class="heading">TypeScript</text>
+  <rect x="70" y="485" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="95" y="528" class="heading">TypeScript</text>
 
-  <rect x="730" y="60" width="190" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="800" y="94" class="heading">Rust</text>
+  <rect x="70" y="615" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="95" y="658" class="heading">C#</text>
 
-  <rect x="950" y="120" width="160" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="1006" y="154" class="heading">Go</text>
+  <!-- Right column -->
+  <rect x="830" y="225" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="855" y="268" class="heading">Rust</text>
 
-  <rect x="950" y="200" width="160" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="1000" y="234" class="heading">C++</text>
+  <rect x="830" y="355" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="855" y="398" class="heading">Go</text>
 
-  <rect x="730" y="240" width="190" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="804" y="274" class="heading">Mojo</text>
+  <rect x="830" y="485" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="855" y="528" class="heading">C++</text>
 
-  <rect x="280" y="240" width="190" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
-  <text x="354" y="274" class="heading">C#</text>
+  <rect x="830" y="615" width="300" height="70" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
+  <text x="855" y="658" class="heading">Mojo</text>
 
-  <!-- Arrows to ports -->
-  <line x1="470" y1="150" x2="250" y2="148" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="470" y1="180" x2="250" y2="228" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="520" y1="120" x2="420" y2="116" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="680" y1="120" x2="780" y2="116" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="730" y1="150" x2="950" y2="148" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="730" y1="180" x2="950" y2="228" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="650" y1="210" x2="740" y2="240" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="550" y1="210" x2="460" y2="240" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <!-- Arrows -->
+  <line x1="450" y1="260" x2="370" y2="260" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="390" x2="370" y2="390" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="520" x2="370" y2="520" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="450" y1="650" x2="370" y2="650" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <line x1="750" y1="260" x2="830" y2="260" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="750" y1="390" x2="830" y2="390" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="750" y1="520" x2="830" y2="520" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="750" y1="650" x2="830" y2="650" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <text x="40" y="812" class="text muted">One contract, many languages — consistent behavior with language-native APIs.</text>
 </svg>
