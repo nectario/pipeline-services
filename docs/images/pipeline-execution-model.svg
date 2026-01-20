@@ -10,8 +10,8 @@
       .chipText { font: 700 13px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111827; }
       .mono { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; fill: #111827; }
     </style>
-    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-      <path d="M0,0 L8,4 L0,8 Z" fill="#6b7280"/>
+    <marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#6b7280"/>
     </marker>
   </defs>
 
