@@ -58,14 +58,14 @@
   <text x="1155" y="352" class="typeLabel" text-anchor="middle">Prompt Action</text>
 
   <!-- Top pipeline arrows -->
-  <line x1="260" y1="300" x2="335" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
-  <line x1="505" y1="300" x2="580" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
-  <line x1="750" y1="300" x2="825" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
-  <line x1="995" y1="300" x2="1070" y2="300" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="260" y1="300" x2="335" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="505" y1="300" x2="580" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="750" y1="300" x2="825" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="995" y1="300" x2="1070" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Code generation (downwards) -->
   <text x="700" y="410" class="heading" text-anchor="middle">code generation</text>
-  <line x1="700" y1="430" x2="700" y2="470" stroke="#6b7280" stroke-width="3.4" marker-end="url(#arrow)"/>
+  <line x1="700" y1="430" x2="700" y2="470" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
   <text x="700" y="488" class="text muted" text-anchor="middle">prompt actions → generated code</text>
 
   <!-- Bottom: compiled pipeline -->
@@ -95,10 +95,10 @@
   <text x="1155" y="692" class="typeLabel" text-anchor="middle">Generated Local Action</text>
 
   <!-- Bottom pipeline arrows -->
-  <line x1="260" y1="640" x2="335" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
-  <line x1="505" y1="640" x2="580" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
-  <line x1="750" y1="640" x2="825" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
-  <line x1="995" y1="640" x2="1070" y2="640" stroke="#6b7280" stroke-width="2.8" marker-end="url(#arrow)"/>
+  <line x1="260" y1="640" x2="335" y2="640" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="505" y1="640" x2="580" y2="640" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="750" y1="640" x2="825" y2="640" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="995" y1="640" x2="1070" y2="640" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Footnote -->
   <text x="40" y="772" class="text muted">Conceptual view: prompts remain in source pipelines; compiled pipelines reference generated actions per target language.</text>
