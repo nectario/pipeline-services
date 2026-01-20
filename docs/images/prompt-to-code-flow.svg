@@ -37,31 +37,31 @@
   <text x="64" y="281" class="text muted">local + remote + prompt actions (small generation surface area)</text>
 
   <!-- Top pipeline actions (left → right) -->
-  <rect x="90" y="339" width="170" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <rect x="90" y="339" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
   <text x="106" y="371" class="text">validate + normalize</text>
-  <text x="175" y="442" class="typeLabel" text-anchor="middle">Local Action</text>
+  <text x="190" y="442" class="typeLabel" text-anchor="middle">Local Action</text>
 
-  <rect x="335" y="339" width="170" height="75" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
-  <text x="351" y="371" class="text">enrich (lookup)</text>
-  <text x="420" y="442" class="typeLabel" text-anchor="middle">Remote Action</text>
+  <rect x="340" y="339" width="200" height="75" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
+  <text x="356" y="371" class="text">enrich (lookup)</text>
+  <text x="440" y="442" class="typeLabel" text-anchor="middle">Remote Action</text>
 
-  <rect x="580" y="339" width="170" height="75" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
-  <text x="596" y="371" class="text">prompt: classify</text>
-  <text x="665" y="442" class="typeLabel" text-anchor="middle">Prompt Action</text>
+  <rect x="590" y="339" width="200" height="75" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
+  <text x="606" y="371" class="text">prompt: classify</text>
+  <text x="690" y="442" class="typeLabel" text-anchor="middle">Prompt Action</text>
 
-  <rect x="825" y="339" width="170" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="841" y="371" class="text">apply rules</text>
-  <text x="910" y="442" class="typeLabel" text-anchor="middle">Local Action</text>
+  <rect x="840" y="339" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <text x="856" y="371" class="text">apply rules</text>
+  <text x="940" y="442" class="typeLabel" text-anchor="middle">Local Action</text>
 
-  <rect x="1070" y="339" width="170" height="75" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
-  <text x="1086" y="371" class="text">prompt: rewrite</text>
-  <text x="1155" y="442" class="typeLabel" text-anchor="middle">Prompt Action</text>
+  <rect x="1090" y="339" width="200" height="75" rx="14" fill="#e9d5ff" stroke="#a78bfa" class="box"/>
+  <text x="1106" y="371" class="text">prompt: rewrite</text>
+  <text x="1190" y="442" class="typeLabel" text-anchor="middle">Prompt Action</text>
 
   <!-- Top pipeline arrows -->
-  <line x1="260" y1="377" x2="335" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="505" y1="377" x2="580" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="750" y1="377" x2="825" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="995" y1="377" x2="1070" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="290" y1="377" x2="340" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="540" y1="377" x2="590" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="790" y1="377" x2="840" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="1040" y1="377" x2="1090" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Code generation (downwards) -->
   <text x="700" y="530" class="heading" text-anchor="middle">code generation</text>
@@ -74,31 +74,31 @@
   <text x="64" y="708" class="text muted">prompt actions become generated local actions (reviewable + testable)</text>
 
   <!-- Bottom pipeline actions (left → right) -->
-  <rect x="90" y="766" width="170" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <rect x="90" y="766" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
   <text x="106" y="798" class="text">validate + normalize</text>
-  <text x="175" y="869" class="typeLabel" text-anchor="middle">Local Action</text>
+  <text x="190" y="869" class="typeLabel" text-anchor="middle">Local Action</text>
 
-  <rect x="335" y="766" width="170" height="75" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
-  <text x="351" y="798" class="text">enrich (lookup)</text>
-  <text x="420" y="869" class="typeLabel" text-anchor="middle">Remote Action</text>
+  <rect x="340" y="766" width="200" height="75" rx="14" fill="#dcfce7" stroke="#34d399" class="box"/>
+  <text x="356" y="798" class="text">enrich (lookup)</text>
+  <text x="440" y="869" class="typeLabel" text-anchor="middle">Remote Action</text>
 
-  <rect x="580" y="766" width="170" height="75" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
-  <text x="596" y="798" class="text">generated: classify</text>
-  <text x="665" y="869" class="typeLabel" text-anchor="middle">Generated Local Action</text>
+  <rect x="590" y="766" width="200" height="75" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
+  <text x="606" y="798" class="text">generated: classify</text>
+  <text x="690" y="869" class="typeLabel" text-anchor="middle">Generated Local Action</text>
 
-  <rect x="825" y="766" width="170" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
-  <text x="841" y="798" class="text">apply rules</text>
-  <text x="910" y="869" class="typeLabel" text-anchor="middle">Local Action</text>
+  <rect x="840" y="766" width="200" height="75" rx="14" fill="#dbeafe" stroke="#60a5fa" class="box"/>
+  <text x="856" y="798" class="text">apply rules</text>
+  <text x="940" y="869" class="typeLabel" text-anchor="middle">Local Action</text>
 
-  <rect x="1070" y="766" width="170" height="75" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
-  <text x="1086" y="798" class="text">generated: rewrite</text>
-  <text x="1155" y="869" class="typeLabel" text-anchor="middle">Generated Local Action</text>
+  <rect x="1090" y="766" width="200" height="75" rx="14" fill="#eef2ff" stroke="#6366f1" class="box"/>
+  <text x="1106" y="798" class="text">generated: rewrite</text>
+  <text x="1190" y="869" class="typeLabel" text-anchor="middle">Generated Local Action</text>
 
   <!-- Bottom pipeline arrows -->
-  <line x1="260" y1="804" x2="335" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="505" y1="804" x2="580" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="750" y1="804" x2="825" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="995" y1="804" x2="1070" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="290" y1="804" x2="340" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="540" y1="804" x2="590" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="790" y1="804" x2="840" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="1040" y1="804" x2="1090" y2="804" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Footnote -->
   <text x="40" y="970" class="text muted">Conceptual view: prompts remain in source pipelines; compiled pipelines reference generated actions per target language.</text>

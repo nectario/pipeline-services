@@ -19,7 +19,7 @@
 
   <!-- Center contract -->
   <rect x="470" y="315" width="260" height="90" rx="18" fill="#ede9fe" stroke="#a78bfa" class="box"/>
-  <text x="600" y="368" class="heading" text-anchor="middle">Behavior contract</text>
+  <text x="600" y="360" class="heading" text-anchor="middle" dominant-baseline="middle">Behavior contract</text>
 
   <!-- Language boxes -->
   <rect x="90" y="272" width="160" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
