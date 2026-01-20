@@ -24,6 +24,7 @@ src/CSharp/**/obj/
 .vs/
 
 # Local development artifacts
+codex.txt
 local_notes.txt
 docs/changes.md
 docs/Mojo_README.md
