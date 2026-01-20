@@ -18,9 +18,9 @@
   <text x="40" y="76" class="subtitle">One shared behavior spec keeps ports aligned on semantics, config shape, and defaults</text>
 
   <!-- Center contract -->
-  <rect x="470" y="255" width="260" height="90" rx="18" fill="#ede9fe" stroke="#a78bfa" class="box"/>
-  <text x="494" y="290" class="heading">Behavior contract</text>
-  <text x="494" y="313" class="mono">docs/PORTABILITY_CONTRACT.md</text>
+  <rect x="470" y="315" width="260" height="90" rx="18" fill="#ede9fe" stroke="#a78bfa" class="box"/>
+  <text x="494" y="350" class="heading">Behavior contract</text>
+  <text x="494" y="373" class="mono">docs/PORTABILITY_CONTRACT.md</text>
 
   <!-- Language boxes -->
   <rect x="90" y="272" width="160" height="56" rx="14" fill="#f3f4f6" stroke="#d1d5db" class="box"/>
@@ -48,12 +48,12 @@
   <text x="354" y="514" class="heading">C#</text>
 
   <!-- Arrows to ports -->
-  <line x1="470" y1="300" x2="250" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="470" y1="330" x2="250" y2="420" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="520" y1="255" x2="420" y2="156" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="680" y1="255" x2="780" y2="156" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="730" y1="300" x2="950" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="730" y1="330" x2="950" y2="420" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="650" y1="345" x2="740" y2="480" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <line x1="550" y1="345" x2="460" y2="480" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="470" y1="360" x2="250" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="470" y1="390" x2="250" y2="420" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="520" y1="315" x2="420" y2="156" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="680" y1="315" x2="780" y2="156" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="730" y1="360" x2="950" y2="300" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="730" y1="390" x2="950" y2="420" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="650" y1="405" x2="740" y2="480" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="550" y1="405" x2="460" y2="480" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 </svg>

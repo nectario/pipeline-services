@@ -64,7 +64,7 @@
   <line x1="995" y1="377" x2="1070" y2="377" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
 
   <!-- Code generation (downwards) -->
-  <text x="700" y="515" class="heading" text-anchor="middle">code generation</text>
+  <text x="700" y="530" class="heading" text-anchor="middle">code generation</text>
   <line x1="700" y1="540" x2="700" y2="591" stroke="#6b7280" stroke-width="2.5" marker-end="url(#arrow)"/>
   <text x="700" y="613" class="text muted" text-anchor="middle">prompt actions → generated code</text>
 
