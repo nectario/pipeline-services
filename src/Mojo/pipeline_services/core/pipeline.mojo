@@ -242,10 +242,7 @@ struct Pipeline(Movable):
     fn add_post_action_named(mut self, name: String, spec: RemoteSpec) -> None:
         self.post_actions.append(RegisteredAction(name, spec))
 
-    fn run(self, input_value: PythonObject) -> PythonObject:
-        return self.execute(input_value).context
-
-    fn execute(self, input_value: PythonObject) -> PipelineResult:
+    fn run(self, input_value: PythonObject) -> PipelineResult:
         var perf_counter_ns_fn: PythonObject
         try:
             var time_module = Python.import_module("time")
@@ -264,6 +261,9 @@ struct Pipeline(Movable):
 
         var total_nanos = now_ns(perf_counter_ns_fn) - control.run_start_ns
         return PipelineResult(ctx, control.is_short_circuited(), control.errors, control.timings, total_nanos)
+
+    fn execute(self, input_value: PythonObject) -> PipelineResult:
+        return self.run(input_value)
 
     fn run_phase(self,
                  phase: String,

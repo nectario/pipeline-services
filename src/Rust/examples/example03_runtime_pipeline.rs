@@ -11,6 +11,6 @@ fn main() {
   }
 
   let frozen_pipeline = runtime_pipeline.freeze();
-  let result = frozen_pipeline.execute("  Hello   Frozen  ".to_string());
+  let result = frozen_pipeline.run("  Hello   Frozen  ".to_string());
   println!("frozenValue={}", result.context);
 }

@@ -23,7 +23,6 @@ fn main() {
   pipeline.add_action(to_lower);
   pipeline.add_action(append_marker);
 
-  let output_value = pipeline.run("  Hello   Remote  ".to_string());
-  println!("output={output_value}");
+  let result = pipeline.run("  Hello   Remote  ".to_string());
+  println!("output={}", result.context);
 }
-

@@ -25,5 +25,5 @@ fn main() raises:
     var registry = PipelineRegistry()
     var loader = PipelineJsonLoader()
     var pipeline = loader.load_str(json_text, registry)
-    var output_value = pipeline.run(PythonObject("ignored"))
-    print(output_value)
+    var result = pipeline.run(PythonObject("ignored"))
+    print(result.context)

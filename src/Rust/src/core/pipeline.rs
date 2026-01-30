@@ -333,11 +333,7 @@ impl<ContextType> Pipeline<ContextType>
 where
   ContextType: Clone + 'static,
 {
-  pub fn run(&self, input_value: ContextType) -> ContextType {
-    self.execute(input_value).context
-  }
-
-  pub fn execute(&self, input_value: ContextType) -> PipelineResult<ContextType> {
+  pub fn run(&self, input_value: ContextType) -> PipelineResult<ContextType> {
     let mut ctx = input_value;
     let mut control = StepControl::new(self.name.clone(), self.on_error.clone());
     control.begin_run();
@@ -356,6 +352,10 @@ where
       timings: control.timings.clone(),
       total_nanos,
     }
+  }
+
+  pub fn execute(&self, input_value: ContextType) -> PipelineResult<ContextType> {
+    self.run(input_value)
   }
 
   fn run_phase(

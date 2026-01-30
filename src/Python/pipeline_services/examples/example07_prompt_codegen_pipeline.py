@@ -30,8 +30,8 @@ def main() -> None:
 
     loader = PipelineJsonLoader()
     pipeline = loader.load_file(str(pipeline_file), registry)
-    output_value = pipeline.run("  john   SMITH ")
-    print("output=" + str(output_value))
+    result = pipeline.run("  john   SMITH ")
+    print("output=" + str(result.context))
 
 
 if __name__ == "__main__":

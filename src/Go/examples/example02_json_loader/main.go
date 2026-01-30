@@ -31,6 +31,6 @@ func main() {
 		panic(loadError)
 	}
 
-	outputValue := pipeline.Run("  Hello   JSON  ")
-	fmt.Println(outputValue)
+	result := pipeline.Run("  Hello   JSON  ")
+	fmt.Println(result.Context)
 }

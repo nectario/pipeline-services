@@ -20,8 +20,8 @@ int main() {
 
   std::size_t warmup_index = 0;
   while (warmup_index < warmup_iterations) {
-    const std::string unused_value = pipeline.run(input_value);
-    (void)unused_value;
+    const auto warmup_result = pipeline.run(input_value);
+    (void)warmup_result;
     warmup_index += 1;
   }
 
@@ -32,7 +32,7 @@ int main() {
   const auto start_timepoint = std::chrono::steady_clock::now();
   std::size_t iteration_index = 0;
   while (iteration_index < iterations) {
-    const auto result = pipeline.execute(input_value);
+    const auto result = pipeline.run(input_value);
     total_pipeline_nanos += result.totalNanos;
 
     for (const auto& timing : result.actionTimings) {

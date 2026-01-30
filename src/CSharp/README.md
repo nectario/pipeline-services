@@ -2,6 +2,33 @@
 
 This folder contains the C# port of Pipeline Services, aligned with the Java reference semantics (`pre → main → post`, `shortCircuitOnException`, `onError`, JSON loader, remote HTTP adapter, timings + metrics post-action).
 
+## Execution API
+- `Pipeline.Run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)
+- `Pipeline.Execute(input)` is a backwards-compatible alias for `Run`
+
+If you need explicit lifecycle control (shared vs pooled vs per-run), use `PipelineProvider`:
+
+```csharp
+using System;
+
+using PipelineServices.Core;
+using PipelineServices.Examples;
+
+public static class PipelineProviderDemo
+{
+    public static Pipeline<string> BuildProgrammaticPooledPipeline()
+    {
+        Pipeline<string> pipeline = new Pipeline<string>("programmatic_pooled", shortCircuitOnException: true);
+        pipeline.AddAction("strip", TextActions.Strip);
+        return pipeline;
+    }
+}
+
+PipelineProvider<string> provider = PipelineProvider<string>.Pooled(PipelineProviderDemo.BuildProgrammaticPooledPipeline, poolMax: 64);
+PipelineResult<string> result = provider.Run("  hello   world  ");
+Console.WriteLine(result.Context);
+```
+
 ## Build and test
 ```bash
 cd src/CSharp
@@ -25,4 +52,3 @@ cd src/CSharp
 python3 -m http.server 8765 --bind 127.0.0.1 -d pipeline_services_examples/fixtures
 dotnet run --project pipeline_services_examples -- example04_json_loader_remote_get
 ```
-

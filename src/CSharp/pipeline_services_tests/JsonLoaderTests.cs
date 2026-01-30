@@ -29,8 +29,8 @@ public sealed class JsonLoaderTests
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
 
-        string outputValue = pipeline.Run("  Hello   JSON  ");
-        Assert.Equal("Hello JSON", outputValue);
+        PipelineResult<string> result = pipeline.Run("  Hello   JSON  ");
+        Assert.Equal("Hello JSON", result.Context);
     }
 
     [Fact]
@@ -61,8 +61,8 @@ public sealed class JsonLoaderTests
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
 
-        string outputValue = pipeline.Run("  Hi  ");
-        Assert.Equal("PRE:Hi:POST", outputValue);
+        PipelineResult<string> result = pipeline.Run("  Hi  ");
+        Assert.Equal("PRE:Hi:POST", result.Context);
     }
 
     private static string Strip(string value)
@@ -85,4 +85,3 @@ public sealed class JsonLoaderTests
         return System.Text.RegularExpressions.Regex.Replace(value.Trim(), "\\s+", " ");
     }
 }
-

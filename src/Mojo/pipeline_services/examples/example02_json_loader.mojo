@@ -23,5 +23,5 @@ fn main() raises:
 
     var loader = PipelineJsonLoader()
     var pipeline = loader.load_str(json_text, registry)
-    var output_value = pipeline.run(PythonObject("  Hello   JSON  "))
-    print(output_value)
+    var result = pipeline.run(PythonObject("  Hello   JSON  "))
+    print(result.context)

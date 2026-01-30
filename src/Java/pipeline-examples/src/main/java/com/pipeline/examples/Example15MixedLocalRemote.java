@@ -24,8 +24,7 @@ public final class Example15MixedLocalRemote {
         .addAction(value -> value.toLowerCase())
         .addAction(value -> value + "|");
 
-    String outputValue = pipeline.run("  Hello   Remote  ");
+    String outputValue = pipeline.run("  Hello   Remote  ").context();
     System.out.println("output=" + outputValue);
   }
 }
-

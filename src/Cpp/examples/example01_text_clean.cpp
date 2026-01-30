@@ -18,7 +18,7 @@ int main() {
   pipeline.addAction(pipeline_services::examples::normalize_whitespace);
   pipeline.addAction("truncate", truncate_at_280);
 
-  const auto result = pipeline.execute("  Hello   World  ");
+  const auto result = pipeline.run("  Hello   World  ");
   std::cout << "output=" << result.context << std::endl;
   std::cout << "shortCircuited=" << (result.shortCircuited ? "true" : "false") << std::endl;
   std::cout << "errors=" << result.errors.size() << std::endl;

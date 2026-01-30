@@ -23,10 +23,9 @@ class JsonLoaderTests(unittest.TestCase):
 """
         loader = PipelineJsonLoader()
         pipeline = loader.load_str(json_text, registry)
-        output_value = pipeline.run("  Hello   JSON  ")
-        self.assertEqual(output_value, "Hello JSON")
+        result = pipeline.run("  Hello   JSON  ")
+        self.assertEqual(result.context, "Hello JSON")
 
 
 if __name__ == "__main__":
     unittest.main()
-

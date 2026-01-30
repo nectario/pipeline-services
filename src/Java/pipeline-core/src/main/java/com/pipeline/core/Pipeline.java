@@ -132,11 +132,7 @@ public final class Pipeline<C> {
     public Pipeline<C> addAction(String actionName, UnaryOperator<C> fn) { return addAction(actionName, adapt(fn)); }
     public Pipeline<C> addPostAction(String actionName, UnaryOperator<C> fn) { return addPostAction(actionName, adapt(fn)); }
 
-    public C run(C input) {
-        return execute(input).context();
-    }
-
-    public PipelineResult<C> execute(C input) {
+    public PipelineResult<C> run(C input) {
         var rec = Metrics.recorder();
 
         long runStartNanos = System.nanoTime();
@@ -157,6 +153,12 @@ public final class Pipeline<C> {
 
         long totalNanos = System.nanoTime() - runStartNanos;
         return new PipelineResult<>(ctx, control.isShortCircuited(), control.errors(), control.actionTimings(), totalNanos);
+    }
+
+    /** @deprecated Renamed to {@link #run(Object)}. */
+    @Deprecated
+    public PipelineResult<C> execute(C input) {
+        return run(input);
     }
 
     public String name() { return name; }

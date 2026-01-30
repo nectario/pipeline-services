@@ -26,10 +26,9 @@ def main() -> None:
     registry = PipelineRegistry()
     loader = PipelineJsonLoader()
     pipeline = loader.load_str(json_text, registry)
-    output_value = pipeline.run("ignored")
-    print(output_value)
+    result = pipeline.run("ignored")
+    print(result.context)
 
 
 if __name__ == "__main__":
     main()
-

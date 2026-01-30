@@ -18,8 +18,8 @@ public static class Example07PromptCodegenPipeline
         string pipelineFilePath = FindPipelineFile("normalize_name.json");
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadFile(pipelineFilePath, registry);
-        string outputValue = pipeline.Run("  john   SMITH ");
-        Console.WriteLine("output=" + outputValue);
+        PipelineResult<string> result = pipeline.Run("  john   SMITH ");
+        Console.WriteLine("output=" + result.Context);
     }
 
     private static string FindPipelineFile(string pipelineFileName)

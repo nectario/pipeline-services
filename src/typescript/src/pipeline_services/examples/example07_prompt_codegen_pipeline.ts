@@ -30,9 +30,9 @@ async function main(): Promise<void> {
 
   const loader = new PipelineJsonLoader();
   const pipeline = await loader.load_file(pipeline_file, registry);
-  const output_value = await pipeline.run("  john   SMITH ");
+  const result = await pipeline.run("  john   SMITH ");
   // eslint-disable-next-line no-console
-  console.log("output=" + String(output_value));
+  console.log("output=" + String(result.context));
 }
 
 void main();

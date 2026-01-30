@@ -21,7 +21,7 @@ final class PipelineTest {
             .addAction((s, control) -> { throw new RuntimeException("boom"); })
             .addAction(s -> s + "B");
 
-        PipelineResult<String> r = p.execute("X");
+        PipelineResult<String> r = p.run("X");
         assertEquals("XA", r.context());
         assertTrue(r.shortCircuited());
         assertEquals(1, r.errors().size());
@@ -35,7 +35,7 @@ final class PipelineTest {
             .addAction((s, control) -> { throw new RuntimeException("boom"); })
             .addAction(s -> s + "B");
 
-        PipelineResult<String> r = p.execute("X");
+        PipelineResult<String> r = p.run("X");
         assertEquals("XAB", r.context());
         assertFalse(r.shortCircuited());
         assertEquals(1, r.errors().size());
@@ -47,7 +47,7 @@ final class PipelineTest {
             .addAction((s, control) -> { control.shortCircuit(); return "END"; })
             .addAction(s -> s + "B");
 
-        PipelineResult<String> r = p.execute("X");
+        PipelineResult<String> r = p.run("X");
         assertEquals("END", r.context());
         assertTrue(r.shortCircuited());
         assertTrue(r.errors().isEmpty());

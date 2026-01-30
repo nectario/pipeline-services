@@ -118,7 +118,7 @@ async function test_short_circuit_stops_main_only(): Promise<void> {
   pipeline.add_action(actions.action_three);
   pipeline.add_post_action(actions.post_action);
 
-  const result = await pipeline.execute("");
+  const result = await pipeline.run("");
   assert.equal(result.short_circuited, true);
   assert.deepEqual(actions.calls, ["pre", "a1", "a2", "post"]);
 }
@@ -131,7 +131,7 @@ async function test_short_circuit_on_exception_stops_main(): Promise<void> {
   pipeline.add_action(actions.later_action);
   pipeline.add_post_action(actions.post_action);
 
-  const result = await pipeline.execute("start");
+  const result = await pipeline.run("start");
   assert.equal(result.short_circuited, true);
   assert.equal(result.errors.length, 1);
   assert.deepEqual(actions.calls, ["fail", "post"]);
@@ -144,7 +144,7 @@ async function test_continue_on_exception_runs_remaining_actions(): Promise<void
   pipeline.add_action(actions.failing_action);
   pipeline.add_action(actions.later_action);
 
-  const result = await pipeline.execute("start");
+  const result = await pipeline.run("start");
   assert.equal(result.short_circuited, false);
   assert.equal(result.errors.length, 1);
   assert.equal(result.context, "start|later");
@@ -166,8 +166,8 @@ async function test_json_loader_actions_alias(): Promise<void> {
 `;
   const loader = new PipelineJsonLoader();
   const pipeline = loader.load_str(json_text, registry);
-  const output_value = await pipeline.run("ok");
-  assert.equal(output_value, "ok");
+  const result = await pipeline.run("ok");
+  assert.equal(result.context, "ok");
 }
 
 async function test_http_step_get(): Promise<void> {
@@ -205,8 +205,8 @@ async function test_json_loader_remote_get(): Promise<void> {
     const registry = new PipelineRegistry();
     const loader = new PipelineJsonLoader();
     const pipeline = loader.load_str(json_text, registry);
-    const output_value = await pipeline.run("ignored");
-    assert.equal(output_value, remote_fixture_body);
+    const result = await pipeline.run("ignored");
+    assert.equal(result.context, remote_fixture_body);
   } finally {
     await server.stop();
   }

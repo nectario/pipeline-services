@@ -19,7 +19,7 @@ final class RuntimePipelineFreezeTest {
     assertEquals("HELLO", rt.value());
 
     var frozen = rt.toImmutable();
-    assertEquals("HELLO", frozen.run("  hello  "));
+    assertEquals("HELLO", frozen.run("  hello  ").context());
   }
 
   @Test

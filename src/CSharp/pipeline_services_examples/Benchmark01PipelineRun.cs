@@ -34,7 +34,7 @@ public static class Benchmark01PipelineRun
         int iterationIndex = 0;
         while (iterationIndex < iterations)
         {
-            PipelineResult<string> result = pipeline.Execute(inputValue);
+            PipelineResult<string> result = pipeline.Run(inputValue);
             totalPipelineNanos += result.TotalNanos;
 
             IReadOnlyList<ActionTiming> actionTimings = result.ActionTimings;
@@ -70,4 +70,3 @@ public static class Benchmark01PipelineRun
         }
     }
 }
-

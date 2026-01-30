@@ -146,7 +146,7 @@ fn short_circuit_stops_main_only() {
   pipeline.add_action(action_three);
   pipeline.add_post_action(post_action);
 
-  let result = pipeline.execute("".to_string());
+  let result = pipeline.run("".to_string());
   assert_eq!(result.short_circuited, true);
   assert_eq!(
     calls.lock().unwrap().clone(),
@@ -182,7 +182,7 @@ fn short_circuit_on_exception_stops_main() {
   pipeline.add_action(later_action);
   pipeline.add_post_action(post_action);
 
-  let result = pipeline.execute("start".to_string());
+  let result = pipeline.run("start".to_string());
   assert_eq!(result.short_circuited, true);
   assert_eq!(result.errors.len(), 1);
   assert_eq!(calls.lock().unwrap().clone(), vec!["fail".to_string(), "post".to_string()]);
@@ -209,7 +209,7 @@ fn continue_on_exception_runs_remaining_actions() {
   pipeline.add_action(failing_action);
   pipeline.add_action(later_action);
 
-  let result = pipeline.execute("start".to_string());
+  let result = pipeline.run("start".to_string());
   assert_eq!(result.short_circuited, false);
   assert_eq!(result.errors.len(), 1);
   assert_eq!(result.context, "start|later".to_string());
@@ -233,8 +233,8 @@ fn json_loader_supports_actions_alias() {
 
   let loader = PipelineJsonLoader::new();
   let pipeline = loader.load_str(json_text, &registry).expect("loader failed");
-  let output_value = pipeline.run("ok".to_string());
-  assert_eq!(output_value, "ok".to_string());
+  let result = pipeline.run("ok".to_string());
+  assert_eq!(result.context, "ok".to_string());
 }
 
 #[test]
@@ -274,6 +274,6 @@ fn json_loader_remote_get() {
   let registry: PipelineRegistry<String> = PipelineRegistry::new();
   let loader = PipelineJsonLoader::new();
   let pipeline = loader.load_str(&json_text, &registry).expect("loader failed");
-  let output_value = pipeline.run("ignored".to_string());
-  assert_eq!(output_value, REMOTE_FIXTURE_BODY.to_string());
+  let result = pipeline.run("ignored".to_string());
+  assert_eq!(result.context, REMOTE_FIXTURE_BODY.to_string());
 }

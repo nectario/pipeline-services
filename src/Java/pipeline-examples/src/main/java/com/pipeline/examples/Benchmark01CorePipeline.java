@@ -31,7 +31,7 @@ public final class Benchmark01CorePipeline {
 
     long wallStartNanos = System.nanoTime();
     for (int iterationIndex = 0; iterationIndex < iterations; iterationIndex++) {
-      PipelineResult<String> result = pipeline.execute(inputValue);
+      PipelineResult<String> result = pipeline.run(inputValue);
       totalPipelineNanos += result.totalNanos();
 
       for (ActionTiming timing : result.actionTimings()) {

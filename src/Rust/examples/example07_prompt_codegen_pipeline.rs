@@ -32,6 +32,6 @@ fn main() {
       &registry,
     )
     .expect("loader failed");
-  let output_value = pipeline.run("  john   SMITH ".to_string());
-  println!("output={output_value}");
+  let result = pipeline.run("  john   SMITH ".to_string());
+  println!("output={}", result.context);
 }

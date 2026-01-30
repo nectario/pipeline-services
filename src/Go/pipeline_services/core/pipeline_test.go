@@ -111,7 +111,7 @@ func TestShortCircuitStopsMainOnly(testingObject *testing.T) {
 	pipeline.AddAction(appendAction{calls: &calls, callName: "a3", suffix: "a3|"})
 	pipeline.AddPostAction(appendAction{calls: &calls, callName: "post", suffix: "post|"})
 
-	result := pipeline.Execute("")
+	result := pipeline.Run("")
 	requireTrue(testingObject, result.ShortCircuited, "expected ShortCircuited=true")
 	requireEqualSlice(testingObject, calls, []string{"pre", "a1", "a2", "post"}, "unexpected call order")
 }
@@ -124,7 +124,7 @@ func TestShortCircuitOnExceptionStopsMain(testingObject *testing.T) {
 	pipeline.AddAction(appendAction{calls: &calls, callName: "later", suffix: "|later"})
 	pipeline.AddPostAction(appendAction{calls: &calls, callName: "post", suffix: "|post"})
 
-	result := pipeline.Execute("start")
+	result := pipeline.Run("start")
 	requireTrue(testingObject, result.ShortCircuited, "expected ShortCircuited=true")
 	requireEqualInt(testingObject, len(result.Errors), 1, "expected one error")
 	requireEqualSlice(testingObject, calls, []string{"fail", "post"}, "unexpected call order")
@@ -137,7 +137,7 @@ func TestContinueOnExceptionRunsRemainingActions(testingObject *testing.T) {
 	pipeline.AddAction(failingAction{calls: &calls, callName: "fail"})
 	pipeline.AddAction(appendAction{calls: &calls, callName: "later", suffix: "|later"})
 
-	result := pipeline.Execute("start")
+	result := pipeline.Run("start")
 	requireTrue(testingObject, !result.ShortCircuited, "expected ShortCircuited=false")
 	requireEqualInt(testingObject, len(result.Errors), 1, "expected one error")
 	requireEqualStrings(testingObject, result.Context, "start|later", "unexpected output")
@@ -164,8 +164,8 @@ func TestJsonLoaderActionsAlias(testingObject *testing.T) {
 		testingObject.Fatalf("failed to load pipeline: %v", loadError)
 	}
 
-	outputValue := pipeline.Run("ok")
-	requireEqualStrings(testingObject, outputValue, "ok", "unexpected output")
+	result := pipeline.Run("ok")
+	requireEqualStrings(testingObject, result.Context, "ok", "unexpected output")
 }
 
 func TestJsonLoaderRemoteGet(testingObject *testing.T) {
@@ -197,6 +197,6 @@ func TestJsonLoaderRemoteGet(testingObject *testing.T) {
 		testingObject.Fatalf("failed to load pipeline: %v", loadError)
 	}
 
-	outputValue := pipeline.Run("ignored")
-	requireEqualStrings(testingObject, outputValue, remoteFixtureBody, "unexpected remote output")
+	result := pipeline.Run("ignored")
+	requireEqualStrings(testingObject, result.Context, remoteFixtureBody, "unexpected remote output")
 }

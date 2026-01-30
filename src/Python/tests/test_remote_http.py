@@ -63,8 +63,8 @@ class RemoteHttpTests(unittest.TestCase):
             registry = PipelineRegistry()
             loader = PipelineJsonLoader()
             pipeline = loader.load_str(json_text, registry)
-            output_value = pipeline.run("ignored")
-            self.assertIn("Hello from remote fixture", output_value)
+            result = pipeline.run("ignored")
+            self.assertIn("Hello from remote fixture", result.context)
         finally:
             http_server.shutdown()
             http_server.server_close()
@@ -72,4 +72,3 @@ class RemoteHttpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

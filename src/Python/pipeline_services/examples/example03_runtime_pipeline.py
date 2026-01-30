@@ -11,10 +11,9 @@ def main() -> None:
     print("runtimeValue=", runtime_pipeline.value())
 
     frozen_pipeline = runtime_pipeline.freeze()
-    result = frozen_pipeline.execute("  Hello   Frozen  ")
+    result = frozen_pipeline.run("  Hello   Frozen  ")
     print("frozenValue=", result.context)
 
 
 if __name__ == "__main__":
     main()
-

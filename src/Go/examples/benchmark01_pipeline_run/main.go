@@ -31,7 +31,7 @@ func main() {
 	startTimepoint := time.Now()
 	iterationIndex := 0
 	for iterationIndex < iterations {
-		result := pipeline.Execute(inputValue)
+		result := pipeline.Run(inputValue)
 		totalPipelineNanos += result.TotalNanos
 
 		actionTimings := result.ActionTimings

@@ -5,10 +5,9 @@ from pipeline_services import Pipeline
 
 def main() -> None:
     pipeline = Pipeline("example00_import", True)
-    output_value = pipeline.run("ok")
-    print(output_value)
+    result = pipeline.run("ok")
+    print(result.context)
 
 
 if __name__ == "__main__":
     main()
-

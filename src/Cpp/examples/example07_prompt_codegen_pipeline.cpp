@@ -33,7 +33,7 @@ int main() {
 
   pipeline_services::config::PipelineJsonLoader loader;
   auto pipeline = loader.load_file(pipelineFile, registry);
-  const std::string outputValue = pipeline.run("  john   SMITH ");
-  std::cout << "output=" << outputValue << std::endl;
+  const auto result = pipeline.run("  john   SMITH ");
+  std::cout << "output=" << result.context << std::endl;
   return 0;
 }

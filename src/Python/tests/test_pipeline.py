@@ -1,85 +1,80 @@
 import unittest
+from dataclasses import dataclass
+from typing import List
 
 from pipeline_services.core.pipeline import Pipeline, StepControl
 
 
+@dataclass
+class RecordedUnaryAction:
+    calls: List[str]
+    name: str
+    suffix: str = ""
+
+    def __call__(self, ctx: str) -> str:
+        self.calls.append(self.name)
+        return ctx + self.suffix
+
+
+@dataclass
+class RecordedShortCircuitAction:
+    calls: List[str]
+    name: str
+    suffix: str = ""
+
+    def __call__(self, ctx: str, control: StepControl) -> str:
+        self.calls.append(self.name)
+        control.short_circuit()
+        return ctx + self.suffix
+
+
+@dataclass
+class RecordedFailingAction:
+    calls: List[str]
+    name: str
+    exception_message: str = "boom"
+
+    def __call__(self, ctx: str) -> str:
+        self.calls.append(self.name)
+        raise ValueError(self.exception_message)
+
+
 class PipelineTests(unittest.TestCase):
     def test_short_circuit_stops_main_only(self) -> None:
-        calls = []
-
-        def pre_action(ctx: str) -> str:
-            calls.append("pre")
-            return ctx + "pre|"
-
-        def action_one(ctx: str) -> str:
-            calls.append("a1")
-            return ctx + "a1|"
-
-        def action_two(ctx: str, control: StepControl) -> str:
-            calls.append("a2")
-            control.short_circuit()
-            return ctx + "a2|"
-
-        def action_three(ctx: str) -> str:
-            calls.append("a3")
-            return ctx + "a3|"
-
-        def post_action(ctx: str) -> str:
-            calls.append("post")
-            return ctx + "post|"
+        calls: List[str] = []
 
         pipeline = Pipeline("t", True)
-        pipeline.add_pre_action(pre_action)
-        pipeline.add_action(action_one)
-        pipeline.add_action(action_two)
-        pipeline.add_action(action_three)
-        pipeline.add_post_action(post_action)
+        pipeline.add_pre_action(RecordedUnaryAction(calls, "pre", "pre|"))
+        pipeline.add_action(RecordedUnaryAction(calls, "a1", "a1|"))
+        pipeline.add_action(RecordedShortCircuitAction(calls, "a2", "a2|"))
+        pipeline.add_action(RecordedUnaryAction(calls, "a3", "a3|"))
+        pipeline.add_post_action(RecordedUnaryAction(calls, "post", "post|"))
 
-        result = pipeline.execute("")
+        result = pipeline.run("")
         self.assertTrue(result.short_circuited)
         self.assertEqual(calls, ["pre", "a1", "a2", "post"])
 
     def test_short_circuit_on_exception_stops_main(self) -> None:
-        calls = []
-
-        def failing_action(ctx: str) -> str:
-            calls.append("fail")
-            raise ValueError("boom")
-
-        def later_action(ctx: str) -> str:
-            calls.append("later")
-            return ctx + "later"
-
-        def post_action(ctx: str) -> str:
-            calls.append("post")
-            return ctx + "post"
+        calls: List[str] = []
 
         pipeline = Pipeline("t", True)
-        pipeline.add_action(failing_action)
-        pipeline.add_action(later_action)
-        pipeline.add_post_action(post_action)
+        pipeline.add_action(RecordedFailingAction(calls, "fail", "boom"))
+        pipeline.add_action(RecordedUnaryAction(calls, "later", "later"))
+        pipeline.add_post_action(RecordedUnaryAction(calls, "post", "post"))
 
-        result = pipeline.execute("start")
+        result = pipeline.run("start")
         self.assertTrue(result.short_circuited)
         self.assertEqual(len(result.errors), 1)
         self.assertEqual(calls, ["fail", "post"])
 
     def test_continue_on_exception_runs_remaining_actions(self) -> None:
-        calls = []
-
-        def failing_action(ctx: str) -> str:
-            calls.append("fail")
-            raise ValueError("boom")
-
-        def later_action(ctx: str) -> str:
-            calls.append("later")
-            return ctx + "|later"
+        calls: List[str] = []
 
         pipeline = Pipeline("t", False)
-        pipeline.add_action(failing_action)
-        pipeline.add_action(later_action)
+        pipeline.add_action(RecordedFailingAction(calls, "fail", "boom"))
+        pipeline.add_action(RecordedUnaryAction(calls, "later", "|later"))
 
-        result = pipeline.execute("start")
+        result = pipeline.run("start")
         self.assertFalse(result.short_circuited)
         self.assertEqual(len(result.errors), 1)
         self.assertEqual(result.context, "start|later")
@@ -88,4 +83,3 @@ class PipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

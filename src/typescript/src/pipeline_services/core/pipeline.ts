@@ -268,12 +268,7 @@ export class Pipeline {
     this.post_actions.push(to_registered_action(name, action));
   }
 
-  async run(input_value: unknown): Promise<unknown> {
-    const result = await this.execute(input_value);
-    return result.context;
-  }
-
-  async execute(input_value: unknown): Promise<PipelineResult> {
+  async run(input_value: unknown): Promise<PipelineResult> {
     let ctx: unknown = input_value;
     const control = new StepControl(this.name, this.on_error);
     control.begin_run(now_ns());
@@ -286,6 +281,10 @@ export class Pipeline {
 
     const total_nanos = now_ns() - control.run_start_ns;
     return new PipelineResult(ctx, control.is_short_circuited(), control.errors, control.timings, total_nanos);
+  }
+
+  async execute(input_value: unknown): Promise<PipelineResult> {
+    return this.run(input_value);
   }
 
   async run_phase(
@@ -331,4 +330,3 @@ export class Pipeline {
     return ctx;
   }
 }
-

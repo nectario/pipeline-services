@@ -19,7 +19,6 @@ fn main() raises:
     pipeline.add_action(to_lower)
     pipeline.add_action(append_marker)
 
-    var output_value = pipeline.run(PythonObject("  Hello   Remote  "))
-    var output_string: String = String(output_value)
+    var result = pipeline.run(PythonObject("  Hello   Remote  "))
+    var output_string: String = String(result.context)
     print("output=" + output_string)
-

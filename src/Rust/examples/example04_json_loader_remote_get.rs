@@ -22,7 +22,6 @@ fn main() {
   let registry: PipelineRegistry<String> = PipelineRegistry::new();
   let loader = PipelineJsonLoader::new();
   let pipeline = loader.load_str(json_text, &registry).expect("loader failed");
-  let output_value = pipeline.run("ignored".to_string());
-  println!("{output_value}");
+  let result = pipeline.run("ignored".to_string());
+  println!("{}", result.context);
 }
-

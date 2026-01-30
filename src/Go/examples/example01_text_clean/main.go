@@ -21,7 +21,7 @@ func main() {
 	pipeline.AddAction(examples.NormalizeWhitespace)
 	pipeline.AddActionNamed("truncate", truncateAt280)
 
-	result := pipeline.Execute("  Hello   World  ")
+	result := pipeline.Run("  Hello   World  ")
 	fmt.Printf("output=%s\n", result.Context)
 	fmt.Printf("shortCircuited=%v\n", result.ShortCircuited)
 	fmt.Printf("errors=%d\n", len(result.Errors))

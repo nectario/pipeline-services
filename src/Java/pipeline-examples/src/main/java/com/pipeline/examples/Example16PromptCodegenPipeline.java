@@ -24,7 +24,7 @@ public final class Example16PromptCodegenPipeline {
     PromptGeneratedActions.register(registry);
 
     Pipeline<String> pipeline = PipelineJsonLoader.loadUnary(pipelineFile, registry);
-    String outputValue = pipeline.run("  john   SMITH ");
+    String outputValue = pipeline.run("  john   SMITH ").context();
     System.out.println("output=" + outputValue);
   }
 

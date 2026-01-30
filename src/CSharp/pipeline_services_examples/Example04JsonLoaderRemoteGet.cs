@@ -31,8 +31,7 @@ public static class Example04JsonLoaderRemoteGet
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
 
-        string outputValue = pipeline.Run("ignored");
-        Console.WriteLine(outputValue);
+        PipelineResult<string> result = pipeline.Run("ignored");
+        Console.WriteLine(result.Context);
     }
 }
-

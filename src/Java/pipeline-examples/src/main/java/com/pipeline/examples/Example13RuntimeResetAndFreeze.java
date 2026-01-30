@@ -24,8 +24,8 @@ public final class Example13RuntimeResetAndFreeze {
 
     // Freeze the recorded steps (pre/main/post) into a reusable immutable Pipeline
     Pipeline<String> immutable = rt.toImmutable();
-    String out = immutable.run("  Reusable   pipeline   input  ");
-    System.out.println("[ex13-runtime] frozen -> " + out);
+    String outputValue = immutable.run("  Reusable   pipeline   input  ").context();
+    System.out.println("[ex13-runtime] frozen -> " + outputValue);
   }
 }
 

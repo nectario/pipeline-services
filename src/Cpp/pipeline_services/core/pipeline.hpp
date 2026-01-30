@@ -316,11 +316,7 @@ public:
     return *this;
   }
 
-  ContextType run(ContextType input_value) const {
-    return execute(std::move(input_value)).context;
-  }
-
-  PipelineResult<ContextType> execute(ContextType input_value) const {
+  PipelineResult<ContextType> run(ContextType input_value) const {
     ContextType ctx = std::move(input_value);
 
     const auto runStartTimepoint = std::chrono::steady_clock::now();
@@ -343,6 +339,11 @@ public:
       .totalNanos = totalNanos,
     };
     return result;
+  }
+
+  // Backwards-compatible alias
+  PipelineResult<ContextType> execute(ContextType input_value) const {
+    return run(std::move(input_value));
   }
 
 private:

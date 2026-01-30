@@ -15,9 +15,8 @@ fn main() {
   pipeline.add_action(normalize_whitespace);
   pipeline.add_action_control_named("truncate", truncate_at_280);
 
-  let result = pipeline.execute("  Hello   World  ".to_string());
+  let result = pipeline.run("  Hello   World  ".to_string());
   println!("output={}", result.context);
   println!("shortCircuited={}", result.short_circuited);
   println!("errors={}", result.errors.len());
 }
-

@@ -11,6 +11,7 @@ pub use crate::core::metrics_actions::print_metrics;
 pub use crate::core::pipeline::{
   ActionTiming, Pipeline, PipelineError, PipelineResult, StepAction, StepControl, UnaryOperator,
 };
+pub use crate::core::pipeline_provider::{default_pool_max, PipelineProvider, PipelineProviderMode};
 pub use crate::core::registry::PipelineRegistry;
 pub use crate::core::runtime_pipeline::RuntimePipeline;
 pub use crate::generated::register_generated_actions;

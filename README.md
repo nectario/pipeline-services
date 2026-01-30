@@ -108,7 +108,7 @@ Pipeline<String> pipeline = new Pipeline<>("clean_text", /*shortCircuitOnExcepti
     })
     .addPostAction(PolicySteps::audit);
 
-PipelineResult<String> result = pipeline.execute("  Hello   World  ");
+PipelineResult<String> result = pipeline.run("  Hello   World  ");
 System.out.println(result.context());
 ```
 
@@ -227,7 +227,64 @@ Canonical JSON form (across ports):
 
 Notes:
 - `"steps"` is accepted as a legacy alias for `"actions"`.
+- Java JSON loader also accepts `"preActions"`/`"postActions"` (preferred) with legacy aliases `"pre"`/`"post"`.
 - Root-level `"remoteDefaults"` can be used to avoid repeating remote configuration across many `"$remote"` actions.
+
+Java-only: JSON singleton mode + action lifecycles:
+- Set `"singletonMode": true` to treat the loaded pipeline definition as reusable across many runs.
+- Per action, set `"lifecycle": "shared" | "pooled" | "perRun"`.
+  - `"pooled"` borrows an instance per invocation and calls `ResettableAction.reset()` before returning it to the pool.
+  - `"pool": { "max": 128 }` controls the maximum pool size.
+
+Example (pooled `$local` action):
+
+```json
+{
+  "pipeline": "singleton_mode_pooled",
+  "type": "unary",
+  "singletonMode": true,
+  "actions": [
+    {
+      "label": "normalize_whitespace",
+      "$local": "com.pipeline.examples.adapters.PooledScratchNormalizeAction",
+      "lifecycle": "pooled",
+      "pool": { "max": 64 }
+    }
+  ]
+}
+```
+
+And the action implements `ResettableAction`:
+
+```java
+import com.pipeline.core.ResettableAction;
+import java.util.function.UnaryOperator;
+
+public final class PooledScratchNormalizeAction implements UnaryOperator<String>, ResettableAction {
+  @Override public String apply(String input) { /* uses internal scratch buffers */ }
+  @Override public void reset() { /* clears internal state */ }
+}
+```
+
+Programmatic pipelines: prefer `PipelineProvider` when you need singleton/pooled/per-run behavior:
+
+Modes:
+- `shared`: one pipeline instance reused across runs (actions must be safe to share concurrently)
+- `pooled`: pipeline instances reused but never shared concurrently
+- `perRun`: a new pipeline instance is created per run
+
+```java
+import com.pipeline.core.Pipeline;
+import com.pipeline.core.PipelineProvider;
+
+PipelineProvider<String> provider = PipelineProvider.pooled(
+    () -> new Pipeline<String>("programmatic_pooled", true)
+        .addAction("normalize", new PooledScratchNormalizeAction()),
+    64
+);
+
+String out = provider.run("  hello   world  ").context();
+```
 
 Java loader (`pipeline-config`) is intentionally minimal and currently targets unary **String** pipelines:
 
@@ -236,7 +293,7 @@ import com.pipeline.config.PipelineJsonLoader;
 
 try (var in = getClass().getResourceAsStream("/pipelines/json_clean_text.json")) {
   var pipeline = PipelineJsonLoader.loadUnary(in);
-  System.out.println(pipeline.run("  Hello   World  "));
+  System.out.println(pipeline.run("  Hello   World  ").context());
 }
 ```
 
@@ -257,7 +314,7 @@ spec.toJson = ctx -> "{\"q\":\"" + ctx.q() + "\"}";
 spec.fromJson = (ctx, body) -> new Ctx(ctx.q(), body);
 
 var pipeline = new Pipeline<Ctx>("remote_demo", true).addAction(HttpStep.jsonPost(spec));
-Ctx out = pipeline.run(new Ctx("hello", null));
+Ctx out = pipeline.run(new Ctx("hello", null)).context();
 ```
 
 If you have many remote actions, use `HttpStep.RemoteDefaults` so you don’t repeat base URL, timeouts, retries, headers, and client wiring.

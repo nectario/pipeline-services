@@ -20,7 +20,6 @@ fn main() {
 
   let loader = PipelineJsonLoader::new();
   let pipeline = loader.load_str(json_text, &registry).expect("loader failed");
-  let output_value = pipeline.run("  Hello   JSON  ".to_string());
-  println!("{output_value}");
+  let result = pipeline.run("  Hello   JSON  ".to_string());
+  println!("{}", result.context);
 }
-

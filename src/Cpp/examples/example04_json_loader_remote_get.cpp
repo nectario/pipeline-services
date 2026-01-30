@@ -26,8 +26,8 @@ int main() {
   pipeline_services::core::PipelineRegistry<std::string> registry;
   pipeline_services::config::PipelineJsonLoader loader;
   const auto pipeline = loader.loadStr(json_text, registry);
-  const std::string output_value = pipeline.run("ignored");
-  std::cout << output_value << std::endl;
+  const auto result = pipeline.run("ignored");
+  std::cout << result.context << std::endl;
   return 0;
 }
 

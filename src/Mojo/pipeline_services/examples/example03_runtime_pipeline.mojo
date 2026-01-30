@@ -10,5 +10,5 @@ fn main() raises:
     print("runtimeValue=", runtime_pipeline.value())
 
     var frozen_pipeline = runtime_pipeline.freeze()
-    var result = frozen_pipeline.execute(PythonObject("  Hello   Frozen  "))
+    var result = frozen_pipeline.run(PythonObject("  Hello   Frozen  "))
     print("frozenValue=", result.context)

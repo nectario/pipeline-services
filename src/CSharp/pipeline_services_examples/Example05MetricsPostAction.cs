@@ -14,8 +14,7 @@ public static class Example05MetricsPostAction
         pipeline.AddAction(TextActions.NormalizeWhitespace);
         pipeline.AddPostAction(new MetricsOutputAction<string>());
 
-        string outputValue = pipeline.Run("  Hello   Metrics  ");
-        Console.WriteLine(outputValue);
+        PipelineResult<string> result = pipeline.Run("  Hello   Metrics  ");
+        Console.WriteLine(result.Context);
     }
 }
-

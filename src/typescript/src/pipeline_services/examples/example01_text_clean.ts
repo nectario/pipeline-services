@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   pipeline.add_action(normalize_whitespace);
   pipeline.add_action_named("truncate", truncate_at_280);
 
-  const result = await pipeline.execute("  Hello   World  ");
+  const result = await pipeline.run("  Hello   World  ");
   // eslint-disable-next-line no-console
   console.log("output=", result.context);
   // eslint-disable-next-line no-console
@@ -26,4 +26,3 @@ async function main(): Promise<void> {
 }
 
 void main();
-

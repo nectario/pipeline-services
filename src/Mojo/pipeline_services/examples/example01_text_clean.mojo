@@ -17,8 +17,7 @@ fn main() raises:
     pipeline.add_action(normalize_whitespace)
     pipeline.add_action_named("truncate", truncate_at_280)
 
-    var result = pipeline.execute(PythonObject("  Hello   World  "))
+    var result = pipeline.run(PythonObject("  Hello   World  "))
     print("output=", result.context)
     print("shortCircuited=", result.short_circuited)
     print("errors=", len(result.errors))
-

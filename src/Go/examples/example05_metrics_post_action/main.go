@@ -13,6 +13,6 @@ func main() {
 	pipeline.AddAction(examples.NormalizeWhitespace)
 	pipeline.AddPostAction(core.PrintMetrics[string])
 
-	outputValue := pipeline.Run("  Hello   Metrics  ")
-	fmt.Println(outputValue)
+	result := pipeline.Run("  Hello   Metrics  ")
+	fmt.Println(result.Context)
 }

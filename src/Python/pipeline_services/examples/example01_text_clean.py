@@ -18,7 +18,7 @@ def main() -> None:
     pipeline.add_action(normalize_whitespace)
     pipeline.add_action_named("truncate", truncate_at_280)
 
-    result = pipeline.execute("  Hello   World  ")
+    result = pipeline.run("  Hello   World  ")
     print("output=", result.context)
     print("shortCircuited=", result.short_circuited)
     print("errors=", len(result.errors))
@@ -26,4 +26,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

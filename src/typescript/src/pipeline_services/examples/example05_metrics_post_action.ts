@@ -17,7 +17,7 @@ async function main(): Promise<void> {
   pipeline.add_action_named("truncate", truncate_at_16);
   pipeline.add_post_action_named("metrics", print_metrics);
 
-  const result = await pipeline.execute("  Hello   Metrics  ");
+  const result = await pipeline.run("  Hello   Metrics  ");
   // eslint-disable-next-line no-console
   console.log("output=", result.context);
   // eslint-disable-next-line no-console
@@ -27,4 +27,3 @@ async function main(): Promise<void> {
 }
 
 void main();
-

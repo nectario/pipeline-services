@@ -16,8 +16,8 @@ fn main() {
 
   let mut warmup_index: usize = 0;
   while warmup_index < warmup_iterations {
-    let unused_value = pipeline.run(input_value.clone());
-    drop(unused_value);
+    let warmup_result = pipeline.run(input_value.clone());
+    drop(warmup_result);
     warmup_index += 1;
   }
 
@@ -28,7 +28,7 @@ fn main() {
   let start_instant = Instant::now();
   let mut iteration_index: usize = 0;
   while iteration_index < iterations {
-    let result = pipeline.execute(input_value.clone());
+    let result = pipeline.run(input_value.clone());
     total_pipeline_nanos += result.total_nanos;
 
     for timing in &result.timings {
@@ -59,4 +59,3 @@ fn main() {
     );
   }
 }
-

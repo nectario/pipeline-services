@@ -8,12 +8,12 @@ public final class Example10DisruptorIntegration {
   private Example10DisruptorIntegration() {}
 
   public static void run() throws Exception {
-    var p = new Pipeline<String>("ex10-clean", /*shortCircuitOnException=*/false)
+    Pipeline<String> pipeline = new Pipeline<String>("ex10-clean", /*shortCircuitOnException=*/false)
         .addAction(TextSteps::strip)
         .addAction(TextSteps::normalizeWhitespace)
         .addAction(TextSteps::truncateAt280);
 
-    try (DisruptorEngine<String> engine = new DisruptorEngine<>("ex10", 1024, p)) {
+    try (DisruptorEngine<String> engine = new DisruptorEngine<>("ex10", 1024, pipeline)) {
       for (int i = 0; i < 50; i++) {
         engine.publish(" hello  " + i + "  ");
       }

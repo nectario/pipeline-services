@@ -214,7 +214,7 @@ public class Pipeline<I, C> {
         out = runWithJumps(input, /*typedOut*/ null, scope);
       } else {
         if (compiledUnary == null) sealUnaryWithMetrics();
-        PipelineResult<C> result = compiledUnary.execute((C) input);
+        PipelineResult<C> result = compiledUnary.run((C) input);
         out = result.context();
         if (result.hasErrors()) {
           success = false;

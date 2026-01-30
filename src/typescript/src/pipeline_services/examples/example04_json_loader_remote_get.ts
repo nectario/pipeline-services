@@ -22,10 +22,9 @@ async function main(): Promise<void> {
   const registry = new PipelineRegistry();
   const loader = new PipelineJsonLoader();
   const pipeline = loader.load_str(json_text, registry);
-  const output_value = await pipeline.run("ignored");
+  const result = await pipeline.run("ignored");
   // eslint-disable-next-line no-console
-  console.log(output_value);
+  console.log(result.context);
 }
 
 void main();
-

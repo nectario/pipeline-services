@@ -13,10 +13,9 @@ public static class Example01TextClean
         pipeline.AddAction(TextActions.NormalizeWhitespace);
         pipeline.AddAction("truncate", TextActions.TruncateAt280);
 
-        PipelineResult<string> result = pipeline.Execute("  Hello   World  ");
+        PipelineResult<string> result = pipeline.Run("  Hello   World  ");
         Console.WriteLine("output=" + result.Context);
         Console.WriteLine("shortCircuited=" + result.ShortCircuited);
         Console.WriteLine("errors=" + result.Errors.Count);
     }
 }
-

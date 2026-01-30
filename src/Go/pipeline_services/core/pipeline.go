@@ -303,11 +303,7 @@ func (pipeline *Pipeline[ContextType]) AddPostActionNamed(actionName string, act
 	return pipeline
 }
 
-func (pipeline *Pipeline[ContextType]) Run(input ContextType) ContextType {
-	return pipeline.Execute(input).Context
-}
-
-func (pipeline *Pipeline[ContextType]) Execute(input ContextType) PipelineResult[ContextType] {
+func (pipeline *Pipeline[ContextType]) Run(input ContextType) PipelineResult[ContextType] {
 	contextValue := input
 	runStartTimepoint := time.Now()
 
@@ -328,6 +324,10 @@ func (pipeline *Pipeline[ContextType]) Execute(input ContextType) PipelineResult
 		ActionTimings:  control.ActionTimings(),
 		TotalNanos:     totalNanos,
 	}
+}
+
+func (pipeline *Pipeline[ContextType]) Execute(input ContextType) PipelineResult[ContextType] {
+	return pipeline.Run(input)
 }
 
 func (pipeline *Pipeline[ContextType]) runPhase(

@@ -2,6 +2,29 @@
 
 This Rust port is aligned with the Mojo/Python/TypeScript `pipeline_services` package and the shared semantics in `docs/PORTABILITY_CONTRACT.md`.
 
+## Execution API
+- `Pipeline::run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)
+- `Pipeline::execute(input)` is a backwards-compatible alias for `run`
+
+If you need explicit lifecycle control (shared vs pooled vs per-run), use `PipelineProvider`:
+
+```rust
+use pipeline_services::examples::text_steps::strip;
+use pipeline_services::{Pipeline, PipelineProvider};
+
+fn build_programmatic_pooled_pipeline() -> Pipeline<String> {
+  let mut pipeline = Pipeline::new("programmatic_pooled", true);
+  pipeline.add_action(strip);
+  pipeline
+}
+
+fn main() {
+  let provider = PipelineProvider::pooled(build_programmatic_pooled_pipeline, 64);
+  let result = provider.run("  hello   world  ".to_string());
+  println!("{}", result.context);
+}
+```
+
 ## Build and test
 ```bash
 cd src/Rust

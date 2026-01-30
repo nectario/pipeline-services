@@ -26,8 +26,8 @@ final class HttpStepTest {
         spec.toJson = s -> s;
         spec.fromJson = (ctx, body) -> body;
 
-        var p = Pipeline.build("remote_timeout", true, HttpStep.jsonGet(spec));
-        PipelineResult<String> r = p.execute("q=1");
+        Pipeline<String> pipeline = Pipeline.build("remote_timeout", true, HttpStep.jsonGet(spec));
+        PipelineResult<String> r = pipeline.run("q=1");
         assertTrue(r.shortCircuited());
         assertTrue(r.hasErrors());
 

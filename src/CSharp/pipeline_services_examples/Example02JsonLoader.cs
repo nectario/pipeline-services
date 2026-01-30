@@ -27,8 +27,7 @@ public static class Example02JsonLoader
 
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
-        string outputValue = pipeline.Run("  Hello   JSON  ");
-        Console.WriteLine(outputValue);
+        PipelineResult<string> result = pipeline.Run("  Hello   JSON  ");
+        Console.WriteLine(result.Context);
     }
 }
-

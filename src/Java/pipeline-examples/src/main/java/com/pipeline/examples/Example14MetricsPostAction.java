@@ -13,7 +13,7 @@ public final class Example14MetricsPostAction {
         .addAction(TextSteps::upper)
         .addPostAction(new MetricsOutputAction<>());
 
-    String outputValue = pipeline.run("  Hello Metrics  ");
+    String outputValue = pipeline.run("  Hello Metrics  ").context();
     System.out.println("output=" + outputValue);
   }
 }

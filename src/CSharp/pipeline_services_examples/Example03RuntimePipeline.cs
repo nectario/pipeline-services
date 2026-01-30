@@ -20,8 +20,7 @@ public static class Example03RuntimePipeline
         Console.WriteLine("runtimeValue=" + runtimePipeline.Value());
 
         Pipeline<string> frozen = runtimePipeline.Freeze();
-        PipelineResult<string> result = frozen.Execute("  Hello   Frozen  ");
+        PipelineResult<string> result = frozen.Run("  Hello   Frozen  ");
         Console.WriteLine("frozenValue=" + result.Context);
     }
 }
-

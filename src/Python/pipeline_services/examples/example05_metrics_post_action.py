@@ -20,7 +20,7 @@ def main() -> None:
     pipeline.add_action_named("truncate", truncate_at_16)
     pipeline.add_post_action_named("metrics", print_metrics)
 
-    result = pipeline.execute("  Hello   Metrics  ")
+    result = pipeline.run("  Hello   Metrics  ")
     print("output=", result.context)
     print("totalNanos=", result.total_nanos)
     print("timingsCount=", len(result.timings))
@@ -28,4 +28,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

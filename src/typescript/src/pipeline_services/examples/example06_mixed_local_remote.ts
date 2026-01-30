@@ -16,10 +16,9 @@ async function main(): Promise<void> {
   pipeline.add_action(to_lower);
   pipeline.add_action(append_marker);
 
-  const output_value = await pipeline.run("  Hello   Remote  ");
+  const result = await pipeline.run("  Hello   Remote  ");
   // eslint-disable-next-line no-console
-  console.log("output=" + String(output_value));
+  console.log("output=" + String(result.context));
 }
 
 void main();
-

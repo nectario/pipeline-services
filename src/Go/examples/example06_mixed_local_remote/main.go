@@ -24,7 +24,6 @@ func main() {
 	pipeline.AddAction(examples.ToLower)
 	pipeline.AddAction(examples.AppendMarker)
 
-	outputValue := pipeline.Run("  Hello   Remote  ")
-	fmt.Printf("output=%s\n", outputValue)
+	result := pipeline.Run("  Hello   Remote  ")
+	fmt.Printf("output=%s\n", result.Context)
 }
-

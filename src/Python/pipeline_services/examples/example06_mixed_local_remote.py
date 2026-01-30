@@ -20,10 +20,9 @@ def main() -> None:
     pipeline.add_action(to_lower)
     pipeline.add_action(append_marker)
 
-    output_value = pipeline.run("  Hello   Remote  ")
-    print("output=" + str(output_value))
+    result = pipeline.run("  Hello   Remote  ")
+    print("output=" + str(result.context))
 
 
 if __name__ == "__main__":
     main()
-

@@ -30,7 +30,7 @@ def main() -> None:
     start_ns = time.perf_counter_ns()
     iteration_index = 0
     while iteration_index < iterations:
-        result = pipeline.execute(input_value)
+        result = pipeline.run(input_value)
         total_pipeline_nanos += result.total_nanos
 
         for timing in result.timings:
@@ -58,4 +58,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

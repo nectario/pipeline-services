@@ -3,6 +3,9 @@ package com.pipeline.config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pipeline.core.ActionRegistry;
+import com.pipeline.core.ActionLifecycle;
+import com.pipeline.core.ActionPool;
+import com.pipeline.core.ResettableAction;
 import com.pipeline.core.Pipeline;
 import com.pipeline.core.StepAction;
 import com.pipeline.remote.http.HttpStep;
@@ -58,6 +61,7 @@ public final class PipelineJsonLoader {
         String name = req(root, "pipeline").asText();
         String type = root.path("type").asText("unary");
         if (!"unary".equals(type)) throw new IOException("Only unary pipelines supported by this loader");
+        boolean singletonMode = root.path("singletonMode").asBoolean(false);
         boolean shortCircuitOnException = root.has("shortCircuitOnException")
             ? root.path("shortCircuitOnException").asBoolean(true)
             : root.path("shortCircuit").asBoolean(true);
@@ -65,43 +69,135 @@ public final class PipelineJsonLoader {
         HttpStep.RemoteDefaults remoteDefaults = parseRemoteDefaults(root.get("remoteDefaults"));
 
         Pipeline<String> pipeline = new Pipeline<>(name, shortCircuitOnException);
-        JsonNode arr = root.has("actions") ? root.path("actions") : root.path("steps");
-        if (arr.isArray()) {
-            for (JsonNode s : arr) {
-                if (s.has("$local")) {
-                    String cls = s.get("$local").asText();
-                    addLocal(pipeline, registry, cls);
-                } else if (s.has("$remote")) {
-                    JsonNode r = s.get("$remote");
-                    String endpointOrPath = parseRemoteEndpointOrPath(r);
 
-                    HttpStep.RemoteSpec<String> spec = remoteDefaults.spec(endpointOrPath, body -> body, (ctx, body) -> body);
-                    if (r.isObject()) {
-                        spec.timeoutMillis = r.path("timeoutMillis").asInt(spec.timeoutMillis);
-                        spec.retries = r.path("retries").asInt(spec.retries);
-                        spec.headers = remoteDefaults.mergeHeaders(parseStringMap(r.get("headers")));
-                    }
-
-                    String method = r.path("method").asText(remoteDefaults.method);
-                    pipeline.addAction("GET".equalsIgnoreCase(method) ? HttpStep.jsonGet(spec) : HttpStep.jsonPost(spec));
-                } else if (s.has("$prompt")) {
-                    throw new IOException(
-                        "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references.");
-                } else {
-                    throw new IOException("Unsupported step: " + s.toString());
-                }
-            }
-        }
+        addSection(root, "preActions", "pre", JsonSection.PRE, pipeline, registry, remoteDefaults, singletonMode);
+        addSection(root, "actions", "steps", JsonSection.MAIN, pipeline, registry, remoteDefaults, singletonMode);
+        addSection(root, "postActions", "post", JsonSection.POST, pipeline, registry, remoteDefaults, singletonMode);
         return pipeline;
     }
 
-    private static void addLocal(Pipeline<String> pipeline, ActionRegistry<String> registry, String localRef) throws IOException {
-        if (registry.hasUnary(localRef)) {
-            pipeline.addAction(registry.getUnary(localRef));
+    private enum JsonSection {
+        PRE,
+        MAIN,
+        POST
+    }
+
+    private static void addSection(
+        JsonNode root,
+        String preferredFieldName,
+        String legacyFieldName,
+        JsonSection section,
+        Pipeline<String> pipeline,
+        ActionRegistry<String> registry,
+        HttpStep.RemoteDefaults remoteDefaults,
+        boolean singletonMode
+    ) throws IOException {
+        Objects.requireNonNull(root, "root");
+        Objects.requireNonNull(preferredFieldName, "preferredFieldName");
+        Objects.requireNonNull(legacyFieldName, "legacyFieldName");
+        Objects.requireNonNull(section, "section");
+        Objects.requireNonNull(pipeline, "pipeline");
+        Objects.requireNonNull(registry, "registry");
+        Objects.requireNonNull(remoteDefaults, "remoteDefaults");
+
+        boolean hasPreferred = root.has(preferredFieldName);
+        JsonNode actionsArray = hasPreferred ? root.get(preferredFieldName) : root.get(legacyFieldName);
+        if (actionsArray == null || actionsArray.isNull()) return;
+        if (!actionsArray.isArray()) {
+            String chosenName = hasPreferred ? preferredFieldName : legacyFieldName;
+            throw new IOException("Section '" + chosenName + "' must be an array");
+        }
+
+        for (JsonNode actionNode : actionsArray) {
+            addActionNode(actionNode, section, pipeline, registry, remoteDefaults, singletonMode);
+        }
+    }
+
+    private static void addActionNode(
+        JsonNode actionNode,
+        JsonSection section,
+        Pipeline<String> pipeline,
+        ActionRegistry<String> registry,
+        HttpStep.RemoteDefaults remoteDefaults,
+        boolean singletonMode
+    ) throws IOException {
+        if (actionNode == null || actionNode.isNull() || !actionNode.isObject()) {
+            throw new IOException("Each action must be a JSON object");
+        }
+
+        String actionName = parseActionName(actionNode);
+        ActionLifecycle lifecycleOverride = singletonMode ? parseLifecycleOverride(actionNode) : null;
+
+        if (actionNode.has("$local")) {
+            JsonNode localNode = actionNode.get("$local");
+            if (localNode == null || !localNode.isTextual()) throw new IOException("$local must be a string");
+            String localRef = localNode.asText();
+
+            boolean isRegistryLocal = registry.hasUnary(localRef) || registry.hasAction(localRef);
+            ActionLifecycle lifecycle = ActionLifecycle.SHARED;
+            if (singletonMode) {
+                lifecycle = isRegistryLocal ? ActionLifecycle.SHARED : ActionLifecycle.POOLED;
+                if (lifecycleOverride != null) lifecycle = lifecycleOverride;
+            }
+            int poolMax = defaultPoolMax();
+            if (singletonMode && lifecycle == ActionLifecycle.POOLED) {
+                poolMax = parsePoolMax(actionNode, poolMax);
+            }
+            addLocal(pipeline, registry, localRef, actionName, section, singletonMode, isRegistryLocal, lifecycle, poolMax);
             return;
         }
-        if (registry.hasAction(localRef)) {
-            pipeline.addAction(registry.getAction(localRef));
+
+        if (actionNode.has("$remote")) {
+            if (singletonMode && lifecycleOverride != null && lifecycleOverride != ActionLifecycle.SHARED) {
+                throw new IOException("Action lifecycle '" + lifecycleOverride.name().toLowerCase()
+                    + "' is not supported for $remote actions");
+            }
+
+            JsonNode remoteSpecNode = actionNode.get("$remote");
+            String endpointOrPath = parseRemoteEndpointOrPath(remoteSpecNode);
+
+            HttpStep.RemoteSpec<String> spec = remoteDefaults.spec(endpointOrPath, body -> body, (ctx, body) -> body);
+            if (remoteSpecNode.isObject()) {
+                spec.timeoutMillis = remoteSpecNode.path("timeoutMillis").asInt(spec.timeoutMillis);
+                spec.retries = remoteSpecNode.path("retries").asInt(spec.retries);
+                spec.headers = remoteDefaults.mergeHeaders(parseStringMap(remoteSpecNode.get("headers")));
+            }
+
+            String method = remoteSpecNode.path("method").asText(remoteDefaults.method);
+            StepAction<String> remoteAction = "GET".equalsIgnoreCase(method) ? HttpStep.jsonGet(spec) : HttpStep.jsonPost(spec);
+            addStepActionToPipeline(pipeline, section, actionName, remoteAction);
+            return;
+        }
+
+        if (actionNode.has("$prompt")) {
+            throw new IOException(
+                "Runtime does not execute $prompt steps. Run prompt codegen to produce a compiled pipeline JSON with $local references.");
+        }
+
+        throw new IOException("Unsupported action: " + actionNode.toString());
+    }
+
+    private static void addLocal(
+        Pipeline<String> pipeline,
+        ActionRegistry<String> registry,
+        String localRef,
+        String actionName,
+        JsonSection section,
+        boolean singletonMode,
+        boolean isRegistryLocal,
+        ActionLifecycle lifecycle,
+        int poolMax
+    ) throws IOException {
+        if (isRegistryLocal) {
+            if (singletonMode && lifecycle != ActionLifecycle.SHARED) {
+                throw new IOException("Action lifecycle '" + lifecycle.name().toLowerCase()
+                    + "' is not supported for registry actions: " + localRef);
+            }
+            if (registry.hasUnary(localRef)) {
+                addUnaryToPipeline(pipeline, section, actionName, registry.getUnary(localRef));
+            } else {
+                addStepActionToPipeline(pipeline, section, actionName, registry.getAction(localRef));
+            }
             return;
         }
 
@@ -111,28 +207,189 @@ public final class PipelineJsonLoader {
                     + ". Run prompt codegen and register generated actions (com.pipeline.generated.PromptGeneratedActions.register).");
         }
 
+        if (!singletonMode || lifecycle == ActionLifecycle.SHARED) {
+            addLocalShared(pipeline, localRef, actionName, section);
+            return;
+        }
+
+        if (lifecycle == ActionLifecycle.PER_RUN) {
+            addLocalPerRun(pipeline, localRef, actionName, section);
+            return;
+        }
+
+        if (lifecycle == ActionLifecycle.POOLED) {
+            addLocalPooled(pipeline, localRef, actionName, section, poolMax);
+            return;
+        }
+
+        throw new IOException("Unsupported lifecycle: " + lifecycle);
+    }
+
+    private static void addLocalShared(
+        Pipeline<String> pipeline,
+        String localRef,
+        String actionName,
+        JsonSection section
+    ) throws IOException {
         Object instance = instantiate(localRef);
         if (instance instanceof UnaryOperator<?> fn) {
             @SuppressWarnings("unchecked") UnaryOperator<String> unaryAction = (UnaryOperator<String>) fn;
-            pipeline.addAction(unaryAction);
+            addUnaryToPipeline(pipeline, section, actionName, unaryAction);
             return;
         }
         if (instance instanceof StepAction<?> stepAction) {
             @SuppressWarnings("unchecked") StepAction<String> action = (StepAction<String>) stepAction;
-            pipeline.addAction(action);
+            addStepActionToPipeline(pipeline, section, actionName, action);
             return;
         }
         throw new IOException("Class must implement UnaryOperator or StepAction: " + localRef);
     }
 
+    private static void addLocalPooled(
+        Pipeline<String> pipeline,
+        String localRef,
+        String actionName,
+        JsonSection section,
+        int poolMax
+    ) throws IOException {
+        Class<?> actionClass = resolveClass(localRef);
+        if (!ResettableAction.class.isAssignableFrom(actionClass)) {
+            throw new IOException("Action lifecycle 'pooled' requires ResettableAction: " + localRef);
+        }
+
+        LocalActionInvokeStyle invokeStyle = determineInvokeStyle(actionClass, localRef);
+        Constructor<?> constructor = resolveNoArgsConstructor(actionClass, localRef);
+
+        ActionPool<Object> pool = new ActionPool<>(poolMax, new ReflectiveNoArgFactory(constructor, localRef));
+        StepAction<String> pooledAction = new PooledLocalAction<>(pool, invokeStyle, localRef);
+        addStepActionToPipeline(pipeline, section, actionName, pooledAction);
+    }
+
+    private static void addLocalPerRun(
+        Pipeline<String> pipeline,
+        String localRef,
+        String actionName,
+        JsonSection section
+    ) throws IOException {
+        Class<?> actionClass = resolveClass(localRef);
+        LocalActionInvokeStyle invokeStyle = determineInvokeStyle(actionClass, localRef);
+        Constructor<?> constructor = resolveNoArgsConstructor(actionClass, localRef);
+
+        StepAction<String> perRunAction = new PerRunLocalAction<>(constructor, invokeStyle, localRef);
+        addStepActionToPipeline(pipeline, section, actionName, perRunAction);
+    }
+
+    private static LocalActionInvokeStyle determineInvokeStyle(Class<?> actionClass, String localRef) throws IOException {
+        if (UnaryOperator.class.isAssignableFrom(actionClass)) return LocalActionInvokeStyle.UNARY_OPERATOR;
+        if (StepAction.class.isAssignableFrom(actionClass)) return LocalActionInvokeStyle.STEP_ACTION;
+        throw new IOException("Class must implement UnaryOperator or StepAction: " + localRef);
+    }
+
+    private static Class<?> resolveClass(String fqcn) throws IOException {
+        try {
+            return Class.forName(fqcn);
+        } catch (Exception exception) {
+            throw new IOException("Failed to load class " + fqcn, exception);
+        }
+    }
+
+    private static Constructor<?> resolveNoArgsConstructor(Class<?> actionClass, String fqcn) throws IOException {
+        try {
+            Constructor<?> constructor = actionClass.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor;
+        } catch (Exception exception) {
+            throw new IOException("Failed to resolve no-args constructor for " + fqcn, exception);
+        }
+    }
+
     private static Object instantiate(String fqcn) throws IOException {
         try {
-            Class<?> c = Class.forName(fqcn);
-            Constructor<?> ctor = c.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            return ctor.newInstance();
-        } catch (Exception e) {
-            throw new IOException("Failed to instantiate " + fqcn, e);
+            Class<?> actionClass = Class.forName(fqcn);
+            Constructor<?> constructor = actionClass.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (Exception exception) {
+            throw new IOException("Failed to instantiate " + fqcn, exception);
+        }
+    }
+
+    private static String parseActionName(JsonNode actionNode) {
+        String fromName = textOrNull(actionNode.get("name"));
+        if (fromName != null && !fromName.isBlank()) return fromName;
+
+        String fromLabel = textOrNull(actionNode.get("label"));
+        if (fromLabel != null && !fromLabel.isBlank()) return fromLabel;
+
+        return null;
+    }
+
+    private static String textOrNull(JsonNode node) {
+        if (node == null || node.isNull() || !node.isTextual()) return null;
+        return node.asText();
+    }
+
+    private static ActionLifecycle parseLifecycleOverride(JsonNode actionNode) throws IOException {
+        JsonNode lifecycleNode = actionNode.get("lifecycle");
+        if (lifecycleNode == null || lifecycleNode.isNull()) return null;
+        if (!lifecycleNode.isTextual()) throw new IOException("lifecycle must be a string");
+
+        String raw = lifecycleNode.asText("").trim().toLowerCase();
+        return switch (raw) {
+            case "shared" -> ActionLifecycle.SHARED;
+            case "pooled" -> ActionLifecycle.POOLED;
+            case "perrun", "per_run", "per-run" -> ActionLifecycle.PER_RUN;
+            default -> throw new IOException("Unsupported lifecycle: " + raw);
+        };
+    }
+
+    private static int parsePoolMax(JsonNode actionNode, int defaultMax) throws IOException {
+        JsonNode poolNode = actionNode.get("pool");
+        if (poolNode == null || poolNode.isNull()) return defaultMax;
+        if (!poolNode.isObject()) throw new IOException("pool must be an object");
+
+        JsonNode maxNode = poolNode.get("max");
+        if (maxNode == null || maxNode.isNull()) return defaultMax;
+        if (!maxNode.canConvertToInt()) throw new IOException("pool.max must be an integer");
+
+        int maxValue = maxNode.asInt();
+        if (maxValue < 1) throw new IOException("pool.max must be >= 1");
+        return maxValue;
+    }
+
+    private static int defaultPoolMax() {
+        int processors = Runtime.getRuntime().availableProcessors();
+        int computed = processors * 8;
+        return Math.min(256, Math.max(1, computed));
+    }
+
+    private static void addUnaryToPipeline(
+        Pipeline<String> pipeline,
+        JsonSection section,
+        String actionName,
+        UnaryOperator<String> action
+    ) {
+        if (section == JsonSection.PRE) {
+            pipeline.addPreAction(actionName, action);
+        } else if (section == JsonSection.POST) {
+            pipeline.addPostAction(actionName, action);
+        } else {
+            pipeline.addAction(actionName, action);
+        }
+    }
+
+    private static void addStepActionToPipeline(
+        Pipeline<String> pipeline,
+        JsonSection section,
+        String actionName,
+        StepAction<String> action
+    ) {
+        if (section == JsonSection.PRE) {
+            pipeline.addPreAction(actionName, action);
+        } else if (section == JsonSection.POST) {
+            pipeline.addPostAction(actionName, action);
+        } else {
+            pipeline.addAction(actionName, action);
         }
     }
 
@@ -142,7 +399,7 @@ public final class PipelineJsonLoader {
     }
 
     private static boolean containsPromptSteps(JsonNode root) {
-        for (String sectionName : new String[] { "pre", "actions", "steps", "post" }) {
+        for (String sectionName : new String[] { "preActions", "pre", "actions", "steps", "postActions", "post" }) {
             JsonNode nodes = root.get(sectionName);
             if (nodes == null || !nodes.isArray()) continue;
             for (JsonNode node : nodes) {

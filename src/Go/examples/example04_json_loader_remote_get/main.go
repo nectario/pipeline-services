@@ -33,6 +33,6 @@ func main() {
 		panic(loadError)
 	}
 
-	outputValue := pipeline.Run("ignored")
-	fmt.Println(outputValue)
+	result := pipeline.Run("ignored")
+	fmt.Println(result.Context)
 }

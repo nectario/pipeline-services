@@ -18,7 +18,7 @@ fn main() raises:
     pipeline.add_action_named("truncate", truncate_at_16)
     pipeline.add_post_action_named("metrics", print_metrics)
 
-    var result = pipeline.execute(PythonObject("  Hello   Metrics  "))
+    var result = pipeline.run(PythonObject("  Hello   Metrics  "))
     print("output=", result.context)
     print("totalNanos=", result.total_nanos)
     print("timingsCount=", len(result.timings))

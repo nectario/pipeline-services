@@ -20,8 +20,7 @@ int main() {
   pipeline.addAction(pipeline_services::examples::to_lower);
   pipeline.addAction(pipeline_services::examples::append_marker);
 
-  const std::string output_value = pipeline.run("  Hello   Remote  ");
-  std::cout << "output=" << output_value << std::endl;
+  const auto result = pipeline.run("  Hello   Remote  ");
+  std::cout << "output=" << result.context << std::endl;
   return 0;
 }
-

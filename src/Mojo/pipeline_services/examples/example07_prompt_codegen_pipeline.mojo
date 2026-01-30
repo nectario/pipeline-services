@@ -30,6 +30,6 @@ fn main() raises:
 
     var loader = PipelineJsonLoader()
     var pipeline = loader.load_file(pipeline_file, registry)
-    var output_value = pipeline.run(PythonObject("  john   SMITH "))
-    var output_text = "output=" + String(output_value)
+    var result = pipeline.run(PythonObject("  john   SMITH "))
+    var output_text = "output=" + String(result.context)
     print(output_text)

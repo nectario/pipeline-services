@@ -1,4 +1,5 @@
 from .core.pipeline import Pipeline, PipelineError, PipelineResult, StepControl, ActionTiming
+from .core.pipeline_provider import PipelineProvider, PipelineProviderMode
 from .core.runtime_pipeline import RuntimePipeline
 from .core.registry import PipelineRegistry
 from .core.metrics_actions import print_metrics

@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const start_ns = now_ns();
   let iteration_index = 0;
   while (iteration_index < iterations) {
-    const result = await pipeline.execute(input_value);
+    const result = await pipeline.run(input_value);
     total_pipeline_nanos += result.total_nanos;
 
     for (const timing of result.timings) {
@@ -62,4 +62,3 @@ async function main(): Promise<void> {
 }
 
 void main();
-

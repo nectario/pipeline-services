@@ -48,7 +48,7 @@ public sealed class RuntimePipelineTests
         runtimePipeline.AddAction(Upper);
         Pipeline<string> frozen = runtimePipeline.Freeze();
 
-        PipelineResult<string> result = frozen.Execute("hi");
+        PipelineResult<string> result = frozen.Run("hi");
         Assert.Equal("HI", result.Context);
     }
 
@@ -68,4 +68,3 @@ public sealed class RuntimePipelineTests
         return "FINISH";
     }
 }
-

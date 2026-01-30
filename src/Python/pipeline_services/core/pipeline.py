@@ -196,10 +196,7 @@ class Pipeline:
     def add_post_action_named(self, name: str, action: Union[UnaryOperator, StepAction, RemoteSpec]) -> None:
         self.post_actions.append(to_registered_action(name, action))
 
-    def run(self, input_value: Any) -> Any:
-        return self.execute(input_value).context
-
-    def execute(self, input_value: Any) -> PipelineResult:
+    def run(self, input_value: Any) -> PipelineResult:
         ctx = input_value
         control = StepControl(self.name, self.on_error)
         control.begin_run(time.perf_counter_ns())
@@ -235,6 +232,9 @@ class Pipeline:
             timings=list(control.timings),
             total_nanos=total_nanos,
         )
+
+    def execute(self, input_value: Any) -> PipelineResult:
+        return self.run(input_value)
 
     def run_phase(
         self,
@@ -279,4 +279,3 @@ class Pipeline:
                 break
             step_index += 1
         return ctx
-

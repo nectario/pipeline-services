@@ -25,8 +25,7 @@ public static class Example06MixedLocalRemote
         pipeline.AddAction(TextActions.ToLower);
         pipeline.AddAction(TextActions.AppendMarker);
 
-        string outputValue = pipeline.Run("  Hello   Remote  ");
-        Console.WriteLine("output=" + outputValue);
+        PipelineResult<string> result = pipeline.Run("  Hello   Remote  ");
+        Console.WriteLine("output=" + result.Context);
     }
 }
-

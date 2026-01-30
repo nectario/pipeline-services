@@ -7,7 +7,6 @@ fn main() {
   pipeline.add_action(normalize_whitespace);
   pipeline.add_post_action_control(print_metrics);
 
-  let output_value = pipeline.run("  Hello   Metrics  ".to_string());
-  println!("{output_value}");
+  let result = pipeline.run("  Hello   Metrics  ".to_string());
+  println!("{}", result.context);
 }
-

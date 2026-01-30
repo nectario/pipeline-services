@@ -11,8 +11,8 @@ int main() {
   pipeline.addAction(pipeline_services::examples::normalize_whitespace);
   pipeline.addPostAction(pipeline_services::core::printMetrics<std::string>);
 
-  const std::string output_value = pipeline.run("  Hello   Metrics  ");
-  std::cout << output_value << std::endl;
+  const auto result = pipeline.run("  Hello   Metrics  ");
+  std::cout << result.context << std::endl;
   return 0;
 }
 

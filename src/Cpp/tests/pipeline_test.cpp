@@ -130,7 +130,7 @@ void test_short_circuit_stops_main_only() {
   pipeline.addAction(AppendAction{calls, "a3", "a3|"});
   pipeline.addPostAction(AppendAction{calls, "post", "post|"});
 
-  const auto result = pipeline.execute("");
+  const auto result = pipeline.run("");
   require_true(result.shortCircuited, "expected shortCircuited=true");
   require_equal(
     *calls,
@@ -147,7 +147,7 @@ void test_short_circuit_on_exception_stops_main() {
   pipeline.addAction(AppendAction{calls, "later", "|later"});
   pipeline.addPostAction(AppendAction{calls, "post", "|post"});
 
-  const auto result = pipeline.execute("start");
+  const auto result = pipeline.run("start");
   require_true(result.shortCircuited, "expected shortCircuited=true");
   require_equal(result.errors.size(), static_cast<std::size_t>(1), "expected one error");
   require_equal(*calls, std::vector<std::string>{"fail", "post"}, "unexpected call order");
@@ -160,7 +160,7 @@ void test_continue_on_exception_runs_remaining_actions() {
   pipeline.addAction(FailingAction{calls, "fail"});
   pipeline.addAction(AppendAction{calls, "later", "|later"});
 
-  const auto result = pipeline.execute("start");
+  const auto result = pipeline.run("start");
   require_true(!result.shortCircuited, "expected shortCircuited=false");
   require_equal(result.errors.size(), static_cast<std::size_t>(1), "expected one error");
   require_equal(result.context, std::string("start|later"), "unexpected output");
@@ -183,8 +183,8 @@ void test_json_loader_actions_alias() {
 
   pipeline_services::config::PipelineJsonLoader loader;
   auto pipeline = loader.loadStr(json_text, registry);
-  const std::string output_value = pipeline.run("ok");
-  require_equal(output_value, std::string("ok"), "unexpected output");
+  const auto result = pipeline.run("ok");
+  require_equal(result.context, std::string("ok"), "unexpected output");
 }
 
 void test_remote_http_step_get() {
@@ -220,8 +220,8 @@ void test_json_loader_remote_get() {
   pipeline_services::core::PipelineRegistry<std::string> registry;
   pipeline_services::config::PipelineJsonLoader loader;
   const auto pipeline = loader.loadStr(json_text, registry);
-  const std::string output_value = pipeline.run("ignored");
-  require_equal(output_value, std::string(remote_fixture_body), "unexpected remote output");
+  const auto result = pipeline.run("ignored");
+  require_equal(result.context, std::string(remote_fixture_body), "unexpected remote output");
 }
 
 }  // namespace

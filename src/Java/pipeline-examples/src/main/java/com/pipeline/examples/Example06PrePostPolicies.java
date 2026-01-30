@@ -8,12 +8,12 @@ public final class Example06PrePostPolicies {
   private Example06PrePostPolicies() {}
 
   public static void run() {
-    var p = new Pipeline<String>("ex06", /*shortCircuitOnException=*/true)
+    Pipeline<String> pipeline = new Pipeline<String>("ex06", /*shortCircuitOnException=*/true)
         .addPreAction(PolicySteps::rateLimit)
         .addAction(TextSteps::strip)
         .addPostAction(PolicySteps::audit);
 
-    String out = p.run("   hi   ");
-    System.out.println("[ex06] => '" + out + "'");
+    String outputValue = pipeline.run("   hi   ").context();
+    System.out.println("[ex06] => '" + outputValue + "'");
   }
 }

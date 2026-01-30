@@ -36,7 +36,7 @@ fn main() raises:
     var start_ns = now_ns(perf_counter_ns_fn)
     var iteration_index: Int = 0
     while iteration_index < iterations:
-        var result = pipeline.execute(input_value)
+        var result = pipeline.run(input_value)
         total_pipeline_nanos = total_pipeline_nanos + result.total_nanos
 
         for timing in result.timings:

@@ -151,12 +151,7 @@ public sealed class Pipeline<ContextType>
         return AddPostAction(actionName, new StepActionAdapter(actionFunction));
     }
 
-    public ContextType Run(ContextType input)
-    {
-        return Execute(input).Context;
-    }
-
-    public PipelineResult<ContextType> Execute(ContextType input)
+    public PipelineResult<ContextType> Run(ContextType input)
     {
         if (input is null)
         {
@@ -183,6 +178,11 @@ public sealed class Pipeline<ContextType>
             control.Errors(),
             control.ActionTimings(),
             totalNanos);
+    }
+
+    public PipelineResult<ContextType> Execute(ContextType input)
+    {
+        return Run(input);
     }
 
     private ContextType RunPhase(
@@ -395,4 +395,3 @@ public sealed class Pipeline<ContextType>
         }
     }
 }
-

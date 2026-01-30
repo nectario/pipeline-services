@@ -24,10 +24,9 @@ def main() -> None:
 
     loader = PipelineJsonLoader()
     pipeline = loader.load_str(json_text, registry)
-    output_value = pipeline.run("  Hello   JSON  ")
-    print(output_value)
+    result = pipeline.run("  Hello   JSON  ")
+    print(result.context)
 
 
 if __name__ == "__main__":
     main()
-

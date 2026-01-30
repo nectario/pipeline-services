@@ -9,10 +9,9 @@ async function main(): Promise<void> {
   console.log("runtimeValue=", runtime_pipeline.value());
 
   const frozen_pipeline = runtime_pipeline.freeze();
-  const result = await frozen_pipeline.execute("  Hello   Frozen  ");
+  const result = await frozen_pipeline.run("  Hello   Frozen  ");
   // eslint-disable-next-line no-console
   console.log("frozenValue=", result.context);
 }
 
 void main();
-

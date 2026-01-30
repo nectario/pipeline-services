@@ -24,6 +24,6 @@ func main() {
 	fmt.Printf("runtimeValue=%s\n", runtimePipeline.Value())
 
 	frozen := runtimePipeline.Freeze()
-	result := frozen.Execute("  Hello   Frozen  ")
+	result := frozen.Run("  Hello   Frozen  ")
 	fmt.Printf("frozenValue=%s\n", result.Context)
 }

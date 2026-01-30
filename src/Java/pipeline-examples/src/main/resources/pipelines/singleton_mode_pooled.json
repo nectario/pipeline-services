@@ -1,0 +1,14 @@
+{
+  "pipeline": "singleton_mode_pooled",
+  "type": "unary",
+  "singletonMode": true,
+  "actions": [
+    {
+      "label": "normalize_whitespace",
+      "$local": "com.pipeline.examples.adapters.PooledScratchNormalizeAction",
+      "lifecycle": "pooled",
+      "pool": { "max": 64 }
+    }
+  ]
+}
+
