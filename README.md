@@ -150,6 +150,29 @@ cargo test
 cargo run --example example01_text_clean
 ```
 
+### C++ port
+```bash
+cd src/Cpp
+cmake -S . -B build
+cmake --build build -j
+ctest --test-dir build
+./build/example01_text_clean
+```
+
+### Go port
+```bash
+cd src/Go
+go test ./...
+go run ./examples/example01_text_clean
+```
+
+### C# port
+```bash
+cd src/CSharp
+dotnet test ./pipeline_services_tests/PipelineServices.Tests.csproj
+dotnet run --project pipeline_services_examples -- example01_text_clean
+```
+
 ## Prompt-to-code (compile phase)
 
 ![Prompt-to-code flow](docs/images/prompt-to-code-flow.svg)
@@ -178,29 +201,6 @@ Registering generated actions (per port):
 - C++: `pipeline_services::generated::registerGeneratedActions(registry)`
 - Mojo: `registry = pipeline_services.generated.register_generated_actions(registry)`
 - C#: `PipelineServices.Generated.PromptGeneratedActions.Register(registry)`
-
-### C++ port
-```bash
-cd src/Cpp
-cmake -S . -B build
-cmake --build build -j
-ctest --test-dir build
-./build/example01_text_clean
-```
-
-### Go port
-```bash
-cd src/Go
-go test ./...
-go run ./examples/example01_text_clean
-```
-
-### C# port
-```bash
-cd src/CSharp
-dotnet test ./pipeline_services_tests/PipelineServices.Tests.csproj
-dotnet run --project pipeline_services_examples -- example01_text_clean
-```
 
 ## Semantics (portable)
 - Explicit short-circuit: inside a `StepAction<C>`, call `control.shortCircuit()`.
