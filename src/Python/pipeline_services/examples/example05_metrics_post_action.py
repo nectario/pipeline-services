@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from pipeline_services.core.metrics_actions import print_metrics
-from pipeline_services.core.pipeline import Pipeline, StepControl
+from pipeline_services.core.pipeline import ActionControl, Pipeline
 from pipeline_services.examples.text_steps import normalize_whitespace, strip
 
 
-def truncate_at_16(text_value: str, control: StepControl) -> str:
+def truncate_at_16(text_value: str, control: ActionControl) -> str:
     text_string = str(text_value)
     if len(text_string) <= 16:
         return text_string

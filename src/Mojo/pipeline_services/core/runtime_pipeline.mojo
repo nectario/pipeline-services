@@ -1,7 +1,7 @@
 from python import PythonObject
 from collections.list import List
 
-from .pipeline import Pipeline, RegisteredAction, StepAction, StepControl, UnaryOperator, format_step_name, safe_error_to_string
+from .pipeline import Pipeline, RegisteredAction, StepAction, ActionControl, UnaryOperator, format_step_name, safe_error_to_string
 from ..remote.http_step import RemoteSpec, http_step
 
 struct RuntimePipeline:
@@ -19,7 +19,7 @@ struct RuntimePipeline:
     var action_index: Int
     var post_index: Int
 
-    var control: StepControl
+    var control: ActionControl
 
     fn __init__(out self,
                 name: String,
@@ -35,7 +35,7 @@ struct RuntimePipeline:
         self.pre_index = 0
         self.action_index = 0
         self.post_index = 0
-        self.control = StepControl(name)
+        self.control = ActionControl(name)
 
     fn value(self) -> PythonObject:
         return self.current

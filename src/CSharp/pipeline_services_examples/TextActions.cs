@@ -53,7 +53,7 @@ public static class TextActions
         return value.ToUpperInvariant();
     }
 
-    public static string TruncateAt280(string value, PipelineServices.Core.StepControl<string> control)
+    public static string TruncateAt280(string value, PipelineServices.Core.ActionControl<string> control)
     {
         if (value == null)
         {

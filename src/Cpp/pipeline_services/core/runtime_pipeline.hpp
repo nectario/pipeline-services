@@ -143,7 +143,7 @@ private:
   std::size_t actionIndex_;
   std::size_t postIndex_;
 
-  StepControl<ContextType> control_;
+  ActionControl<ContextType> control_;
 };
 
 }  // namespace pipeline_services::core

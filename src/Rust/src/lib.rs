@@ -8,8 +8,9 @@ pub mod remote;
 
 pub use crate::config::json_loader::PipelineJsonLoader;
 pub use crate::core::metrics_actions::print_metrics;
+#[allow(deprecated)]
 pub use crate::core::pipeline::{
-  ActionTiming, Pipeline, PipelineError, PipelineResult, StepAction, StepControl, UnaryOperator,
+  ActionControl, ActionTiming, Pipeline, PipelineError, PipelineResult, StepAction, StepControl, UnaryOperator,
 };
 pub use crate::core::pipeline_provider::{default_pool_max, PipelineProvider, PipelineProviderMode};
 pub use crate::core::registry::PipelineRegistry;

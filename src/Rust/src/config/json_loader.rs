@@ -194,7 +194,7 @@ fn add_local(
     let step_action = registry.get_action(local_ref)?;
     let wrapped = {
       let step_action = step_action.clone();
-      move |ctx: String, control: &mut crate::core::pipeline::StepControl<String>| (step_action)(ctx, control)
+      move |ctx: String, control: &mut crate::core::pipeline::ActionControl<String>| (step_action)(ctx, control)
     };
 
     if section_name == "pre" {

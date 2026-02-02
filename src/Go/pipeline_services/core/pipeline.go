@@ -40,7 +40,7 @@ type ActionTiming struct {
 	Success      bool
 }
 
-type StepControl[ContextType any] interface {
+type ActionControl[ContextType any] interface {
 	ShortCircuit()
 	IsShortCircuited() bool
 
@@ -52,8 +52,15 @@ type StepControl[ContextType any] interface {
 	ActionTimings() []ActionTiming
 }
 
+// StepControl is a backwards-compatible alias for ActionControl.
+//
+// Go does not allow generic type aliases, so this is expressed as an embedded interface.
+type StepControl[ContextType any] interface {
+	ActionControl[ContextType]
+}
+
 type StepAction[ContextType any] interface {
-	Apply(ctx ContextType, control StepControl[ContextType]) (ContextType, error)
+	Apply(ctx ContextType, control ActionControl[ContextType]) (ContextType, error)
 }
 
 type OnErrorFn[ContextType any] func(ctx ContextType, err PipelineError) ContextType
@@ -67,7 +74,7 @@ func DefaultOnError[ContextType any](ctx ContextType, err PipelineError) Context
 
 type UnaryFunc[ContextType any] func(ctx ContextType) ContextType
 
-func (unaryFunc UnaryFunc[ContextType]) Apply(ctx ContextType, control StepControl[ContextType]) (ContextType, error) {
+func (unaryFunc UnaryFunc[ContextType]) Apply(ctx ContextType, control ActionControl[ContextType]) (ContextType, error) {
 	if control == nil {
 		return unaryFunc(ctx), nil
 	}
@@ -78,7 +85,7 @@ type UnaryFuncWithError[ContextType any] func(ctx ContextType) (ContextType, err
 
 func (unaryFunc UnaryFuncWithError[ContextType]) Apply(
 	ctx ContextType,
-	control StepControl[ContextType],
+	control ActionControl[ContextType],
 ) (ContextType, error) {
 	if control == nil {
 		return unaryFunc(ctx)
@@ -86,17 +93,17 @@ func (unaryFunc UnaryFuncWithError[ContextType]) Apply(
 	return unaryFunc(ctx)
 }
 
-type StepFunc[ContextType any] func(ctx ContextType, control StepControl[ContextType]) ContextType
+type StepFunc[ContextType any] func(ctx ContextType, control ActionControl[ContextType]) ContextType
 
-func (stepFunc StepFunc[ContextType]) Apply(ctx ContextType, control StepControl[ContextType]) (ContextType, error) {
+func (stepFunc StepFunc[ContextType]) Apply(ctx ContextType, control ActionControl[ContextType]) (ContextType, error) {
 	return stepFunc(ctx, control), nil
 }
 
-type StepFuncWithError[ContextType any] func(ctx ContextType, control StepControl[ContextType]) (ContextType, error)
+type StepFuncWithError[ContextType any] func(ctx ContextType, control ActionControl[ContextType]) (ContextType, error)
 
 func (stepFunc StepFuncWithError[ContextType]) Apply(
 	ctx ContextType,
-	control StepControl[ContextType],
+	control ActionControl[ContextType],
 ) (ContextType, error) {
 	return stepFunc(ctx, control)
 }
@@ -400,11 +407,11 @@ func normalizeAction[ContextType any](action any) (StepAction[ContextType], erro
 		return UnaryFuncWithError[ContextType](unaryFuncWithError), nil
 	}
 
-	if stepFunc, ok := action.(func(ContextType, StepControl[ContextType]) ContextType); ok {
+	if stepFunc, ok := action.(func(ContextType, ActionControl[ContextType]) ContextType); ok {
 		return StepFunc[ContextType](stepFunc), nil
 	}
 
-	if stepFuncWithError, ok := action.(func(ContextType, StepControl[ContextType]) (ContextType, error)); ok {
+	if stepFuncWithError, ok := action.(func(ContextType, ActionControl[ContextType]) (ContextType, error)); ok {
 		return StepFuncWithError[ContextType](stepFuncWithError), nil
 	}
 

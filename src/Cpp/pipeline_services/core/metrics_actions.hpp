@@ -11,7 +11,7 @@
 namespace pipeline_services::core {
 
 template <typename ContextType>
-ContextType printMetrics(ContextType ctx, StepControl<ContextType>& control) {
+ContextType printMetrics(ContextType ctx, ActionControl<ContextType>& control) {
   nlohmann::json metrics_json;
   metrics_json["pipeline"] = control.pipelineName();
   metrics_json["shortCircuited"] = control.isShortCircuited();

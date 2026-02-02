@@ -2,7 +2,7 @@ import {
   Pipeline,
   RegisteredAction,
   StepAction,
-  StepControl,
+  ActionControl,
   UnaryOperator,
   format_step_name,
   safe_error_to_string,
@@ -25,7 +25,7 @@ export class RuntimePipeline {
   private action_index: number;
   private post_index: number;
 
-  private control: StepControl;
+  private control: ActionControl;
 
   constructor(name: string, short_circuit_on_exception: boolean = true, initial: unknown = null) {
     this.name = name;
@@ -38,7 +38,7 @@ export class RuntimePipeline {
     this.pre_index = 0;
     this.action_index = 0;
     this.post_index = 0;
-    this.control = new StepControl(name);
+    this.control = new ActionControl(name);
   }
 
   value(): unknown {
@@ -154,4 +154,3 @@ export class RuntimePipeline {
     return this.current;
   }
 }
-

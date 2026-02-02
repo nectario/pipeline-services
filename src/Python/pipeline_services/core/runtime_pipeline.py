@@ -6,7 +6,7 @@ from typing import Any, List, Union
 from .pipeline import (
     Pipeline,
     RegisteredAction,
-    StepControl,
+    ActionControl,
     StepAction,
     UnaryOperator,
     format_step_name,
@@ -30,7 +30,7 @@ class RuntimePipeline:
         self.pre_index = 0
         self.action_index = 0
         self.post_index = 0
-        self.control = StepControl(self.name)
+        self.control = ActionControl(self.name)
 
     def value(self) -> Any:
         return self.current
@@ -128,4 +128,3 @@ class RuntimePipeline:
             self.ended = True
 
         return self.current
-

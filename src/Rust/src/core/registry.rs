@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::core::pipeline::{StepAction, StepControl, UnaryOperator};
+use crate::core::pipeline::{ActionControl, StepAction, UnaryOperator};
 
 pub struct PipelineRegistry<ContextType> {
   unary_actions: HashMap<String, UnaryOperator<ContextType>>,
@@ -25,7 +25,7 @@ impl<ContextType> PipelineRegistry<ContextType> {
 
   pub fn register_action<ActionFn>(&mut self, name: impl Into<String>, action: ActionFn)
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.step_actions.insert(name.into(), Arc::new(action));
   }
@@ -58,4 +58,3 @@ impl<ContextType> Default for PipelineRegistry<ContextType> {
     Self::new()
   }
 }
-

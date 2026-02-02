@@ -19,7 +19,7 @@ public sealed class RuntimePipeline<ContextType>
     private int actionIndex;
     private int postIndex;
 
-    private readonly SessionStepControl control;
+    private readonly SessionActionControl control;
 
     public RuntimePipeline(string name, bool shortCircuitOnException, ContextType initial)
     {
@@ -36,7 +36,7 @@ public sealed class RuntimePipeline<ContextType>
         actionIndex = 0;
         postIndex = 0;
 
-        control = new SessionStepControl(name);
+        control = new SessionActionControl(name);
     }
 
     public ContextType AddPreAction(StepAction<ContextType> preAction)
@@ -84,17 +84,17 @@ public sealed class RuntimePipeline<ContextType>
         return AddPostAction(new UnaryActionAdapter(unaryAction));
     }
 
-    public ContextType AddPreAction(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public ContextType AddPreAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddPreAction(new StepActionAdapter(actionFunction));
     }
 
-    public ContextType AddAction(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public ContextType AddAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddAction(new StepActionAdapter(actionFunction));
     }
 
-    public ContextType AddPostAction(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public ContextType AddPostAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddPostAction(new StepActionAdapter(actionFunction));
     }
@@ -204,7 +204,7 @@ public sealed class RuntimePipeline<ContextType>
             this.unaryAction = unaryAction ?? throw new ArgumentNullException(nameof(unaryAction));
         }
 
-        public ContextType Apply(ContextType contextValue, StepControl<ContextType> control)
+        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
         {
             return unaryAction(contextValue);
         }
@@ -212,20 +212,20 @@ public sealed class RuntimePipeline<ContextType>
 
     private sealed class StepActionAdapter : StepAction<ContextType>
     {
-        private readonly Func<ContextType, StepControl<ContextType>, ContextType> actionFunction;
+        private readonly Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction;
 
-        public StepActionAdapter(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+        public StepActionAdapter(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
         {
             this.actionFunction = actionFunction ?? throw new ArgumentNullException(nameof(actionFunction));
         }
 
-        public ContextType Apply(ContextType contextValue, StepControl<ContextType> control)
+        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
         {
             return actionFunction(contextValue, control);
         }
     }
 
-    private sealed class SessionStepControl : StepControl<ContextType>
+    private sealed class SessionActionControl : ActionControl<ContextType>
     {
         private readonly string pipelineName;
         private readonly List<PipelineError> errors;
@@ -235,7 +235,7 @@ public sealed class RuntimePipeline<ContextType>
         private int index;
         private string stepName;
 
-        public SessionStepControl(string pipelineName)
+        public SessionActionControl(string pipelineName)
         {
             this.pipelineName = pipelineName ?? throw new ArgumentNullException(nameof(pipelineName));
             errors = new List<PipelineError>();
@@ -298,4 +298,3 @@ public sealed class RuntimePipeline<ContextType>
         }
     }
 }
-

@@ -1,7 +1,7 @@
 use pipeline_services::examples::text_steps::{normalize_whitespace, strip};
-use pipeline_services::{Pipeline, StepControl};
+use pipeline_services::{ActionControl, Pipeline};
 
-fn truncate_at_280(text_value: String, control: &mut StepControl<String>) -> String {
+fn truncate_at_280(text_value: String, control: &mut ActionControl<String>) -> String {
   if text_value.chars().count() <= 280 {
     return text_value;
   }

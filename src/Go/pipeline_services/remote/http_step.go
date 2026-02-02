@@ -107,7 +107,7 @@ type httpStepAction[ContextType any] struct {
 
 func (action httpStepAction[ContextType]) Apply(
 	ctx ContextType,
-	control core.StepControl[ContextType],
+	control core.ActionControl[ContextType],
 ) (ContextType, error) {
 	markUsed(control)
 	return Invoke(action.spec, action.method, ctx)

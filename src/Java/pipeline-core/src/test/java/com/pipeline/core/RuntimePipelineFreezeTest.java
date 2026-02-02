@@ -8,7 +8,7 @@ final class RuntimePipelineFreezeTest {
 
   static String strip(String s) { return s == null ? "" : s.strip(); }
   static String upper(String s) { return s.toUpperCase(); }
-  static String scToX(String s, StepControl<String> control) { control.shortCircuit(); return "X"; }
+  static String scToX(String s, ActionControl<String> control) { control.shortCircuit(); return "X"; }
 
   @Test
   void freezeBuildsEquivalentPipeline() {

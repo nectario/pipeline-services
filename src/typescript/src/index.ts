@@ -1,4 +1,5 @@
 export {
+  ActionControl,
   ActionTiming,
   Pipeline,
   PipelineError,

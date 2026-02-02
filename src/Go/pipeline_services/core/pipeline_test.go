@@ -18,7 +18,7 @@ type appendAction struct {
 	suffix   string
 }
 
-func (action appendAction) Apply(ctx string, control core.StepControl[string]) (string, error) {
+func (action appendAction) Apply(ctx string, control core.ActionControl[string]) (string, error) {
 	if control == nil {
 		return ctx + action.suffix, nil
 	}
@@ -32,7 +32,7 @@ type shortCircuitAction struct {
 	suffix   string
 }
 
-func (action shortCircuitAction) Apply(ctx string, control core.StepControl[string]) (string, error) {
+func (action shortCircuitAction) Apply(ctx string, control core.ActionControl[string]) (string, error) {
 	*action.calls = append(*action.calls, action.callName)
 	control.ShortCircuit()
 	return ctx + action.suffix, nil
@@ -43,7 +43,7 @@ type failingAction struct {
 	callName string
 }
 
-func (action failingAction) Apply(ctx string, control core.StepControl[string]) (string, error) {
+func (action failingAction) Apply(ctx string, control core.ActionControl[string]) (string, error) {
 	if control == nil {
 		return "", errors.New("boom")
 	}

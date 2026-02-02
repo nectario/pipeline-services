@@ -5,7 +5,7 @@ use std::time::Instant;
 
 pub type UnaryOperator<ContextType> = Arc<dyn Fn(ContextType) -> ContextType + Send + Sync + 'static>;
 pub type StepAction<ContextType> =
-  Arc<dyn Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static>;
+  Arc<dyn Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static>;
 pub type OnErrorFn<ContextType> =
   Arc<dyn Fn(ContextType, PipelineError) -> ContextType + Send + Sync + 'static>;
 
@@ -32,7 +32,7 @@ pub fn default_on_error<ContextType>(ctx: ContextType, error: PipelineError) -> 
   ctx
 }
 
-pub struct StepControl<ContextType> {
+pub struct ActionControl<ContextType> {
   pub pipeline_name: String,
   pub on_error: OnErrorFn<ContextType>,
   pub errors: Vec<PipelineError>,
@@ -46,7 +46,7 @@ pub struct StepControl<ContextType> {
   pub run_start_instant: Option<Instant>,
 }
 
-impl<ContextType> StepControl<ContextType> {
+impl<ContextType> ActionControl<ContextType> {
   pub fn new(pipeline_name: impl Into<String>, on_error: OnErrorFn<ContextType>) -> Self {
     Self {
       pipeline_name: pipeline_name.into(),
@@ -119,6 +119,9 @@ impl<ContextType> StepControl<ContextType> {
     }
   }
 }
+
+#[deprecated(note = "Renamed to ActionControl.")]
+pub type StepControl<ContextType> = ActionControl<ContextType>;
 
 #[derive(Clone, Debug)]
 pub struct PipelineResult<ContextType> {
@@ -228,7 +231,7 @@ where
 
   pub fn add_pre_action_control<ActionFn>(&mut self, action: ActionFn) -> &mut Self
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.add_pre_action_control_named("", action)
   }
@@ -239,7 +242,7 @@ where
     action: ActionFn,
   ) -> &mut Self
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.pre_actions.push(RegisteredAction {
       name: name.into(),
@@ -268,7 +271,7 @@ where
 
   pub fn add_action_control<ActionFn>(&mut self, action: ActionFn) -> &mut Self
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.add_action_control_named("", action)
   }
@@ -279,7 +282,7 @@ where
     action: ActionFn,
   ) -> &mut Self
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.actions.push(RegisteredAction {
       name: name.into(),
@@ -308,7 +311,7 @@ where
 
   pub fn add_post_action_control<ActionFn>(&mut self, action: ActionFn) -> &mut Self
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.add_post_action_control_named("", action)
   }
@@ -319,7 +322,7 @@ where
     action: ActionFn,
   ) -> &mut Self
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     self.post_actions.push(RegisteredAction {
       name: name.into(),
@@ -335,7 +338,7 @@ where
 {
   pub fn run(&self, input_value: ContextType) -> PipelineResult<ContextType> {
     let mut ctx = input_value;
-    let mut control = StepControl::new(self.name.clone(), self.on_error.clone());
+    let mut control = ActionControl::new(self.name.clone(), self.on_error.clone());
     control.begin_run();
 
     ctx = self.run_phase("pre", ctx, &self.pre_actions, &mut control, false);
@@ -363,7 +366,7 @@ where
     phase: &str,
     start_ctx: ContextType,
     actions: &[RegisteredAction<ContextType>],
-    control: &mut StepControl<ContextType>,
+    control: &mut ActionControl<ContextType>,
     stop_on_short_circuit: bool,
   ) -> ContextType {
     let mut ctx = start_ctx;

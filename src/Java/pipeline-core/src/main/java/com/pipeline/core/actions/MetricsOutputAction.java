@@ -2,7 +2,7 @@ package com.pipeline.core.actions;
 
 import com.pipeline.core.ActionTiming;
 import com.pipeline.core.StepAction;
-import com.pipeline.core.StepControl;
+import com.pipeline.core.ActionControl;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,7 +38,7 @@ public final class MetricsOutputAction<C> implements StepAction<C> {
   }
 
   @Override
-  public C apply(C ctx, StepControl<C> control) {
+  public C apply(C ctx, ActionControl<C> control) {
     long nowNanos = nanoClock.getAsLong();
     long startNanos = control.runStartNanos();
     double pipelineLatencyMs = (startNanos == 0L) ? 0.0 : (nowNanos - startNanos) / 1_000_000.0;
@@ -60,4 +60,3 @@ public final class MetricsOutputAction<C> implements StepAction<C> {
     return ctx;
   }
 }
-

@@ -8,7 +8,7 @@ This Python port mirrors the Mojo `pipeline_services` package as closely as prac
 - JSON loader with `$local` (registry) and `$remote` (HTTP) actions
 """
 
-from .core.pipeline import ActionTiming, Pipeline, PipelineError, PipelineResult, StepControl
+from .core.pipeline import ActionControl, ActionTiming, Pipeline, PipelineError, PipelineResult, StepControl
 from .core.pipeline_provider import PipelineProvider, PipelineProviderMode
 from .core.registry import PipelineRegistry
 from .core.runtime_pipeline import RuntimePipeline

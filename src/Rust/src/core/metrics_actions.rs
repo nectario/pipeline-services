@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::core::pipeline::StepControl;
+use crate::core::pipeline::ActionControl;
 
-pub fn print_metrics<ContextType>(ctx: ContextType, control: &mut StepControl<ContextType>) -> ContextType {
+pub fn print_metrics<ContextType>(ctx: ContextType, control: &mut ActionControl<ContextType>) -> ContextType {
   let mut metrics_map: BTreeMap<String, serde_json::Value> = BTreeMap::new();
 
   metrics_map.insert("pipeline".to_string(), serde_json::Value::String(control.pipeline_name.clone()));
@@ -38,4 +38,3 @@ pub fn print_metrics<ContextType>(ctx: ContextType, control: &mut StepControl<Co
   println!("{}", serde_json::to_string(&metrics_map).unwrap_or_else(|_| "{}".to_string()));
   ctx
 }
-

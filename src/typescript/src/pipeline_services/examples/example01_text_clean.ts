@@ -1,7 +1,7 @@
-import { Pipeline, StepControl } from "../../index.js";
+import { ActionControl, Pipeline } from "../../index.js";
 import { normalize_whitespace, strip } from "./text_steps.js";
 
-async function truncate_at_280(text_value: unknown, control: StepControl): Promise<string> {
+async function truncate_at_280(text_value: unknown, control: ActionControl): Promise<string> {
   const text_string = String(text_value);
   if (text_string.length <= 280) {
     return text_string;

@@ -1,21 +1,12 @@
 using System;
-using System.Collections.Generic;
 
 namespace PipelineServices.Core;
 
+/// <summary>
+/// Backwards-compatible alias for <see cref="ActionControl{ContextType}"/>.
+/// </summary>
+[Obsolete("Renamed to ActionControl<ContextType>.")]
 public interface StepControl<ContextType>
+    : ActionControl<ContextType>
 {
-    void ShortCircuit();
-    bool IsShortCircuited();
-
-    ContextType RecordError(ContextType contextValue, Exception exception);
-
-    IReadOnlyList<PipelineError> Errors();
-
-    string PipelineName();
-
-    long RunStartNanos();
-
-    IReadOnlyList<ActionTiming> ActionTimings();
 }
-

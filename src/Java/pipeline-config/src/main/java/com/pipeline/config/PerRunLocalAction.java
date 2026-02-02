@@ -1,7 +1,7 @@
 package com.pipeline.config;
 
 import com.pipeline.core.StepAction;
-import com.pipeline.core.StepControl;
+import com.pipeline.core.ActionControl;
 
 import java.lang.reflect.Constructor;
 import java.util.Objects;
@@ -19,7 +19,7 @@ public final class PerRunLocalAction<C> implements StepAction<C> {
     }
 
     @Override
-    public C apply(C ctx, StepControl<C> control) {
+    public C apply(C ctx, ActionControl<C> control) {
         Object instance = newInstance();
         try {
             return invoke(instance, ctx, control);
@@ -36,7 +36,7 @@ public final class PerRunLocalAction<C> implements StepAction<C> {
         }
     }
 
-    private C invoke(Object instance, C ctx, StepControl<C> control) {
+    private C invoke(Object instance, C ctx, ActionControl<C> control) {
         if (invokeStyle == LocalActionInvokeStyle.UNARY_OPERATOR) {
             @SuppressWarnings("unchecked") UnaryOperator<C> unaryOperator = (UnaryOperator<C>) instance;
             return unaryOperator.apply(ctx);
@@ -61,4 +61,3 @@ public final class PerRunLocalAction<C> implements StepAction<C> {
         return "PerRunLocalAction(" + actionReference + ")";
     }
 }
-

@@ -8,7 +8,7 @@ from typing import Any, Callable, List, Optional, Union
 from ..remote.http_step import RemoteSpec, http_step
 
 UnaryOperator = Callable[[Any], Any]
-StepAction = Callable[[Any, "StepControl"], Any]
+StepAction = Callable[[Any, "ActionControl"], Any]
 OnErrorFn = Callable[[Any, "PipelineError"], Any]
 
 
@@ -34,7 +34,7 @@ def default_on_error(ctx: Any, err: PipelineError) -> Any:
     return ctx
 
 
-class StepControl:
+class ActionControl:
     def __init__(self, pipeline_name: str, on_error: OnErrorFn = default_on_error):
         self.pipeline_name = pipeline_name
         self.on_error = on_error
@@ -198,7 +198,7 @@ class Pipeline:
 
     def run(self, input_value: Any) -> PipelineResult:
         ctx = input_value
-        control = StepControl(self.name, self.on_error)
+        control = ActionControl(self.name, self.on_error)
         control.begin_run(time.perf_counter_ns())
 
         ctx = self.run_phase(
@@ -241,7 +241,7 @@ class Pipeline:
         phase: str,
         start_ctx: Any,
         actions: List[RegisteredAction],
-        control: StepControl,
+        control: ActionControl,
         stop_on_short_circuit: bool,
     ) -> Any:
         ctx = start_ctx
@@ -279,3 +279,6 @@ class Pipeline:
                 break
             step_index += 1
         return ctx
+
+
+StepControl = ActionControl

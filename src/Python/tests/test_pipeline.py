@@ -2,7 +2,7 @@ import unittest
 from dataclasses import dataclass
 from typing import List
 
-from pipeline_services.core.pipeline import Pipeline, StepControl
+from pipeline_services.core.pipeline import ActionControl, Pipeline
 
 
 @dataclass
@@ -22,7 +22,7 @@ class RecordedShortCircuitAction:
     name: str
     suffix: str = ""
 
-    def __call__(self, ctx: str, control: StepControl) -> str:
+    def __call__(self, ctx: str, control: ActionControl) -> str:
         self.calls.append(self.name)
         control.short_circuit()
         return ctx + self.suffix

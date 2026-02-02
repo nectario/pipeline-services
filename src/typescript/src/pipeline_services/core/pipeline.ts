@@ -17,7 +17,7 @@ export interface ActionTiming {
 }
 
 export type UnaryOperator = (ctx: unknown) => unknown | Promise<unknown>;
-export type StepAction = (ctx: unknown, control: StepControl) => unknown | Promise<unknown>;
+export type StepAction = (ctx: unknown, control: ActionControl) => unknown | Promise<unknown>;
 export type OnErrorFn = (ctx: unknown, err: PipelineError) => unknown;
 
 export function default_on_error(ctx: unknown, err: PipelineError): unknown {
@@ -25,7 +25,7 @@ export function default_on_error(ctx: unknown, err: PipelineError): unknown {
   return ctx;
 }
 
-export class StepControl {
+export class ActionControl {
   public pipeline_name: string;
   public on_error: OnErrorFn;
   public errors: Array<PipelineError>;
@@ -101,6 +101,9 @@ export class StepControl {
     this.timings.push(timing);
   }
 }
+
+/** @deprecated Renamed to `ActionControl`. */
+export { ActionControl as StepControl };
 
 export class PipelineResult {
   public context: unknown;
@@ -179,7 +182,7 @@ export function noop_unary(ctx: unknown): unknown {
   return ctx;
 }
 
-export function noop_action(ctx: unknown, control: StepControl): unknown {
+export function noop_action(ctx: unknown, control: ActionControl): unknown {
   void control;
   return ctx;
 }
@@ -270,7 +273,7 @@ export class Pipeline {
 
   async run(input_value: unknown): Promise<PipelineResult> {
     let ctx: unknown = input_value;
-    const control = new StepControl(this.name, this.on_error);
+    const control = new ActionControl(this.name, this.on_error);
     control.begin_run(now_ns());
 
     ctx = await this.run_phase("pre", ctx, this.pre_actions, control, false);
@@ -291,7 +294,7 @@ export class Pipeline {
     phase: string,
     start_ctx: unknown,
     actions: Array<RegisteredAction>,
-    control: StepControl,
+    control: ActionControl,
     stop_on_short_circuit: boolean,
   ): Promise<unknown> {
     let ctx: unknown = start_ctx;

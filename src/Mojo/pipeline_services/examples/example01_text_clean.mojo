@@ -1,9 +1,9 @@
 from python import PythonObject
 
-from pipeline_services.core.pipeline import Pipeline, StepControl
+from pipeline_services.core.pipeline import Pipeline, ActionControl
 from pipeline_services.examples.text_steps import strip, normalize_whitespace
 
-fn truncate_at_280(text_value: PythonObject, mut control: StepControl) raises -> PythonObject:
+fn truncate_at_280(text_value: PythonObject, mut control: ActionControl) raises -> PythonObject:
     var text_string: String = String(text_value)
     if len(text_string) <= 280:
         return PythonObject(text_string)

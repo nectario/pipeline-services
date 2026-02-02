@@ -394,7 +394,7 @@ public static class HttpStep
             this.method = method ?? throw new ArgumentNullException(nameof(method));
         }
 
-        public ContextType Apply(ContextType contextValue, StepControl<ContextType> control)
+        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
         {
             return Invoke(remoteSpec, method, contextValue);
         }

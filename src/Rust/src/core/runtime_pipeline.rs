@@ -2,8 +2,8 @@ use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
 use crate::core::pipeline::{
-  default_on_error, format_step_name, safe_panic_to_string, OnErrorFn, Pipeline, PipelineError,
-  RegisteredAction, RegisteredActionKind, StepControl,
+  default_on_error, format_step_name, safe_panic_to_string, ActionControl, OnErrorFn, Pipeline, PipelineError,
+  RegisteredAction, RegisteredActionKind,
 };
 
 pub struct RuntimePipeline<ContextType> {
@@ -22,7 +22,7 @@ pub struct RuntimePipeline<ContextType> {
   action_index: usize,
   post_index: usize,
 
-  control: StepControl<ContextType>,
+  control: ActionControl<ContextType>,
 }
 
 impl<ContextType> RuntimePipeline<ContextType>
@@ -32,7 +32,7 @@ where
   pub fn new(name: impl Into<String>, short_circuit_on_exception: bool, initial: ContextType) -> Self {
     let name_value = name.into();
     let on_error: OnErrorFn<ContextType> = Arc::new(default_on_error);
-    let control = StepControl::new(name_value.clone(), on_error.clone());
+    let control = ActionControl::new(name_value.clone(), on_error.clone());
 
     Self {
       name: name_value,
@@ -100,7 +100,7 @@ where
 
   pub fn add_action_control<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     let registered_action = RegisteredAction {
       name: "".to_string(),
@@ -130,7 +130,7 @@ where
 
   pub fn add_post_action_control<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
-    ActionFn: Fn(ContextType, &mut StepControl<ContextType>) -> ContextType + Send + Sync + 'static,
+    ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
     let registered_action = RegisteredAction {
       name: "".to_string(),

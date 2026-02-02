@@ -3,7 +3,7 @@ import { createServer, Server } from "node:http";
 import { AddressInfo } from "node:net";
 import test from "node:test";
 
-import { Pipeline, PipelineJsonLoader, PipelineRegistry, RemoteSpec, StepControl, http_step } from "../src/index.js";
+import { ActionControl, Pipeline, PipelineJsonLoader, PipelineRegistry, RemoteSpec, http_step } from "../src/index.js";
 
 async function identity_action(value: unknown): Promise<unknown> {
   return value;
@@ -26,7 +26,7 @@ class CallRecorderActions {
     return String(ctx) + "a1|";
   };
 
-  public action_two_short_circuit = async (ctx: unknown, control: StepControl): Promise<string> => {
+  public action_two_short_circuit = async (ctx: unknown, control: ActionControl): Promise<string> => {
     this.calls.push("a2");
     control.short_circuit();
     return String(ctx) + "a2|";

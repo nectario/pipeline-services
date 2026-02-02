@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func PrintMetrics[ContextType any](ctx ContextType, control StepControl[ContextType]) (ContextType, error) {
+func PrintMetrics[ContextType any](ctx ContextType, control ActionControl[ContextType]) (ContextType, error) {
 	metricsMap := map[string]any{}
 	metricsMap["pipeline"] = control.PipelineName()
 	metricsMap["shortCircuited"] = control.IsShortCircuited()

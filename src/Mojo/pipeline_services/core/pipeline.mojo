@@ -47,7 +47,7 @@ comptime OnErrorFn = fn(ctx: PythonObject, err: PipelineError) -> PythonObject
 fn default_on_error(ctx: PythonObject, err: PipelineError) -> PythonObject:
     return ctx
 
-struct StepControl:
+struct ActionControl:
     var pipeline_name: String
     var on_error: OnErrorFn
     var errors: List[PipelineError]
@@ -103,8 +103,10 @@ struct StepControl:
         var timing = ActionTiming(self.phase, self.index, self.action_name, elapsed_nanos, success)
         self.timings.append(timing)
 
+comptime StepControl = ActionControl
+
 comptime UnaryOperator = fn(ctx: PythonObject) raises -> PythonObject
-comptime StepAction = fn(ctx: PythonObject, mut control: StepControl) raises -> PythonObject
+comptime StepAction = fn(ctx: PythonObject, mut control: ActionControl) raises -> PythonObject
 
 struct PipelineResult:
     var context: PythonObject
@@ -131,7 +133,7 @@ struct PipelineResult:
 fn noop_unary(ctx: PythonObject) -> PythonObject:
     return ctx
 
-fn noop_action(ctx: PythonObject, mut control: StepControl) -> PythonObject:
+fn noop_action(ctx: PythonObject, mut control: ActionControl) -> PythonObject:
     return ctx
 
 fn noop_remote_spec() -> RemoteSpec:
@@ -251,7 +253,7 @@ struct Pipeline(Movable):
             perf_counter_ns_fn = PythonObject(None)
 
         var ctx: PythonObject = input_value
-        var control = StepControl(self.name, self.on_error)
+        var control = ActionControl(self.name, self.on_error)
         control.begin_run(now_ns(perf_counter_ns_fn))
 
         ctx = self.run_phase("pre", ctx, self.pre_actions, perf_counter_ns_fn, control, stop_on_short_circuit = False)
@@ -270,7 +272,7 @@ struct Pipeline(Movable):
                  start_ctx: PythonObject,
                  actions: List[RegisteredAction],
                  perf_counter_ns_fn: PythonObject,
-                 mut control: StepControl,
+                 mut control: ActionControl,
                  stop_on_short_circuit: Bool) -> PythonObject:
         var ctx = start_ctx
         var step_index: Int = 0

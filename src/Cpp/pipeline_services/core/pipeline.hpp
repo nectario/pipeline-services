@@ -51,10 +51,10 @@ template <typename ContextType>
 using UnaryOperator = std::function<ContextType(ContextType)>;
 
 template <typename ContextType>
-class StepControl;
+class ActionControl;
 
 template <typename ContextType>
-using StepAction = std::function<ContextType(ContextType, StepControl<ContextType>&)>;
+using StepAction = std::function<ContextType(ContextType, ActionControl<ContextType>&)>;
 
 template <typename ContextType>
 using OnErrorFn = std::function<ContextType(ContextType, const PipelineError&)>;
@@ -94,9 +94,9 @@ inline std::string formatStepName(StepPhase phase, std::size_t index, const std:
 }
 
 template <typename ContextType>
-class StepControl {
+class ActionControl {
 public:
-  explicit StepControl(std::string pipelineName, OnErrorFn<ContextType> onError = defaultOnError<ContextType>)
+  explicit ActionControl(std::string pipelineName, OnErrorFn<ContextType> onError = defaultOnError<ContextType>)
     : pipelineName_(std::move(pipelineName)),
       onError_(std::move(onError)),
       errors_(),
@@ -207,6 +207,9 @@ private:
 };
 
 template <typename ContextType>
+using StepControl = ActionControl<ContextType>;
+
+template <typename ContextType>
 struct PipelineResult {
   ContextType context;
   bool shortCircuited;
@@ -223,7 +226,7 @@ template <typename ContextType>
 struct UnaryAdapter {
   UnaryOperator<ContextType> unary;
 
-  ContextType operator()(ContextType ctx, StepControl<ContextType>& control) const {
+  ContextType operator()(ContextType ctx, ActionControl<ContextType>& control) const {
     (void)control;
     return unary(std::move(ctx));
   }
@@ -231,7 +234,7 @@ struct UnaryAdapter {
 
 template <typename ContextType, typename CallableType>
 StepAction<ContextType> toStepAction(CallableType callable) {
-  if constexpr (std::is_invocable_r_v<ContextType, CallableType, ContextType, StepControl<ContextType>&>) {
+  if constexpr (std::is_invocable_r_v<ContextType, CallableType, ContextType, ActionControl<ContextType>&>) {
     StepAction<ContextType> stepAction = std::move(callable);
     return stepAction;
   } else if constexpr (std::is_invocable_r_v<ContextType, CallableType, ContextType>) {
@@ -240,7 +243,7 @@ StepAction<ContextType> toStepAction(CallableType callable) {
     StepAction<ContextType> stepAction = std::move(adapter);
     return stepAction;
   } else {
-    throw std::invalid_argument("Action must be callable as (C)->C or (C, StepControl<C>&)->C");
+    throw std::invalid_argument("Action must be callable as (C)->C or (C, ActionControl<C>&)->C");
   }
 }
 
@@ -320,7 +323,7 @@ public:
     ContextType ctx = std::move(input_value);
 
     const auto runStartTimepoint = std::chrono::steady_clock::now();
-    StepControl<ContextType> control(name_, onError_);
+    ActionControl<ContextType> control(name_, onError_);
     control.beginRun(runStartTimepoint);
 
     ctx = runPhase(control, StepPhase::PRE, std::move(ctx), preActions_, false);
@@ -353,7 +356,7 @@ private:
   };
 
   ContextType runPhase(
-    StepControl<ContextType>& control,
+    ActionControl<ContextType>& control,
     StepPhase phase,
     ContextType startContext,
     const std::vector<RegisteredAction>& actions,

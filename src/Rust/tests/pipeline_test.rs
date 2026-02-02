@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use pipeline_services::remote::http_step::{http_step, RemoteSpec};
-use pipeline_services::{Pipeline, PipelineJsonLoader, PipelineRegistry, StepControl};
+use pipeline_services::{ActionControl, Pipeline, PipelineJsonLoader, PipelineRegistry};
 
 const REMOTE_FIXTURE_BODY: &str = "Hello from remote fixture\n";
 
@@ -121,7 +121,7 @@ fn short_circuit_stops_main_only() {
   };
 
   let calls_two = calls.clone();
-  let action_two_short_circuit = move |ctx: String, control: &mut StepControl<String>| -> String {
+  let action_two_short_circuit = move |ctx: String, control: &mut ActionControl<String>| -> String {
     calls_two.lock().unwrap().push("a2".to_string());
     control.short_circuit();
     format!("{ctx}a2|")

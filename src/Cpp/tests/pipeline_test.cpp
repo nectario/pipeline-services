@@ -98,7 +98,7 @@ struct ShortCircuitAction {
   std::string call_name;
   std::string suffix;
 
-  std::string operator()(std::string ctx, pipeline_services::core::StepControl<std::string>& control) const {
+  std::string operator()(std::string ctx, pipeline_services::core::ActionControl<std::string>& control) const {
     calls->push_back(call_name);
     control.shortCircuit();
     return ctx + suffix;

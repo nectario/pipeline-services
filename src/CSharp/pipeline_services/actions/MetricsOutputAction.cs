@@ -34,7 +34,7 @@ public sealed class MetricsOutputAction<ContextType> : StepAction<ContextType>
         this.sink = sink ?? throw new ArgumentNullException(nameof(sink));
     }
 
-    public ContextType Apply(ContextType contextValue, StepControl<ContextType> control)
+    public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
     {
         if (control == null)
         {
@@ -71,4 +71,3 @@ public sealed class MetricsOutputAction<ContextType> : StepAction<ContextType>
         Console.WriteLine(json);
     }
 }
-

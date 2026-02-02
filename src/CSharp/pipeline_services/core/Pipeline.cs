@@ -117,36 +117,36 @@ public sealed class Pipeline<ContextType>
         return AddPostAction(actionName, new UnaryActionAdapter(unaryAction));
     }
 
-    public Pipeline<ContextType> AddPreAction(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public Pipeline<ContextType> AddPreAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddPreAction("", actionFunction);
     }
 
     public Pipeline<ContextType> AddPreAction(
         string actionName,
-        Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+        Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddPreAction(actionName, new StepActionAdapter(actionFunction));
     }
 
-    public Pipeline<ContextType> AddAction(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public Pipeline<ContextType> AddAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddAction("", actionFunction);
     }
 
-    public Pipeline<ContextType> AddAction(string actionName, Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public Pipeline<ContextType> AddAction(string actionName, Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddAction(actionName, new StepActionAdapter(actionFunction));
     }
 
-    public Pipeline<ContextType> AddPostAction(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+    public Pipeline<ContextType> AddPostAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddPostAction("", actionFunction);
     }
 
     public Pipeline<ContextType> AddPostAction(
         string actionName,
-        Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+        Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
     {
         return AddPostAction(actionName, new StepActionAdapter(actionFunction));
     }
@@ -161,7 +161,7 @@ public sealed class Pipeline<ContextType>
         long runStartTimestamp = Stopwatch.GetTimestamp();
         ContextType contextValue = input;
 
-        DefaultStepControl control = new DefaultStepControl(name, onError);
+        DefaultActionControl control = new DefaultActionControl(name, onError);
         control.BeginRun(NanoTime.GetNowNanos());
 
         contextValue = RunPhase(control, StepPhase.Pre, contextValue, preActions, stopOnShortCircuit: false);
@@ -186,7 +186,7 @@ public sealed class Pipeline<ContextType>
     }
 
     private ContextType RunPhase(
-        DefaultStepControl control,
+        DefaultActionControl control,
         StepPhase phase,
         ContextType startContext,
         List<RegisteredAction> actionList,
@@ -272,7 +272,7 @@ public sealed class Pipeline<ContextType>
             this.unaryAction = unaryAction ?? throw new ArgumentNullException(nameof(unaryAction));
         }
 
-        public ContextType Apply(ContextType contextValue, StepControl<ContextType> control)
+        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
         {
             return unaryAction(contextValue);
         }
@@ -280,14 +280,14 @@ public sealed class Pipeline<ContextType>
 
     private sealed class StepActionAdapter : StepAction<ContextType>
     {
-        private readonly Func<ContextType, StepControl<ContextType>, ContextType> actionFunction;
+        private readonly Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction;
 
-        public StepActionAdapter(Func<ContextType, StepControl<ContextType>, ContextType> actionFunction)
+        public StepActionAdapter(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
         {
             this.actionFunction = actionFunction ?? throw new ArgumentNullException(nameof(actionFunction));
         }
 
-        public ContextType Apply(ContextType contextValue, StepControl<ContextType> control)
+        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
         {
             return actionFunction(contextValue, control);
         }
@@ -306,7 +306,7 @@ public sealed class Pipeline<ContextType>
         public StepAction<ContextType> Action { get; }
     }
 
-    private sealed class DefaultStepControl : StepControl<ContextType>
+    private sealed class DefaultActionControl : ActionControl<ContextType>
     {
         private readonly string pipelineName;
         private readonly OnErrorHandler<ContextType> onErrorHandler;
@@ -320,7 +320,7 @@ public sealed class Pipeline<ContextType>
         private string stepName;
         private long runStartNanos;
 
-        public DefaultStepControl(string pipelineName, OnErrorHandler<ContextType> onErrorHandler)
+        public DefaultActionControl(string pipelineName, OnErrorHandler<ContextType> onErrorHandler)
         {
             this.pipelineName = pipelineName ?? throw new ArgumentNullException(nameof(pipelineName));
             this.onErrorHandler = onErrorHandler ?? throw new ArgumentNullException(nameof(onErrorHandler));

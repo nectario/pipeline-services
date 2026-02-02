@@ -264,7 +264,7 @@ struct HttpStepAction {
   RemoteSpec<ContextType> spec;
   std::string method;
 
-  ContextType operator()(ContextType ctx, pipeline_services::core::StepControl<ContextType>& control) const {
+  ContextType operator()(ContextType ctx, pipeline_services::core::ActionControl<ContextType>& control) const {
     (void)control;
     return invoke<ContextType>(spec, method, ctx);
   }

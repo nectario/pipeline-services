@@ -4,7 +4,7 @@
 #include "pipeline_services/core/pipeline.hpp"
 #include "pipeline_services/examples/text_steps.hpp"
 
-std::string truncate_at_280(std::string text_value, pipeline_services::core::StepControl<std::string>& control) {
+std::string truncate_at_280(std::string text_value, pipeline_services::core::ActionControl<std::string>& control) {
   if (text_value.size() <= 280) {
     return text_value;
   }

@@ -3,10 +3,10 @@
 This folder contains the Mojo port of Pipeline Services, targeting Mojo `0.26.x` via `pixi`.
 
 ## What’s implemented
-- Core runtime: `Pipeline`, `StepControl`, `PipelineResult`, `PipelineError`
+- Core runtime: `Pipeline`, `ActionControl` (legacy: `StepControl`), `PipelineResult`, `PipelineError`
 - Two action shapes:
   - unary: `fn(ctx: PythonObject) -> PythonObject`
-  - control-aware: `fn(ctx: PythonObject, mut control: StepControl) -> PythonObject`
+  - control-aware: `fn(ctx: PythonObject, mut control: ActionControl) -> PythonObject`
 - Exception capture + `shortCircuitOnException` semantics (see `docs/PORTABILITY_CONTRACT.md`)
 - Minimal JSON loader using a registry:
   - `$local` actions from `PipelineRegistry`

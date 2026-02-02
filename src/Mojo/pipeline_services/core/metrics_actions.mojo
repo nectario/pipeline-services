@@ -1,9 +1,9 @@
 from python import Python
 from python import PythonObject
 
-from .pipeline import StepControl
+from .pipeline import ActionControl
 
-fn print_metrics(ctx: PythonObject, mut control: StepControl) -> PythonObject:
+fn print_metrics(ctx: PythonObject, mut control: ActionControl) -> PythonObject:
     try:
         var builtins_module = Python.import_module("builtins")
         var time_module = Python.import_module("time")

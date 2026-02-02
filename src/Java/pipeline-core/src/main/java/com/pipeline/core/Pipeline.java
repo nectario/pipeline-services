@@ -137,7 +137,7 @@ public final class Pipeline<C> {
 
         long runStartNanos = System.nanoTime();
         C ctx = Objects.requireNonNull(input, "input");
-        DefaultStepControl<C> control = new DefaultStepControl<>(name, onError);
+        DefaultActionControl<C> control = new DefaultActionControl<>(name, onError);
         control.beginRun(runStartNanos);
 
         // pre: always run all pre-actions
@@ -165,7 +165,7 @@ public final class Pipeline<C> {
     public boolean shortCircuitOnException() { return shortCircuitOnException; }
     public int size() { return actions.size(); }
 
-    private C runPhase(DefaultStepControl<C> control,
+    private C runPhase(DefaultActionControl<C> control,
                        com.pipeline.metrics.MetricsRecorder rec,
                        StepPhase phase,
                        C start,
@@ -237,7 +237,7 @@ public final class Pipeline<C> {
         }
     }
 
-    private static final class DefaultStepControl<C> implements StepControl<C> {
+    private static final class DefaultActionControl<C> implements ActionControl<C> {
         private final String pipelineName;
         private final BiFunction<C, PipelineError, C> onError;
         private final List<PipelineError> errors = new ArrayList<>();
@@ -250,7 +250,7 @@ public final class Pipeline<C> {
         private String stepName = "?";
         private long runStartNanos;
 
-        private DefaultStepControl(String pipelineName, BiFunction<C, PipelineError, C> onError) {
+        private DefaultActionControl(String pipelineName, BiFunction<C, PipelineError, C> onError) {
             this.pipelineName = Objects.requireNonNull(pipelineName, "pipelineName");
             this.onError = Objects.requireNonNull(onError, "onError");
         }

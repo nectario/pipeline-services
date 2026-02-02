@@ -3,7 +3,7 @@ package com.pipeline.config;
 import com.pipeline.core.ActionPool;
 import com.pipeline.core.ResettableAction;
 import com.pipeline.core.StepAction;
-import com.pipeline.core.StepControl;
+import com.pipeline.core.ActionControl;
 
 import java.util.Objects;
 import java.util.function.UnaryOperator;
@@ -20,7 +20,7 @@ public final class PooledLocalAction<C> implements StepAction<C> {
     }
 
     @Override
-    public C apply(C ctx, StepControl<C> control) {
+    public C apply(C ctx, ActionControl<C> control) {
         Object instance = pool.borrow();
         RuntimeException actionException = null;
         try {
@@ -43,7 +43,7 @@ public final class PooledLocalAction<C> implements StepAction<C> {
         }
     }
 
-    private C invoke(Object instance, C ctx, StepControl<C> control) {
+    private C invoke(Object instance, C ctx, ActionControl<C> control) {
         if (invokeStyle == LocalActionInvokeStyle.UNARY_OPERATOR) {
             @SuppressWarnings("unchecked") UnaryOperator<C> unaryOperator = (UnaryOperator<C>) instance;
             return unaryOperator.apply(ctx);

@@ -7,7 +7,7 @@ import (
 	"pipeline-services-go/pipeline_services/examples"
 )
 
-func truncateAt280(value string, control core.StepControl[string]) string {
+func truncateAt280(value string, control core.ActionControl[string]) string {
 	if len(value) <= 280 {
 		return value
 	}

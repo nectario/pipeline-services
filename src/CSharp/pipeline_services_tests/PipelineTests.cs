@@ -113,23 +113,23 @@ public sealed class PipelineTests
         return value + "X";
     }
 
-    private static string ThrowBoom(string value, StepControl<string> control)
+    private static string ThrowBoom(string value, ActionControl<string> control)
     {
         throw new InvalidOperationException("boom");
     }
 
-    private static string PostThrowBoom(string value, StepControl<string> control)
+    private static string PostThrowBoom(string value, ActionControl<string> control)
     {
         throw new InvalidOperationException("boom");
     }
 
-    private static string ShortCircuitAndEnd(string value, StepControl<string> control)
+    private static string ShortCircuitAndEnd(string value, ActionControl<string> control)
     {
         control.ShortCircuit();
         return "END";
     }
 
-    private static string PreShortCircuit(string value, StepControl<string> control)
+    private static string PreShortCircuit(string value, ActionControl<string> control)
     {
         control.ShortCircuit();
         return "P1";

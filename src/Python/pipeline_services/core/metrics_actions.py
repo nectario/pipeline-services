@@ -3,10 +3,10 @@ from __future__ import annotations
 import time
 from typing import Any, Dict
 
-from .pipeline import StepControl
+from .pipeline import ActionControl
 
 
-def print_metrics(ctx: Any, control: StepControl) -> Any:
+def print_metrics(ctx: Any, control: ActionControl) -> Any:
     try:
         metrics_map: Dict[str, Any] = {}
 
@@ -30,4 +30,3 @@ def print_metrics(ctx: Any, control: StepControl) -> Any:
     except Exception as caught_error:
         print("metricsError=", str(caught_error))
     return ctx
-

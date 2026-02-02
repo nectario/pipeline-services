@@ -5,17 +5,19 @@ It defines observable behavior and the minimal API surface a port should expose.
 
 ## 1. Core Abstractions
 
-### 1.1 `StepAction<C>` + `StepControl<C>`
+### 1.1 `StepAction<C>` + `ActionControl<C>`
 
 Ports should support two step shapes:
 - **Unary**: `C -> C` (simple transforms)
 - **Control-aware**: `(C, control) -> C` (explicit short-circuit + error recording)
 
-`StepControl<C>` provides:
+`ActionControl<C>` provides:
 - `shortCircuit()`: request early termination of MAIN actions
 - `isShortCircuited()`: query current state
 - `recordError(ctx, exception) -> ctx`: record an error and optionally return an updated ctx (via callback hook)
 - `errors() -> [PipelineError]`: the accumulated errors
+
+Note: Ports may keep a backwards-compatible alias named `StepControl<C>` for older code.
 
 ### 1.2 `Pipeline<C>`
 
@@ -113,4 +115,4 @@ Ports may provide a `RemoteSpec<C>` that maps `C` to request JSON and maps `(C, 
 ## 5. Naming
 
 Public API names should match where possible:
-- `Pipeline`, `StepAction`, `StepControl`, `PipelineResult`, `PipelineError`, `PipelineJsonLoader`
+- `Pipeline`, `StepAction`, `ActionControl` (legacy: `StepControl`), `PipelineResult`, `PipelineError`, `PipelineJsonLoader`

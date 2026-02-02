@@ -29,13 +29,13 @@ public final class RuntimePipeline<T> {
   // Indices for metrics labels (do not affect recording)
   private int preIdx = 0, actionIdx = 0, postIdx = 0;
 
-  private final SessionStepControl<T> control;
+  private final SessionActionControl<T> control;
 
   public RuntimePipeline(String name, boolean shortCircuitOnException, T initial) {
     this.name = name;
     this.shortCircuitOnException = shortCircuitOnException;
     this.current = initial;
-    this.control = new SessionStepControl<>(name);
+    this.control = new SessionActionControl<>(name);
   }
 
   /** Apply a pre action (record + execute unless ended) and return the updated value. */
@@ -138,7 +138,7 @@ public final class RuntimePipeline<T> {
     return (ctx, control) -> fn.apply(ctx);
   }
 
-  private static final class SessionStepControl<C> implements StepControl<C> {
+  private static final class SessionActionControl<C> implements ActionControl<C> {
     private final String pipelineName;
     private final List<PipelineError> errors = new ArrayList<>();
     private boolean shortCircuited;
@@ -146,7 +146,7 @@ public final class RuntimePipeline<T> {
     private int index = 0;
     private String stepName = "?";
 
-    private SessionStepControl(String pipelineName) {
+    private SessionActionControl(String pipelineName) {
       this.pipelineName = Objects.requireNonNull(pipelineName, "pipelineName");
     }
 

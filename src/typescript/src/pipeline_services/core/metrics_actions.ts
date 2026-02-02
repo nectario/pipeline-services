@@ -1,6 +1,6 @@
-import { StepControl, now_ns } from "./pipeline.js";
+import { ActionControl, now_ns } from "./pipeline.js";
 
-export async function print_metrics(ctx: unknown, control: StepControl): Promise<unknown> {
+export async function print_metrics(ctx: unknown, control: ActionControl): Promise<unknown> {
   try {
     const metrics_map: Record<string, unknown> = {};
 
@@ -30,4 +30,3 @@ export async function print_metrics(ctx: unknown, control: StepControl): Promise
   }
   return ctx;
 }
-

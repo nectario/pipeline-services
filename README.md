@@ -46,7 +46,7 @@ This repo is organized around a shared, language-agnostic behavior contract (`do
 
 ## Java modules (Maven)
 ```
-pipeline-core        # Pipeline<C>, StepAction<C>, StepControl<C>, PipelineResult<C>, RuntimePipeline<T>, metrics
+pipeline-core        # Pipeline<C>, StepAction<C>, ActionControl<C> (legacy: StepControl<C>), PipelineResult<C>, RuntimePipeline<T>, metrics
 pipeline-config      # Minimal JSON loader for unary String pipelines
 pipeline-remote      # HTTP action adapter (json GET/POST)
 pipeline-prompt      # Prompt-to-code generated actions (optional check-in) + Java helpers

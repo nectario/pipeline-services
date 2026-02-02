@@ -57,12 +57,12 @@ public sealed class RuntimePipelineTests
         return value.ToUpperInvariant();
     }
 
-    private static string ThrowBoom(string value, StepControl<string> control)
+    private static string ThrowBoom(string value, ActionControl<string> control)
     {
         throw new InvalidOperationException("boom");
     }
 
-    private static string ShortCircuitAndFinish(string value, StepControl<string> control)
+    private static string ShortCircuitAndFinish(string value, ActionControl<string> control)
     {
         control.ShortCircuit();
         return "FINISH";
