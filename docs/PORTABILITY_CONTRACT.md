@@ -116,3 +116,14 @@ Ports may provide a `RemoteSpec<C>` that maps `C` to request JSON and maps `(C, 
 
 Public API names should match where possible:
 - `Pipeline`, `StepAction`, `ActionControl` (legacy: `StepControl`), `PipelineResult`, `PipelineError`, `PipelineJsonLoader`
+
+## 6. Programmatic Lifecycle (Optional)
+
+Ports may provide a `PipelineProvider<C>` helper for explicit reuse policy:
+
+- `shared`: one pipeline instance reused across runs (pipeline/actions must be safe for concurrent use)
+- `pooled`: pipeline instances reused but never shared concurrently
+- `perRun`: a new pipeline instance per run
+
+Optional extension: ports may allow pooled reuse of stateful actions across pipeline instances via an `ActionPoolCache` (or equivalent).
+In Java this is exposed as `PipelineProvider.withPooledLocalActions(cache)` and requires poolable actions to implement `ResettableAction` so per-run state does not leak.

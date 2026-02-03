@@ -17,6 +17,8 @@ public final class Pipeline<C> {
     private final boolean shortCircuitOnException;
     private volatile BiFunction<C, PipelineError, C> onError = (ctx, err) -> ctx;
 
+    private volatile boolean pooledLocalActionsEnabled;
+
     private final List<RegisteredAction<C>> preActions = new ArrayList<>();
     private final List<RegisteredAction<C>> actions = new ArrayList<>();
     private final List<RegisteredAction<C>> postActions = new ArrayList<>();
@@ -165,6 +167,47 @@ public final class Pipeline<C> {
     public boolean shortCircuitOnException() { return shortCircuitOnException; }
     public int size() { return actions.size(); }
 
+    void enablePooledLocalActions(ActionPoolCache actionPoolCache) {
+        Objects.requireNonNull(actionPoolCache, "actionPoolCache");
+        if (pooledLocalActionsEnabled) return;
+        synchronized (this) {
+            if (pooledLocalActionsEnabled) return;
+            pooledLocalActionsEnabled = true;
+        }
+
+        enablePooledLocalActionsForPhase(actionPoolCache, StepPhase.PRE, preActions);
+        enablePooledLocalActionsForPhase(actionPoolCache, StepPhase.MAIN, actions);
+        enablePooledLocalActionsForPhase(actionPoolCache, StepPhase.POST, postActions);
+    }
+
+    private void enablePooledLocalActionsForPhase(
+        ActionPoolCache actionPoolCache,
+        StepPhase phase,
+        List<RegisteredAction<C>> registeredActions
+    ) {
+        for (int index = 0; index < registeredActions.size(); index++) {
+            RegisteredAction<C> registeredAction = registeredActions.get(index);
+            StepAction<C> action = registeredAction.action();
+            if (action instanceof PooledAction<?>) continue;
+
+            PoolablePrototype poolablePrototype = poolablePrototype(action);
+            if (poolablePrototype == null) continue;
+
+            String actionLabel = registeredAction.name();
+            String normalizedLabel = (actionLabel == null) ? "" : actionLabel.strip();
+
+            ActionCacheKey actionCacheKey = new ActionCacheKey(name, phase, index, normalizedLabel);
+            ActionPoolCache.ActionPoolEntry entry = actionPoolCache.entry(
+                actionCacheKey,
+                poolablePrototype.actionClass(),
+                poolablePrototype.invokeStyle());
+            entry.pool().trySeed(poolablePrototype.prototype());
+
+            StepAction<C> pooledAction = new PooledAction<>(entry.pool(), poolablePrototype.invokeStyle(), actionCacheKey.toString());
+            registeredActions.set(index, RegisteredAction.named(actionLabel, pooledAction));
+        }
+    }
+
     private C runPhase(DefaultActionControl<C> control,
                        com.pipeline.metrics.MetricsRecorder rec,
                        StepPhase phase,
@@ -224,7 +267,19 @@ public final class Pipeline<C> {
 
     private static <C> StepAction<C> adapt(UnaryOperator<C> fn) {
         Objects.requireNonNull(fn, "fn");
-        return (ctx, control) -> fn.apply(ctx);
+        return new UnaryAdapterAction<>(fn);
+    }
+
+    private record PoolablePrototype(Object prototype, Class<?> actionClass, ActionInvokeStyle invokeStyle) {}
+
+    private PoolablePrototype poolablePrototype(StepAction<C> action) {
+        if (action instanceof UnaryAdapterAction<?> unaryAdapterAction) {
+            Object unaryOperator = unaryAdapterAction.unaryOperator();
+            if (!(unaryOperator instanceof ResettableAction)) return null;
+            return new PoolablePrototype(unaryOperator, unaryOperator.getClass(), ActionInvokeStyle.UNARY_OPERATOR);
+        }
+        if (!(action instanceof ResettableAction)) return null;
+        return new PoolablePrototype(action, action.getClass(), ActionInvokeStyle.STEP_ACTION);
     }
 
     private record RegisteredAction<C>(String name, StepAction<C> action) {
@@ -234,6 +289,23 @@ public final class Pipeline<C> {
 
         static <C> RegisteredAction<C> named(String name, StepAction<C> action) {
             return new RegisteredAction<>(name, action);
+        }
+    }
+
+    private static final class UnaryAdapterAction<C> implements StepAction<C> {
+        private final UnaryOperator<C> unaryOperator;
+
+        private UnaryAdapterAction(UnaryOperator<C> unaryOperator) {
+            this.unaryOperator = Objects.requireNonNull(unaryOperator, "unaryOperator");
+        }
+
+        private UnaryOperator<C> unaryOperator() {
+            return unaryOperator;
+        }
+
+        @Override
+        public C apply(C ctx, ActionControl<C> control) {
+            return unaryOperator.apply(ctx);
         }
     }
 

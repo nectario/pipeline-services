@@ -286,6 +286,37 @@ PipelineProvider<String> provider = PipelineProvider.pooled(
 String out = provider.run("  hello   world  ").context();
 ```
 
+If you want to reuse the same *pipeline plan* while ensuring stateful actions are never shared concurrently, enable pooled local actions.
+Any action that implements `ResettableAction` is pooled under a stable key (`pipelineName + phase + index + label`) and `reset()` is called after each invocation:
+
+```java
+import com.pipeline.core.ActionPoolCache;
+import com.pipeline.core.Pipeline;
+import com.pipeline.core.PipelineProvider;
+
+ActionPoolCache actionPoolCache = new ActionPoolCache(64);
+
+PipelineProvider<String> provider = PipelineProvider.pooled(
+    () -> new Pipeline<String>("programmatic_pooled_actions", true)
+        .addAction("normalize", new PooledScratchNormalizeAction()),
+    64
+).withPooledLocalActions(actionPoolCache);
+
+String out = provider.run("  hello   world  ").context();
+```
+
+If you prefer method references, you can decorate an action with an explicit reset hook:
+
+```java
+import com.pipeline.core.Actions;
+import com.pipeline.core.Pipeline;
+
+PooledScratchNormalizeAction normalize = new PooledScratchNormalizeAction();
+
+Pipeline<String> pipeline = new Pipeline<String>("ref_style", true)
+    .addAction("normalize", Actions.resettable(normalize::apply, normalize::reset));
+```
+
 Java loader (`pipeline-config`) is intentionally minimal and currently targets unary **String** pipelines:
 
 ```java
