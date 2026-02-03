@@ -311,10 +311,9 @@ If you prefer method references, you can decorate an action with an explicit res
 import com.pipeline.core.Actions;
 import com.pipeline.core.Pipeline;
 
-PooledScratchNormalizeAction normalize = new PooledScratchNormalizeAction();
-
 Pipeline<String> pipeline = new Pipeline<String>("ref_style", true)
-    .addAction("normalize", Actions.resettable(normalize::apply, normalize::reset));
+    .addAction("normalize",
+        Actions.resettable(new PooledScratchNormalizeAction(), PooledScratchNormalizeAction::reset));
 ```
 
 Java loader (`pipeline-config`) is intentionally minimal and currently targets unary **String** pipelines:
