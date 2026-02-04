@@ -62,6 +62,7 @@ public final class PipelineJsonLoader {
         String type = root.path("type").asText("unary");
         if (!"unary".equals(type)) throw new IOException("Only unary pipelines supported by this loader");
         boolean singletonMode = root.path("singletonMode").asBoolean(false);
+        boolean reflectionEnabled = root.path("reflectionEnabled").asBoolean(true);
         boolean shortCircuitOnException = root.has("shortCircuitOnException")
             ? root.path("shortCircuitOnException").asBoolean(true)
             : root.path("shortCircuit").asBoolean(true);
@@ -70,9 +71,9 @@ public final class PipelineJsonLoader {
 
         Pipeline<String> pipeline = new Pipeline<>(name, shortCircuitOnException);
 
-        addSection(root, "preActions", "pre", JsonSection.PRE, pipeline, registry, remoteDefaults, singletonMode);
-        addSection(root, "actions", "steps", JsonSection.MAIN, pipeline, registry, remoteDefaults, singletonMode);
-        addSection(root, "postActions", "post", JsonSection.POST, pipeline, registry, remoteDefaults, singletonMode);
+        addSection(root, "preActions", "pre", JsonSection.PRE, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
+        addSection(root, "actions", "steps", JsonSection.MAIN, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
+        addSection(root, "postActions", "post", JsonSection.POST, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
         return pipeline;
     }
 
@@ -90,7 +91,8 @@ public final class PipelineJsonLoader {
         Pipeline<String> pipeline,
         ActionRegistry<String> registry,
         HttpStep.RemoteDefaults remoteDefaults,
-        boolean singletonMode
+        boolean singletonMode,
+        boolean reflectionEnabled
     ) throws IOException {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(preferredFieldName, "preferredFieldName");
@@ -109,7 +111,7 @@ public final class PipelineJsonLoader {
         }
 
         for (JsonNode actionNode : actionsArray) {
-            addActionNode(actionNode, section, pipeline, registry, remoteDefaults, singletonMode);
+            addActionNode(actionNode, section, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
         }
     }
 
@@ -119,7 +121,8 @@ public final class PipelineJsonLoader {
         Pipeline<String> pipeline,
         ActionRegistry<String> registry,
         HttpStep.RemoteDefaults remoteDefaults,
-        boolean singletonMode
+        boolean singletonMode,
+        boolean reflectionEnabled
     ) throws IOException {
         if (actionNode == null || actionNode.isNull() || !actionNode.isObject()) {
             throw new IOException("Each action must be a JSON object");
@@ -133,6 +136,11 @@ public final class PipelineJsonLoader {
             if (localNode == null || !localNode.isTextual()) throw new IOException("$local must be a string");
             String localRef = localNode.asText();
 
+            if (isIdentityLocalRef(localRef)) {
+                addUnaryToPipeline(pipeline, section, actionName, ctx -> ctx);
+                return;
+            }
+
             boolean isRegistryLocal = registry.hasUnary(localRef) || registry.hasAction(localRef);
             ActionLifecycle lifecycle = ActionLifecycle.SHARED;
             if (singletonMode) {
@@ -143,7 +151,7 @@ public final class PipelineJsonLoader {
             if (singletonMode && lifecycle == ActionLifecycle.POOLED) {
                 poolMax = parsePoolMax(actionNode, poolMax);
             }
-            addLocal(pipeline, registry, localRef, actionName, section, singletonMode, isRegistryLocal, lifecycle, poolMax);
+            addLocal(pipeline, registry, localRef, actionName, section, singletonMode, reflectionEnabled, isRegistryLocal, lifecycle, poolMax);
             return;
         }
 
@@ -184,6 +192,7 @@ public final class PipelineJsonLoader {
         String actionName,
         JsonSection section,
         boolean singletonMode,
+        boolean reflectionEnabled,
         boolean isRegistryLocal,
         ActionLifecycle lifecycle,
         int poolMax
@@ -205,6 +214,10 @@ public final class PipelineJsonLoader {
             throw new IOException(
                 "Prompt-generated action is missing from the registry: " + localRef
                     + ". Run prompt codegen and register generated actions (com.pipeline.generated.PromptGeneratedActions.register).");
+        }
+
+        if (!reflectionEnabled) {
+            throw new IOException("Reflection is disabled. Register the action in the ActionRegistry or use built-ins (e.g., $local: \"identity\"): " + localRef);
         }
 
         if (!singletonMode || lifecycle == ActionLifecycle.SHARED) {
@@ -407,6 +420,12 @@ public final class PipelineJsonLoader {
             }
         }
         return false;
+    }
+
+    private static boolean isIdentityLocalRef(String localRef) {
+        if (localRef == null) return false;
+        String normalized = localRef.trim();
+        return "identity".equalsIgnoreCase(normalized);
     }
 
     private static Path findPipelinesRoot(Path sourceFilePath) throws IOException {

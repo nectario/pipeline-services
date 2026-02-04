@@ -327,6 +327,13 @@ try (var in = getClass().getResourceAsStream("/pipelines/json_clean_text.json"))
 }
 ```
 
+### Placeholders (Identity)
+
+For iterative development you can use an explicit placeholder action:
+
+- JSON: `{ "$local": "identity" }` (built-in, no reflection)
+- Programmatic: `pipeline.addAction("todo_normalize");` (adds an identity action with that label)
+
 ## Remote action (HTTP)
 Use `pipeline-remote` to turn an HTTP call into a `StepAction<C>`:
 

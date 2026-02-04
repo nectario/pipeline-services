@@ -81,6 +81,15 @@ public final class Pipeline<C> {
             return this;
         }
 
+        /** Convenience placeholder: registers an identity action with the provided name. */
+        public Builder<C> addPreAction(String name) { pre.add(RegisteredAction.named(name, identity())); return this; }
+
+        /** Convenience placeholder: registers an identity action with the provided name. */
+        public Builder<C> addAction(String name) { main.add(RegisteredAction.named(name, identity())); return this; }
+
+        /** Convenience placeholder: registers an identity action with the provided name. */
+        public Builder<C> addPostAction(String name) { post.add(RegisteredAction.named(name, identity())); return this; }
+
         public Builder<C> addPreAction(StepAction<C> action) { return addPreAction(null, action); }
         public Builder<C> addAction(StepAction<C> action) { return addAction(null, action); }
         public Builder<C> addPostAction(StepAction<C> action) { return addPostAction(null, action); }
@@ -116,6 +125,15 @@ public final class Pipeline<C> {
     public Pipeline<C> addPreAction(UnaryOperator<C> fn) { return addPreAction(null, fn); }
     public Pipeline<C> addAction(UnaryOperator<C> fn) { return addAction(null, fn); }
     public Pipeline<C> addPostAction(UnaryOperator<C> fn) { return addPostAction(null, fn); }
+
+    /** Convenience placeholder: registers an identity action with the provided name. */
+    public Pipeline<C> addPreAction(String actionName) { return addPreAction(actionName, identity()); }
+
+    /** Convenience placeholder: registers an identity action with the provided name. */
+    public Pipeline<C> addAction(String actionName) { return addAction(actionName, identity()); }
+
+    /** Convenience placeholder: registers an identity action with the provided name. */
+    public Pipeline<C> addPostAction(String actionName) { return addPostAction(actionName, identity()); }
 
     public Pipeline<C> addPreAction(String actionName, StepAction<C> action) {
         preActions.add(RegisteredAction.named(actionName, action));
@@ -268,6 +286,10 @@ public final class Pipeline<C> {
     private static <C> StepAction<C> adapt(UnaryOperator<C> fn) {
         Objects.requireNonNull(fn, "fn");
         return new UnaryAdapterAction<>(fn);
+    }
+
+    private static <C> StepAction<C> identity() {
+        return (ctx, control) -> ctx;
     }
 
     private record PoolablePrototype(Object prototype, Class<?> actionClass, ActionInvokeStyle invokeStyle) {}
