@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.UnaryOperator;
 
 /** Minimal JSON loader for unary pipelines. */
@@ -71,36 +72,98 @@ public final class PipelineJsonLoader {
 
         Pipeline<String> pipeline = new Pipeline<>(name, shortCircuitOnException);
 
-        addSection(root, "preActions", "pre", JsonSection.PRE, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
-        addSection(root, "actions", "steps", JsonSection.MAIN, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
-        addSection(root, "postActions", "post", JsonSection.POST, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
+        addPreActions(root, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
+        addActions(root, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
+        addPostActions(root, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
         return pipeline;
     }
 
-    private enum JsonSection {
-        PRE,
-        MAIN,
-        POST
-    }
-
-    private static void addSection(
+    private static void addPreActions(
         JsonNode root,
-        String preferredFieldName,
-        String legacyFieldName,
-        JsonSection section,
         Pipeline<String> pipeline,
         ActionRegistry<String> registry,
         HttpStep.RemoteDefaults remoteDefaults,
         boolean singletonMode,
         boolean reflectionEnabled
     ) throws IOException {
+        addActionsArray(
+            root,
+            "preActions",
+            "pre",
+            pipeline,
+            registry,
+            remoteDefaults,
+            singletonMode,
+            reflectionEnabled,
+            (String actionName, UnaryOperator<String> action) -> pipeline.addPreAction(actionName, action),
+            (String actionName, StepAction<String> action) -> pipeline.addPreAction(actionName, action)
+        );
+    }
+
+    private static void addActions(
+        JsonNode root,
+        Pipeline<String> pipeline,
+        ActionRegistry<String> registry,
+        HttpStep.RemoteDefaults remoteDefaults,
+        boolean singletonMode,
+        boolean reflectionEnabled
+    ) throws IOException {
+        addActionsArray(
+            root,
+            "actions",
+            "steps",
+            pipeline,
+            registry,
+            remoteDefaults,
+            singletonMode,
+            reflectionEnabled,
+            (String actionName, UnaryOperator<String> action) -> pipeline.addAction(actionName, action),
+            (String actionName, StepAction<String> action) -> pipeline.addAction(actionName, action)
+        );
+    }
+
+    private static void addPostActions(
+        JsonNode root,
+        Pipeline<String> pipeline,
+        ActionRegistry<String> registry,
+        HttpStep.RemoteDefaults remoteDefaults,
+        boolean singletonMode,
+        boolean reflectionEnabled
+    ) throws IOException {
+        addActionsArray(
+            root,
+            "postActions",
+            "post",
+            pipeline,
+            registry,
+            remoteDefaults,
+            singletonMode,
+            reflectionEnabled,
+            (String actionName, UnaryOperator<String> action) -> pipeline.addPostAction(actionName, action),
+            (String actionName, StepAction<String> action) -> pipeline.addPostAction(actionName, action)
+        );
+    }
+
+    private static void addActionsArray(
+        JsonNode root,
+        String preferredFieldName,
+        String legacyFieldName,
+        Pipeline<String> pipeline,
+        ActionRegistry<String> registry,
+        HttpStep.RemoteDefaults remoteDefaults,
+        boolean singletonMode,
+        boolean reflectionEnabled,
+        BiConsumer<String, UnaryOperator<String>> unaryAdder,
+        BiConsumer<String, StepAction<String>> stepAdder
+    ) throws IOException {
         Objects.requireNonNull(root, "root");
         Objects.requireNonNull(preferredFieldName, "preferredFieldName");
         Objects.requireNonNull(legacyFieldName, "legacyFieldName");
-        Objects.requireNonNull(section, "section");
         Objects.requireNonNull(pipeline, "pipeline");
         Objects.requireNonNull(registry, "registry");
         Objects.requireNonNull(remoteDefaults, "remoteDefaults");
+        Objects.requireNonNull(unaryAdder, "unaryAdder");
+        Objects.requireNonNull(stepAdder, "stepAdder");
 
         boolean hasPreferred = root.has(preferredFieldName);
         JsonNode actionsArray = hasPreferred ? root.get(preferredFieldName) : root.get(legacyFieldName);
@@ -111,14 +174,15 @@ public final class PipelineJsonLoader {
         }
 
         for (JsonNode actionNode : actionsArray) {
-            addActionNode(actionNode, section, pipeline, registry, remoteDefaults, singletonMode, reflectionEnabled);
+            addActionNode(actionNode, pipeline, unaryAdder, stepAdder, registry, remoteDefaults, singletonMode, reflectionEnabled);
         }
     }
 
     private static void addActionNode(
         JsonNode actionNode,
-        JsonSection section,
         Pipeline<String> pipeline,
+        BiConsumer<String, UnaryOperator<String>> unaryAdder,
+        BiConsumer<String, StepAction<String>> stepAdder,
         ActionRegistry<String> registry,
         HttpStep.RemoteDefaults remoteDefaults,
         boolean singletonMode,
@@ -137,7 +201,7 @@ public final class PipelineJsonLoader {
             String localRef = localNode.asText();
 
             if (isIdentityLocalRef(localRef)) {
-                addUnaryToPipeline(pipeline, section, actionName, ctx -> ctx);
+                unaryAdder.accept(actionName, ctx -> ctx);
                 return;
             }
 
@@ -151,7 +215,7 @@ public final class PipelineJsonLoader {
             if (singletonMode && lifecycle == ActionLifecycle.POOLED) {
                 poolMax = parsePoolMax(actionNode, poolMax);
             }
-            addLocal(pipeline, registry, localRef, actionName, section, singletonMode, reflectionEnabled, isRegistryLocal, lifecycle, poolMax);
+            addLocal(registry, localRef, actionName, singletonMode, reflectionEnabled, isRegistryLocal, lifecycle, poolMax, unaryAdder, stepAdder);
             return;
         }
 
@@ -173,7 +237,7 @@ public final class PipelineJsonLoader {
 
             String method = remoteSpecNode.path("method").asText(remoteDefaults.method);
             StepAction<String> remoteAction = "GET".equalsIgnoreCase(method) ? HttpStep.jsonGet(spec) : HttpStep.jsonPost(spec);
-            addStepActionToPipeline(pipeline, section, actionName, remoteAction);
+            stepAdder.accept(actionName, remoteAction);
             return;
         }
 
@@ -186,16 +250,16 @@ public final class PipelineJsonLoader {
     }
 
     private static void addLocal(
-        Pipeline<String> pipeline,
         ActionRegistry<String> registry,
         String localRef,
         String actionName,
-        JsonSection section,
         boolean singletonMode,
         boolean reflectionEnabled,
         boolean isRegistryLocal,
         ActionLifecycle lifecycle,
-        int poolMax
+        int poolMax,
+        BiConsumer<String, UnaryOperator<String>> unaryAdder,
+        BiConsumer<String, StepAction<String>> stepAdder
     ) throws IOException {
         if (isRegistryLocal) {
             if (singletonMode && lifecycle != ActionLifecycle.SHARED) {
@@ -203,9 +267,9 @@ public final class PipelineJsonLoader {
                     + "' is not supported for registry actions: " + localRef);
             }
             if (registry.hasUnary(localRef)) {
-                addUnaryToPipeline(pipeline, section, actionName, registry.getUnary(localRef));
+                unaryAdder.accept(actionName, registry.getUnary(localRef));
             } else {
-                addStepActionToPipeline(pipeline, section, actionName, registry.getAction(localRef));
+                stepAdder.accept(actionName, registry.getAction(localRef));
             }
             return;
         }
@@ -221,17 +285,17 @@ public final class PipelineJsonLoader {
         }
 
         if (!singletonMode || lifecycle == ActionLifecycle.SHARED) {
-            addLocalShared(pipeline, localRef, actionName, section);
+            addLocalShared(localRef, actionName, unaryAdder, stepAdder);
             return;
         }
 
         if (lifecycle == ActionLifecycle.PER_RUN) {
-            addLocalPerRun(pipeline, localRef, actionName, section);
+            addLocalPerRun(localRef, actionName, stepAdder);
             return;
         }
 
         if (lifecycle == ActionLifecycle.POOLED) {
-            addLocalPooled(pipeline, localRef, actionName, section, poolMax);
+            addLocalPooled(localRef, actionName, stepAdder, poolMax);
             return;
         }
 
@@ -239,30 +303,29 @@ public final class PipelineJsonLoader {
     }
 
     private static void addLocalShared(
-        Pipeline<String> pipeline,
         String localRef,
         String actionName,
-        JsonSection section
+        BiConsumer<String, UnaryOperator<String>> unaryAdder,
+        BiConsumer<String, StepAction<String>> stepAdder
     ) throws IOException {
         Object instance = instantiate(localRef);
         if (instance instanceof UnaryOperator<?> fn) {
             @SuppressWarnings("unchecked") UnaryOperator<String> unaryAction = (UnaryOperator<String>) fn;
-            addUnaryToPipeline(pipeline, section, actionName, unaryAction);
+            unaryAdder.accept(actionName, unaryAction);
             return;
         }
         if (instance instanceof StepAction<?> stepAction) {
             @SuppressWarnings("unchecked") StepAction<String> action = (StepAction<String>) stepAction;
-            addStepActionToPipeline(pipeline, section, actionName, action);
+            stepAdder.accept(actionName, action);
             return;
         }
         throw new IOException("Class must implement UnaryOperator or StepAction: " + localRef);
     }
 
     private static void addLocalPooled(
-        Pipeline<String> pipeline,
         String localRef,
         String actionName,
-        JsonSection section,
+        BiConsumer<String, StepAction<String>> stepAdder,
         int poolMax
     ) throws IOException {
         Class<?> actionClass = resolveClass(localRef);
@@ -275,21 +338,20 @@ public final class PipelineJsonLoader {
 
         ActionPool<Object> pool = new ActionPool<>(poolMax, new ReflectiveNoArgFactory(constructor, localRef));
         StepAction<String> pooledAction = new PooledLocalAction<>(pool, invokeStyle, localRef);
-        addStepActionToPipeline(pipeline, section, actionName, pooledAction);
+        stepAdder.accept(actionName, pooledAction);
     }
 
     private static void addLocalPerRun(
-        Pipeline<String> pipeline,
         String localRef,
         String actionName,
-        JsonSection section
+        BiConsumer<String, StepAction<String>> stepAdder
     ) throws IOException {
         Class<?> actionClass = resolveClass(localRef);
         LocalActionInvokeStyle invokeStyle = determineInvokeStyle(actionClass, localRef);
         Constructor<?> constructor = resolveNoArgsConstructor(actionClass, localRef);
 
         StepAction<String> perRunAction = new PerRunLocalAction<>(constructor, invokeStyle, localRef);
-        addStepActionToPipeline(pipeline, section, actionName, perRunAction);
+        stepAdder.accept(actionName, perRunAction);
     }
 
     private static LocalActionInvokeStyle determineInvokeStyle(Class<?> actionClass, String localRef) throws IOException {
@@ -374,36 +436,6 @@ public final class PipelineJsonLoader {
         int processors = Runtime.getRuntime().availableProcessors();
         int computed = processors * 8;
         return Math.min(256, Math.max(1, computed));
-    }
-
-    private static void addUnaryToPipeline(
-        Pipeline<String> pipeline,
-        JsonSection section,
-        String actionName,
-        UnaryOperator<String> action
-    ) {
-        if (section == JsonSection.PRE) {
-            pipeline.addPreAction(actionName, action);
-        } else if (section == JsonSection.POST) {
-            pipeline.addPostAction(actionName, action);
-        } else {
-            pipeline.addAction(actionName, action);
-        }
-    }
-
-    private static void addStepActionToPipeline(
-        Pipeline<String> pipeline,
-        JsonSection section,
-        String actionName,
-        StepAction<String> action
-    ) {
-        if (section == JsonSection.PRE) {
-            pipeline.addPreAction(actionName, action);
-        } else if (section == JsonSection.POST) {
-            pipeline.addPostAction(actionName, action);
-        } else {
-            pipeline.addAction(actionName, action);
-        }
     }
 
     private static JsonNode req(JsonNode n, String field) throws IOException {
