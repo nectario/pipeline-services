@@ -1,6 +1,8 @@
 # Pipeline Services — Rust port
 
-This Rust port is aligned with the Mojo/Python/TypeScript `pipeline_services` package and the shared semantics in `docs/PORTABILITY_CONTRACT.md`.
+This directory is a contract-aligned Rust reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract and is not a separate public crates.io release surface for `v0.1.0`.
+
+It follows the shared semantics in [../../docs/PORTABILITY_CONTRACT.md](../../docs/PORTABILITY_CONTRACT.md).
 
 ## Execution API
 - `Pipeline::run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)

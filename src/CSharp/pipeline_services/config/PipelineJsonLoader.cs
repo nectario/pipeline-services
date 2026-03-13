@@ -41,7 +41,7 @@ public sealed class PipelineJsonLoader
 
         HttpStep.RemoteDefaults remoteDefaults = ParseRemoteDefaults(root);
 
-        AddSection(root, "pre", pipeline, registry, remoteDefaults);
+        AddSectionFromRoot(root, "pre", pipeline, registry, remoteDefaults);
         if (root.TryGetProperty("actions", out JsonElement actionsElement))
         {
             AddSection(actionsElement, "actions", pipeline, registry, remoteDefaults);
@@ -50,7 +50,7 @@ public sealed class PipelineJsonLoader
         {
             AddSection(stepsElement, "steps", pipeline, registry, remoteDefaults);
         }
-        AddSection(root, "post", pipeline, registry, remoteDefaults);
+        AddSectionFromRoot(root, "post", pipeline, registry, remoteDefaults);
 
         return pipeline;
     }
@@ -84,7 +84,7 @@ public sealed class PipelineJsonLoader
         return LoadString(jsonText, registry);
     }
 
-    private static void AddSection(
+    private static void AddSectionFromRoot(
         JsonElement root,
         string sectionName,
         Pipeline<string> pipeline,
@@ -238,12 +238,12 @@ public sealed class PipelineJsonLoader
         if (remoteElement.ValueKind == JsonValueKind.String)
         {
             string endpointOrPath = remoteElement.GetString() ?? "";
-            remoteSpec = remoteDefaults.Spec(endpointOrPath, IdentityToJson, IdentityFromJson);
+            remoteSpec = remoteDefaults.Spec<string>(endpointOrPath, IdentityToJson, IdentityFromJson);
         }
         else if (remoteElement.ValueKind == JsonValueKind.Object)
         {
             string endpointOrPath = ParseRemoteEndpointOrPath(remoteElement);
-            remoteSpec = remoteDefaults.Spec(endpointOrPath, IdentityToJson, IdentityFromJson);
+            remoteSpec = remoteDefaults.Spec<string>(endpointOrPath, IdentityToJson, IdentityFromJson);
 
             if (remoteElement.TryGetProperty("timeoutMillis", out JsonElement timeoutElement) &&
                 timeoutElement.ValueKind == JsonValueKind.Number)

@@ -1,14 +1,20 @@
 {
   "name": "pipeline-services-ts",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "description": "Pipeline Services — TypeScript port aligned with the Mojo/Python pipeline_services package (pre/actions/post, shortCircuitOnException, JSON loader with $local/$remote, remoteDefaults, timings/metrics).",
+  "description": "Pipeline Services - contract-aligned TypeScript reference port kept in-repo for portability validation.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nectario/pipeline-services.git"
+  },
+  "homepage": "https://github.com/nectario/pipeline-services#readme",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
-    "test": "npm run build && node --test dist/tests"
+    "test": "npm run build && node --test dist/tests/pipeline.test.js"
   },
   "keywords": [
     "pipeline",
@@ -17,7 +23,7 @@
     "java",
     "typescript"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/node": "^20.11.0",
     "typescript": "^5.6.3"

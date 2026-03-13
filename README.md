@@ -1,5 +1,33 @@
 # Pipeline Services
-Portable, local‑first pipeline framework with reference implementations in multiple languages (Java, Mojo, Python, TypeScript, Rust, C++, Go, C#).
+[![CI](https://github.com/nectario/pipeline-services/actions/workflows/ci.yml/badge.svg)](https://github.com/nectario/pipeline-services/actions/workflows/ci.yml)
+
+Pipeline Services is a locality-aware software architecture framework for composing application behavior as typed, observable pipelines of actions.
+
+It is a middle path between monoliths and microservices: keep modularity and clear execution flow, default to local execution when locality is the right design, and distribute only when distribution is truly warranted.
+
+Pipeline Services is application architecture, not cloud/platform/deployment infrastructure.
+
+Java is the reference implementation in this repository. Python, TypeScript, Rust, Go, C#, and C++ are contract-aligned reference ports with tests and examples. Mojo is a strategic target and experimental runtime-evolution track.
+
+## Project status
+- `v0.1.0` is an initial public preview focused on the Java reference implementation and the shared portability contract.
+- The non-Java ports are in-repo reference ports, not independently published public releases today.
+- See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for the maturity matrix, release surface, and compatibility boundaries.
+
+## Release scope for v0.1.0
+- Java is the reference implementation and the primary compatibility anchor.
+- Python, TypeScript, Rust, Go, C#, and C++ validate the portability contract through in-repo tests and examples.
+- Mojo remains manual/experimental for now, and `pipeline-disruptor` remains experimental and single-thread today.
+- Standalone publication to Maven Central, PyPI, npm, crates.io, NuGet, or other package registries is explicitly out of scope for this release.
+
+## Requirements
+- Java 21+
+- Python 3.9+
+- Node 20+
+- Go 1.22+
+- Rust stable
+- .NET 8
+- CMake 3.20+
 
 ## What this framework tries to solve
 Most “systems” (services, batch jobs, agents, workflows, trading engines, orchestration) are ultimately a **series of actions**: validate → enrich → transform → call out to something → decide → persist → observe. The problem is that this logic often ends up scattered across classes, functions, and ad-hoc conventions.
@@ -51,26 +79,33 @@ pipeline-config      # Minimal JSON loader for unary String pipelines
 pipeline-remote      # HTTP action adapter (json GET/POST)
 pipeline-prompt      # Prompt-to-code generated actions (optional check-in) + Java helpers
 pipeline-api         # Higher-level facade (labels/jumps/beans/inline JSON + optional metrics)
-pipeline-disruptor   # Runner wrapper (single-thread for now)
+pipeline-disruptor   # Experimental runner wrapper (single-thread for now)
 pipeline-examples    # Runnable examples (+ main runner)
 ```
 
 ## Ports
-- Java (reference): `src/Java/` (Maven multi-module)
-- Mojo: `src/Mojo/pipeline_services/` (runs via `pipeline_services/pixi.toml`)
-- Python: `src/Python/pipeline_services/` (runs via `python3 -m ...`)
-- TypeScript: `src/typescript/` (npm package)
-- Rust: `src/Rust/` (Cargo crate)
-- C++: `src/Cpp/` (C++20 + CMake)
-- Go: `src/Go/` (Go modules)
-- C#: `src/CSharp/` (dotnet projects)
+- Java: reference implementation (`src/Java/`)
+- Python: contract-aligned in-repo reference port (`src/Python/`)
+- TypeScript: contract-aligned in-repo reference port (`src/typescript/`)
+- Rust: contract-aligned in-repo reference port (`src/Rust/`)
+- Go: contract-aligned in-repo reference port (`src/Go/`)
+- C#: contract-aligned in-repo reference port (`src/CSharp/`)
+- C++: contract-aligned in-repo reference port (`src/Cpp/`)
+- Mojo: strategic target and experimental reference port (`src/Mojo/pipeline_services/`)
+
+These ports live in-repo to validate the shared contract. `v0.1.0` does not imply separate registry publication or identical maturity across every port.
+
+## Experimental directories
+- `src/Java/pipeline-api-pr/` is an incubating Java API work area that is not part of the release build or the public `v0.1.0` compatibility surface. See [src/Java/pipeline-api-pr/README.md](src/Java/pipeline-api-pr/README.md).
+- `statemachine/` is a standalone experiment and is not part of the main Pipeline Services release surface. See [statemachine/README.md](statemachine/README.md).
+- `archive/` contains historical snapshots and is not part of the supported release surface.
 
 ![Portability contract](docs/images/portability-contract.svg)
 
 ## Why Mojo
 Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
 
-This repo includes a Mojo port that follows the shared behavior contract so semantics stay comparable across languages.
+This repo includes a Mojo port that follows the shared behavior contract so semantics stay comparable across languages. CI for Mojo remains manual until the toolchain is pinned cleanly for GitHub-hosted runners.
 
 ## Quick start
 
@@ -137,7 +172,7 @@ python3 -m pipeline_services.examples.benchmark01_pipeline_run
 ### TypeScript port
 ```bash
 cd src/typescript
-npm install
+npm ci
 npm run build
 npm test
 node dist/src/pipeline_services/examples/example01_text_clean.js

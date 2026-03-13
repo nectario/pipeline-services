@@ -5,11 +5,34 @@
 
   <groupId>io.github.nectario</groupId>
   <artifactId>pipeline-services</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
   <packaging>pom</packaging>
   <name>Pipeline Services</name>
-  <description>Local-first, typed pipeline framework with shortCircuit, prompt-to-code, and optional remote adapters.</description>
+  <description>Locality-aware software architecture framework for typed, observable pipelines of actions.</description>
   <url>https://github.com/nectario/pipeline-services</url>
+
+  <licenses>
+    <license>
+      <name>Apache License 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <scm>
+    <connection>scm:git:https://github.com/nectario/pipeline-services.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/nectario/pipeline-services.git</developerConnection>
+    <url>https://github.com/nectario/pipeline-services</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <developers>
+    <developer>
+      <id>nectario</id>
+      <name>Nektarios Kalogridis</name>
+      <url>https://github.com/nectario</url>
+    </developer>
+  </developers>
 
   <modules>
     <module>src/Java/pipeline-core</module>

@@ -1,6 +1,8 @@
 # Pipeline Services — C# port
 
-This folder contains the C# port of Pipeline Services, aligned with the Java reference semantics (`pre → main → post`, `shortCircuitOnException`, `onError`, JSON loader, remote HTTP adapter, timings + metrics post-action).
+This directory is a contract-aligned C# reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract and is not a separate public NuGet release surface for `v0.1.0`.
+
+It is aligned with the Java reference semantics (`pre → main → post`, `shortCircuitOnException`, `onError`, JSON loader, remote HTTP adapter, timings + metrics post-action).
 
 ## Execution API
 - `Pipeline.Run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)

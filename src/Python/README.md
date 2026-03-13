@@ -1,7 +1,8 @@
 # Pipeline Services — Python port
 
-This is the Python port of Pipeline Services, kept intentionally close to the Mojo `pipeline_services` package.
-It implements the shared semantics described in `docs/PORTABILITY_CONTRACT.md`.
+This directory is a contract-aligned Python reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract and is not a separate public distribution promise for `v0.1.0`.
+
+It implements the shared semantics described in [../../docs/PORTABILITY_CONTRACT.md](../../docs/PORTABILITY_CONTRACT.md).
 
 ## What’s implemented
 - `Pipeline` with `pre` / `actions` / `post`

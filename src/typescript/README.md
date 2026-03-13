@@ -1,6 +1,8 @@
 # Pipeline Services — TypeScript port
 
-This TypeScript port is aligned with the Mojo/Python `pipeline_services` package and the shared semantics in `docs/PORTABILITY_CONTRACT.md`.
+This directory is a contract-aligned TypeScript reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract, and the package metadata is marked private because `v0.1.0` is not a standalone npm release.
+
+It follows the shared semantics in [../../docs/PORTABILITY_CONTRACT.md](../../docs/PORTABILITY_CONTRACT.md).
 
 ## What’s implemented
 - `Pipeline` with `pre` / `actions` / `post`
@@ -16,7 +18,7 @@ This TypeScript port is aligned with the Mojo/Python `pipeline_services` package
 ## Install, build, test
 ```bash
 cd src/typescript
-npm install
+npm ci
 npm run build
 npm test
 ```

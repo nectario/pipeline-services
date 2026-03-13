@@ -2,9 +2,10 @@
 name = "pipeline-services-rs"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 publish = false
-description = "Pipeline Services — Rust port aligned with the Mojo/Python/TypeScript contract-first ports."
+description = "Pipeline Services - contract-aligned Rust reference port."
+repository = "https://github.com/nectario/pipeline-services"
 
 [lib]
 name = "pipeline_services"

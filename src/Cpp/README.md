@@ -1,6 +1,8 @@
 # Pipeline Services — C++ port
 
-This C++ port follows the shared semantics in `docs/PORTABILITY_CONTRACT.md` and intentionally uses Java-style `camelCase` naming for the public API (`addAction`, `shortCircuit`, ...), so the ports stay easy to compare.
+This directory is a contract-aligned C++ reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract and is not a separate package publication surface for `v0.1.0`.
+
+This C++ port follows the shared semantics in [../../docs/PORTABILITY_CONTRACT.md](../../docs/PORTABILITY_CONTRACT.md) and intentionally uses Java-style `camelCase` naming for the public API (`addAction`, `shortCircuit`, ...), so the ports stay easy to compare.
 
 ## Execution API
 - `Pipeline::run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)

@@ -62,7 +62,7 @@ public sealed class JsonLoaderTests
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
 
         PipelineResult<string> result = pipeline.Run("  Hi  ");
-        Assert.Equal("PRE:Hi:POST", result.Context);
+        Assert.Equal("PRE:  Hi:POST", result.Context);
     }
 
     private static string Strip(string value)

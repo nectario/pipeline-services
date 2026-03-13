@@ -1,5 +1,7 @@
 # Pipeline Services — Go port
 
+This directory is a contract-aligned Go reference port of Pipeline Services. It lives in-repo to validate the shared behavior contract, and its current module path is optimized for in-repo evaluation rather than standalone external module publication.
+
 This Go port mirrors the Java reference semantics (`pre → main → post`, `shortCircuitOnException`, `onError`, JSON loader, remote HTTP adapter) while using idiomatic exported Go identifiers.
 
 ## Execution API

@@ -1,38 +1,87 @@
-# Unit tests for jump engine
+# Testing
 
-This adds **JUnit 5** tests in `pipeline-api`:
+Pipeline Services has active test coverage across the Java reference implementation and the in-repo reference ports for Python, TypeScript, Rust, Go, C#, and C++.
 
-- `JumpEngineUnaryTest` — self-looping unary step stops after 3 attempts.
-- `JumpEngineTypedTest` — jumping to a mismatched typed target throws a clear error.
-- `JumpEngineGuardsTest` — prevents jumping into `pre`; trips `maxJumpsPerRun`.
-- `JumpToStartTest` — `jumpTo(label)` starts a run from a labeled step.
+## Java
 
-Make sure your parent/child `pom.xml` files have JUnit 5:
-
-```xml
-<dependency>
-  <groupId>org.junit.jupiter</groupId>
-  <artifactId>junit-jupiter</artifactId>
-  <version>5.10.2</version>
-  <scope>test</scope>
-</dependency>
-
-<build>
-  <plugins>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-surefire-plugin</artifactId>
-      <version>3.2.5</version>
-      <configuration>
-        <useModulePath>false</useModulePath>
-      </configuration>
-    </plugin>
-  </plugins>
-</build>
-```
-
-Run:
+Run the full Maven test suite from the repo root:
 
 ```bash
-./mvnw -pl pipeline-api test
+./mvnw -q test
 ```
+
+The Java suite covers the reference implementation in `pipeline-core`, the jump/metrics facade in `pipeline-api`, the JSON loader in `pipeline-config`, and the HTTP adapter in `pipeline-remote`.
+
+Visible `pipeline-core` test classes:
+- `PipelineProviderTest`
+- `PipelineTest`
+- `PooledLocalActionsProgrammaticTest`
+- `RuntimePipelineFreezeTest`
+- `RuntimePipelineTest`
+- `StepsTest`
+
+Visible `pipeline-api` test classes:
+- `JumpEngineGuardsTest`
+- `JumpEngineTypedTest`
+- `JumpEngineUnaryTest`
+- `JumpToStartTest`
+- `MetricsCompiledPathTest`
+- `MetricsErrorTest`
+- `MetricsJumpEngineTest`
+- `TestMetrics`
+
+Additional Java coverage currently includes:
+- `PipelineJsonLoaderBuiltinsTest`
+- `PipelineJsonLoaderSingletonModeTest`
+- `HttpStepTest`
+
+## Python
+
+```bash
+PYTHONPATH=src/Python python -m unittest discover -s src/Python/tests -p 'test_*.py'
+```
+
+Visible Python test modules:
+- `test_pipeline.py`
+- `test_json_loader.py`
+- `test_remote_http.py`
+
+## TypeScript
+
+```bash
+cd src/typescript
+npm ci
+npm test
+```
+
+## Rust
+
+```bash
+cd src/Rust
+cargo test
+```
+
+## Go
+
+```bash
+cd src/Go
+go test ./...
+```
+
+## C#
+
+```bash
+dotnet test src/CSharp/pipeline_services_tests/PipelineServices.Tests.csproj
+```
+
+## C++
+
+```bash
+cmake -S src/Cpp -B src/Cpp/build
+cmake --build src/Cpp/build -j
+ctest --test-dir src/Cpp/build --output-on-failure
+```
+
+## Mojo
+
+Mojo validation remains manual for now. The toolchain lives under `pipeline_services/pixi.toml`, and the examples documented in [README.md](README.md) are the current manual verification path until the Mojo toolchain is pinned cleanly for GitHub-hosted CI runners.
