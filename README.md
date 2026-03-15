@@ -21,13 +21,14 @@ Java is the reference implementation in this repository. Python, TypeScript, Rus
 - Standalone publication to Maven Central, PyPI, npm, crates.io, NuGet, or other package registries is explicitly out of scope for this release.
 
 ## Requirements
-- Java 21+
-- Python 3.9+
-- Node 20+
-- Go 1.22+
-- Rust stable
-- .NET 8
-- CMake 3.20+
+- Java
+- Python
+- Mojo
+- TypeScript
+- C++
+- C#
+- Go
+- Rust
 
 ## What this framework tries to solve
 Most “systems” (services, batch jobs, agents, workflows, trading engines, orchestration) are ultimately a **series of actions**: validate → enrich → transform → call out to something → decide → persist → observe. The problem is that this logic often ends up scattered across classes, functions, and ad-hoc conventions.
