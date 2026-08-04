@@ -1,119 +1,183 @@
 package com.pipeline.core;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-/**
- * Provides pipeline execution with an explicit lifecycle policy:
- * <ul>
- *   <li>{@code shared}: one pipeline instance reused across runs (must be safe for concurrent use)</li>
- *   <li>{@code pooled}: pipeline instances are reused but never shared concurrently</li>
- *   <li>{@code perRun}: a new pipeline instance is created per run</li>
- * </ul>
- */
+/** Creates or selects reusable Pipeline instances without scheduling work. */
 public final class PipelineProvider<C> {
-  public enum Mode {
-    SHARED,
-    POOLED,
-    PER_RUN
-  }
-
-  private final Mode mode;
-  private final Pipeline<C> sharedPipeline;
-  private final ActionPool<Pipeline<C>> pipelinePool;
+  private final PipelineProviderMode mode;
   private final Supplier<? extends Pipeline<C>> pipelineFactory;
-  private final ActionPoolCache actionPoolCache;
+  private final Pipeline<C> singletonPipeline;
+  private final List<Pipeline<C>> pooledPipelines;
+  private final AtomicLong nextSelection = new AtomicLong();
 
   private PipelineProvider(
-      Mode mode,
-      Pipeline<C> sharedPipeline,
-      ActionPool<Pipeline<C>> pipelinePool,
+      PipelineProviderMode mode,
       Supplier<? extends Pipeline<C>> pipelineFactory,
-      ActionPoolCache actionPoolCache
-  ) {
+      Pipeline<C> singletonPipeline,
+      List<Pipeline<C>> pooledPipelines) {
     this.mode = Objects.requireNonNull(mode, "mode");
-    this.sharedPipeline = sharedPipeline;
-    this.pipelinePool = pipelinePool;
     this.pipelineFactory = pipelineFactory;
-    this.actionPoolCache = actionPoolCache;
+    this.singletonPipeline = singletonPipeline;
+    this.pooledPipelines = pooledPipelines == null ? List.of() : List.copyOf(pooledPipelines);
   }
 
+  public static <C> PipelineProvider<C> newInstancePerEvent(
+      Supplier<? extends Pipeline<C>> pipelineFactory) {
+    return new PipelineProvider<>(
+        PipelineProviderMode.NEW_INSTANCE_PER_EVENT,
+        Objects.requireNonNull(pipelineFactory, "pipelineFactory"),
+        null,
+        List.of());
+  }
+
+  public static <C> PipelineProvider<C> singleton(Pipeline<C> pipeline) {
+    Pipeline<C> frozenPipeline = Objects.requireNonNull(pipeline, "pipeline").freeze();
+    return new PipelineProvider<>(
+        PipelineProviderMode.SINGLETON,
+        null,
+        frozenPipeline,
+        List.of());
+  }
+
+  public static <C> PipelineProvider<C> singleton(
+      Supplier<? extends Pipeline<C>> pipelineFactory) {
+    Objects.requireNonNull(pipelineFactory, "pipelineFactory");
+    return singleton(requirePipeline(pipelineFactory.get(), "pipelineFactory.get()"));
+  }
+
+  public static <C> PipelineProvider<C> pooled(
+      Supplier<? extends Pipeline<C>> pipelineFactory,
+      int instanceCount) {
+    Objects.requireNonNull(pipelineFactory, "pipelineFactory");
+    if (instanceCount < 1) {
+      throw new IllegalArgumentException("instanceCount must be >= 1");
+    }
+
+    List<Pipeline<C>> pipelines = new ArrayList<>(instanceCount);
+    for (int index = 0; index < instanceCount; index++) {
+      Pipeline<C> pipeline = requirePipeline(
+          pipelineFactory.get(),
+          "pipelineFactory.get()");
+      pipelines.add(pipeline.freeze());
+    }
+
+    return new PipelineProvider<>(
+        PipelineProviderMode.POOLED,
+        null,
+        null,
+        pipelines);
+  }
+
+  public static <C> PipelineProvider<C> pooled(
+      Supplier<? extends Pipeline<C>> pipelineFactory) {
+    return pooled(pipelineFactory, defaultInstanceCount());
+  }
+
+  /** Preview compatibility alias for singleton mode. */
+  @Deprecated
   public static <C> PipelineProvider<C> shared(Pipeline<C> pipeline) {
-    Pipeline<C> nonNullPipeline = Objects.requireNonNull(pipeline, "pipeline");
-    return new PipelineProvider<>(Mode.SHARED, nonNullPipeline, null, null, null);
+    return singleton(pipeline);
   }
 
-  public static <C> PipelineProvider<C> shared(Supplier<? extends Pipeline<C>> factory) {
-    Objects.requireNonNull(factory, "factory");
-    Pipeline<C> pipeline = Objects.requireNonNull(factory.get(), "factory.get()");
-    return shared(pipeline);
+  /** Preview compatibility alias for singleton mode. */
+  @Deprecated
+  public static <C> PipelineProvider<C> shared(
+      Supplier<? extends Pipeline<C>> pipelineFactory) {
+    return singleton(pipelineFactory);
   }
 
-  public static <C> PipelineProvider<C> pooled(Supplier<? extends Pipeline<C>> factory) {
-    return pooled(factory, defaultPoolMax());
+  /** Preview compatibility alias for new-instance-per-event mode. */
+  @Deprecated
+  public static <C> PipelineProvider<C> perRun(
+      Supplier<? extends Pipeline<C>> pipelineFactory) {
+    return newInstancePerEvent(pipelineFactory);
   }
 
-  public static <C> PipelineProvider<C> pooled(Supplier<? extends Pipeline<C>> factory, int poolMax) {
-    Objects.requireNonNull(factory, "factory");
-    ActionPool<Pipeline<C>> pool = new ActionPool<>(poolMax, () -> Objects.requireNonNull(factory.get(), "factory.get()"));
-    return new PipelineProvider<>(Mode.POOLED, null, pool, null, null);
+  public static <C> Builder<C> builder(
+      Supplier<? extends Pipeline<C>> pipelineFactory) {
+    return new Builder<>(pipelineFactory);
   }
 
-  public static <C> PipelineProvider<C> perRun(Supplier<? extends Pipeline<C>> factory) {
-    Objects.requireNonNull(factory, "factory");
-    return new PipelineProvider<>(Mode.PER_RUN, null, null, factory, null);
-  }
-
-  public Mode mode() {
+  public PipelineProviderMode mode() {
     return mode;
   }
 
-  public PipelineProvider<C> withPooledLocalActions() {
-    return withPooledLocalActions(new ActionPoolCache());
-  }
-
-  public PipelineProvider<C> withPooledLocalActions(ActionPoolCache actionPoolCache) {
-    Objects.requireNonNull(actionPoolCache, "actionPoolCache");
-
-    if (mode == Mode.SHARED && sharedPipeline != null) {
-      sharedPipeline.enablePooledLocalActions(actionPoolCache);
-    }
-
-    return new PipelineProvider<>(mode, sharedPipeline, pipelinePool, pipelineFactory, actionPoolCache);
-  }
-
-  public PipelineResult<C> run(C input) {
+  /** Number of retained instances: zero for per-event, one for singleton, pool size for pooled. */
+  public int instanceCount() {
     return switch (mode) {
-      case SHARED -> runWithOptionalActionPooling(Objects.requireNonNull(sharedPipeline, "sharedPipeline"), input);
-      case POOLED -> runPooled(input);
-      case PER_RUN -> {
-        Pipeline<C> pipeline = Objects.requireNonNull(
-            Objects.requireNonNull(pipelineFactory, "pipelineFactory").get(),
-            "pipelineFactory.get()");
-        yield runWithOptionalActionPooling(pipeline, input);
-      }
+      case NEW_INSTANCE_PER_EVENT -> 0;
+      case SINGLETON -> 1;
+      case POOLED -> pooledPipelines.size();
     };
   }
 
-  private PipelineResult<C> runPooled(C input) {
-    Pipeline<C> borrowedPipeline = Objects.requireNonNull(pipelinePool, "pipelinePool").borrow();
-    try {
-      return runWithOptionalActionPooling(borrowedPipeline, input);
-    } finally {
-      pipelinePool.release(borrowedPipeline);
-    }
+  public Pipeline<C> getPipeline() {
+    return switch (mode) {
+      case NEW_INSTANCE_PER_EVENT ->
+          requirePipeline(pipelineFactory.get(), "pipelineFactory.get()").freeze();
+      case SINGLETON -> singletonPipeline;
+      case POOLED -> pooledPipelines.get(nextPooledIndex());
+    };
   }
 
-  private PipelineResult<C> runWithOptionalActionPooling(Pipeline<C> pipeline, C input) {
-    if (actionPoolCache != null) {
-      pipeline.enablePooledLocalActions(actionPoolCache);
-    }
-    return pipeline.run(input);
+  public C run(C context) {
+    return getPipeline().run(context);
   }
 
-  private static int defaultPoolMax() {
-    int processors = Runtime.getRuntime().availableProcessors();
-    int computed = processors * 8;
-    return Math.min(256, Math.max(1, computed));
+  public PipelineResult<C> runDetailed(C context) {
+    return getPipeline().runDetailed(context);
+  }
+
+  private int nextPooledIndex() {
+    long selection = nextSelection.getAndIncrement();
+    return Math.floorMod(selection, pooledPipelines.size());
+  }
+
+  private static <C> Pipeline<C> requirePipeline(
+      Pipeline<C> pipeline,
+      String source) {
+    return Objects.requireNonNull(pipeline, source + " returned null");
+  }
+
+  private static int defaultInstanceCount() {
+    return Math.max(1, Runtime.getRuntime().availableProcessors());
+  }
+
+  public static final class Builder<C> {
+    private final Supplier<? extends Pipeline<C>> pipelineFactory;
+    private PipelineProviderMode mode = PipelineProviderMode.NEW_INSTANCE_PER_EVENT;
+    private int instanceCount = defaultInstanceCount();
+
+    private Builder(Supplier<? extends Pipeline<C>> pipelineFactory) {
+      this.pipelineFactory = Objects.requireNonNull(pipelineFactory, "pipelineFactory");
+    }
+
+    public Builder<C> mode(PipelineProviderMode mode) {
+      this.mode = Objects.requireNonNull(mode, "mode");
+      return this;
+    }
+
+    public Builder<C> instanceCount(int instanceCount) {
+      if (instanceCount < 1) {
+        throw new IllegalArgumentException("instanceCount must be >= 1");
+      }
+      this.instanceCount = instanceCount;
+      return this;
+    }
+
+    public PipelineProvider<C> build() {
+      return switch (mode) {
+        case NEW_INSTANCE_PER_EVENT ->
+            PipelineProvider.newInstancePerEvent(pipelineFactory);
+        case SINGLETON ->
+            PipelineProvider.singleton(pipelineFactory);
+        case POOLED ->
+            PipelineProvider.pooled(pipelineFactory, instanceCount);
+      };
+    }
   }
 }
