@@ -13,7 +13,7 @@ public final class Example01_TextClean {
         .addAction(TextSteps::truncateAt280);
 
     String input = "  Hello   <b>World</b>  ";
-    String outputValue = pipeline.run(input).context();
+    String outputValue = pipeline.run(input);
     System.out.println("[ex01] => " + outputValue);
   }
 }

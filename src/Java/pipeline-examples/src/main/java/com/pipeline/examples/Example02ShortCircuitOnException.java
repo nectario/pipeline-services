@@ -12,7 +12,7 @@ public final class Example02ShortCircuitOnException {
         .addAction(TextSteps::upper);
 
     String input = "Hello 🌟"; // contains an emoji to trigger exception
-    String outputValue = pipeline.run(input).context();
+    String outputValue = pipeline.run(input);
     System.out.println("[ex02] in='" + input + "' out='" + outputValue + "'");
   }
 }

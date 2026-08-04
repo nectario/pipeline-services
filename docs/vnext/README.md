@@ -1,24 +1,39 @@
 # Pipeline Services vNext
 
-This directory defines the target contract for the next Pipeline Services implementation.
+This directory defines the shared contract and implementation guidance for the Pipeline Services simplicity reset.
 
-The vNext work is contract-first. These documents describe the intended public model and behavioral invariants before any runtime is replaced. The current `v0.1.0` implementation remains the executable source of truth until the later implementation phases adopt this contract.
+The work is organized contract-first: behavior is defined once, implemented first in Java, and then carried to each port using native language conventions.
 
 ## Documents
 
-- [Simplicity Constitution](SIMPLICITY_CONSTITUTION.md) — the design constraints that keep the framework robust and small.
-- [Portability Contract](PORTABILITY_CONTRACT.md) — the shared behavior that every language implementation must preserve.
-- [API Naming Matrix](API_NAMING_MATRIX.md) — canonical concepts and their idiomatic spelling in each language.
-- [Provider and Router Contract](PROVIDER_ROUTER_CONTRACT.md) — pipeline instance lifecycle, pooled selection, and event routing.
-- [Conformance Scenarios](../../spec/conformance/vnext/pipeline-core.yaml) — machine-readable behavioral scenarios to implement across ports.
+- [Simplicity Constitution](SIMPLICITY_CONSTITUTION.md) — constraints that keep the framework robust and small.
+- [Portability Contract](PORTABILITY_CONTRACT.md) — behavior every language implementation must preserve.
+- [API Naming Matrix](API_NAMING_MATRIX.md) — canonical concepts and idiomatic spelling by language.
+- [Provider and Router Contract](PROVIDER_ROUTER_CONTRACT.md) — instance lifecycle, pooled selection, and event routing.
+- [Java Reference Implementation](JAVA_REFERENCE_IMPLEMENTATION.md) — the Phase 2 Java API and internals.
+- [Java Migration Guide](JAVA_MIGRATION.md) — preview-to-vNext Java changes.
+- [Java Benchmark Smoke](JAVA_BENCHMARK.md) — informational `run()` versus `runDetailed()` measurements.
+- [Conformance Scenarios](../../spec/conformance/vnext/pipeline-core.yaml) — machine-readable behavioral scenarios for every port.
 
 ## Status
 
-- Status: design contract
-- Runtime status: not yet implemented
-- Java remains the reference implementation for the later runtime phase.
-- Composition is required in every language.
-- Subclassing and builders are supported where idiomatic, but must delegate to the same pipeline plan and runner.
+- Phase 1: shared design contract complete.
+- Phase 2: Java reference kernel implemented.
+- Phase 3: remaining language ports not yet migrated to the vNext runtime contract.
+- Phase 4: extension consolidation and final documentation cleanup remain.
+
+The Java implementation now provides:
+
+- one generic context type;
+- one canonical `Pipeline<C>`;
+- one `PipelineRunner`;
+- one execution-scoped `shortCircuit()` operation;
+- direct construction, composition, subclassing, and a thin builder;
+- immutable Pipeline plans;
+- independent state for nested and overlapping runs;
+- `NEW_INSTANCE_PER_EVENT`, `SINGLETON`, and `POOLED` provider modes;
+- a separate `PipelineRouter`;
+- a zero-infrastructure-dependency `pipeline-core` module.
 
 ## Target model
 
@@ -40,4 +55,4 @@ preActions → actions → postActions
 one execution engine per language
 ```
 
-Handwritten local actions, remote actions, and LLM-generated actions all resolve to the same ordinary action abstraction at runtime.
+Handwritten local Actions, remote adapters, and LLM-generated Actions all resolve to the same ordinary Action abstraction at runtime.

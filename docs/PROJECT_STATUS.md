@@ -1,63 +1,103 @@
 # Project Status
 
-## vNext contract-first redesign
+## vNext simplicity reset
 
-The next Pipeline Services implementation is being organized in four gated phases. Phase 1 defines the target contract before runtime code changes.
+Pipeline Services is being migrated in four gated phases.
 
-The vNext design documents are indexed in [`docs/vnext/README.md`](vnext/README.md) and include:
+- **Phase 1 complete:** simplicity constitution, portability contract, naming matrix, provider/router contract, and machine-readable conformance scenarios.
+- **Phase 2 complete in Java:** the Java reference kernel implements the vNext core model.
+- **Phase 3 pending:** migrate the remaining language ports to the vNext runtime semantics.
+- **Phase 4 pending:** consolidate JSON, remote, LLM, observability, workflow, and other extensions around the final kernel.
 
-- the simplicity constitution;
-- the new portability contract;
-- the polyglot API naming matrix;
-- PipelineProvider and PipelineRouter lifecycle semantics;
-- machine-readable conformance scenarios under `spec/conformance/vnext/`.
+The vNext documents are indexed in [`docs/vnext/README.md`](vnext/README.md).
 
-The vNext documents are a **target design contract**. They do not yet replace the executable `v0.1.0` behavior. The current implementation and [`PORTABILITY_CONTRACT.md`](PORTABILITY_CONTRACT.md) remain the preview runtime source of truth until the later implementation phases are merged.
+The repository is temporarily in a mixed migration state:
+
+- `com.pipeline.core.Pipeline<C>` is the Java vNext reference implementation.
+- Java preview control-aware overloads remain as adapters into the same runner.
+- Python, TypeScript, Rust, Go, C#, C++, and Mojo retain their current preview implementations until Phase 3.
+- The old [`PORTABILITY_CONTRACT.md`](PORTABILITY_CONTRACT.md) documents the pre-vNext preview surface.
+- [`vnext/PORTABILITY_CONTRACT.md`](vnext/PORTABILITY_CONTRACT.md) is the target shared contract and the current Java core contract.
 
 ## Release scope for v0.1.0
 
-`v0.1.0` is an initial public preview of Pipeline Services as a locality-aware software architecture framework.
+`v0.1.0` remains an initial public preview of Pipeline Services as a locality-aware software architecture framework.
 
-The release is centered on:
-- the Java reference implementation
-- the shared behavior contract in `docs/PORTABILITY_CONTRACT.md`
-- in-repo reference ports that exercise the contract with tests/examples
-- the JSON, remote-adapter, runtime-pipeline, and prompt-to-code flows described in the repo docs
+The release includes:
 
-The release does **not** include standalone publication to language-specific package registries.
+- the Java reference implementation;
+- in-repo language ports;
+- shared JSON configuration;
+- remote Action adapters;
+- prompt-to-code and generated Action support;
+- examples and conformance tests.
+
+Standalone publication to Maven Central, PyPI, npm, crates.io, NuGet, or other package registries remains outside the current release scope.
 
 ## Port maturity matrix
 
 | Surface | Status | Notes |
 | --- | --- | --- |
-| Java (`src/Java/`) | Reference implementation | Primary compatibility anchor for `v0.1.0`; Maven multi-module build and examples are part of the release surface. |
-| Python (`src/Python/`) | Contract-aligned reference port | In-repo port with tests/examples; intended to validate the portability contract, not to imply separate packaging/release guarantees. |
-| TypeScript (`src/typescript/`) | Contract-aligned reference port | In-repo reference package; marked private to make clear it is not a standalone npm release today. |
-| Rust (`src/Rust/`) | Contract-aligned reference port | In-repo port with tests/examples; `publish = false` remains intentional for `v0.1.0`. |
-| Go (`src/Go/`) | Contract-aligned reference port | In-repo port with tests/examples; current module path is optimized for repo evaluation rather than external module publication. |
-| C# (`src/CSharp/`) | Contract-aligned reference port | In-repo port with tests/examples; not currently positioned as a standalone public NuGet surface. |
-| C++ (`src/Cpp/`) | Contract-aligned reference port | In-repo port with examples/tests; part of the contract-validation story, not a package-distribution story. |
-| Mojo (`src/Mojo/`, `pipeline_services/`) | Strategic target / experimental | Important runtime-evolution track; manual validation for now while the toolchain remains experimental for hosted CI. |
-| `pipeline-disruptor` | Experimental | Present in the repo and examples, but currently single-thread only and not part of the core compatibility promise. |
+| Java (`src/Java/`) | vNext reference implementation | Canonical single-context Pipeline, one runner, execution-scoped short circuit, provider modes, router, and zero-infrastructure-dependency core. |
+| Python (`src/Python/`) | Preview reference port | In-repo port with tests; Phase 3 vNext migration pending. |
+| TypeScript (`src/typescript/`) | Preview reference port | In-repo private package with tests; Phase 3 migration pending. |
+| Rust (`src/Rust/`) | Preview reference port | In-repo non-published crate with tests; Phase 3 migration pending. |
+| Go (`src/Go/`) | Preview reference port | In-repo module with tests; Phase 3 migration pending. |
+| C# (`src/CSharp/`) | Preview reference port | In-repo project with tests; Phase 3 migration pending. |
+| C++ (`src/Cpp/`) | Preview reference port | In-repo implementation with examples/tests; Phase 3 migration pending. |
+| Mojo (`src/Mojo/`, `pipeline_services/`) | Strategic / experimental | Important runtime-evolution track; Phase 3 migration and manual toolchain validation pending. |
+| `pipeline-config` | Transitional extension | Resolves JSON into the canonical Java Pipeline; selected preview aliases and Action lifecycle features remain during migration. |
+| `pipeline-remote` | Transitional extension | Remote operations execute as ordinary Actions through the canonical Java runner. |
+| `pipeline-prompt` | Strategic extension | Prompt-to-code remains first-class and generates ordinary language-native Actions. |
+| `pipeline-api` | Legacy extension | Typed chains, labels, and jumps remain outside the vNext core contract. Unary compiled execution delegates to the canonical runner. |
+| `RuntimePipeline` | Deprecated compatibility helper | Interactive immediate execution now delegates to the canonical runner. |
+| `pipeline-disruptor` | Experimental | Queueing wrapper; not part of core semantics or compatibility guarantees. |
 
-## Experimental / non-release directories
+## Java vNext compatibility boundary
 
-- `src/Java/pipeline-api-pr/`: incubating Java API work area. It is **not** part of the public release build and is **not** part of the `v0.1.0` compatibility surface.
-- `statemachine/`: standalone experimental state-machine prototype. It is **not** part of the main Pipeline Services API promise.
-- `archive/`: historical snapshots and work-in-progress material kept for reference. It is **not** part of the supported release surface.
-- `pipeline_services/`: Pixi-managed Mojo toolchain workspace used for manual Mojo validation. It supports the Mojo track but is not itself a separate public framework surface.
+The canonical Java surface is centered on:
 
-## What is and is not part of the compatibility promise
+```text
+Pipeline<C>
+Action<C>
+PipelineExecution.shortCircuit()
+PipelineResult<C>
+PipelineProvider<C>
+PipelineRouter<E, C>
+PipelineObserver
+```
 
-The `v0.1.0` compatibility promise is centered on:
-- the observable semantics described in [PORTABILITY_CONTRACT.md](PORTABILITY_CONTRACT.md)
-- the Java reference implementation modules in the main Maven build
-- the canonical JSON pipeline shape (`actions`, `$local`, `$remote`, `remoteDefaults`)
-- the documented prompt-to-code flow and generated-pipeline layout
+The common execution method is:
 
-The following are explicitly **not** covered by the `v0.1.0` compatibility promise:
-- `src/Java/pipeline-api-pr/`
-- `statemachine/`
-- `archive/`
-- standalone publication metadata for package registries
-- stronger threading/performance guarantees for `pipeline-disruptor` beyond its current experimental, single-thread implementation
+```text
+run(context) → context
+```
+
+The diagnostic method is:
+
+```text
+runDetailed(context) → PipelineResult<context>
+```
+
+The Java core temporarily retains preview `StepAction<C>` and `ActionControl<C>` overloads as compatibility adapters. They do not introduce a second execution engine.
+
+See:
+
+- [Java Reference Implementation](vnext/JAVA_REFERENCE_IMPLEMENTATION.md)
+- [Java Migration Guide](vnext/JAVA_MIGRATION.md)
+
+## Experimental and non-release directories
+
+- `src/Java/pipeline-api-pr/`: incubating Java API work area, outside the supported release build.
+- `statemachine/`: separate state-machine experiment, outside the Pipeline core contract.
+- `archive/`: historical snapshots and work-in-progress material.
+- `pipeline_services/`: Pixi-managed Mojo workspace for manual validation.
+
+## Compatibility promise
+
+During the phased migration:
+
+- Java core behavior is defined by `docs/vnext/PORTABILITY_CONTRACT.md`.
+- Non-Java preview behavior remains defined by `docs/PORTABILITY_CONTRACT.md` until each port is migrated.
+- Shared JSON and prompt-to-code artifacts remain supported through transitional adapters.
+- Experimental workflow, state-machine, queueing, and package-publication surfaces are not part of the core compatibility promise.

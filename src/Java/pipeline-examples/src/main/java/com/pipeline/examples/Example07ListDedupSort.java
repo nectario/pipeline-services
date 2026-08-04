@@ -15,7 +15,7 @@ public final class Example07ListDedupSort {
         .addAction(ListSteps::dedup)
         .addAction(ListSteps::sortNatural);
 
-    List<String> outputValue = pipeline.run(Arrays.asList("orange", "apple", "orange")).context();
+    List<String> outputValue = pipeline.run(Arrays.asList("orange", "apple", "orange"));
     System.out.println("[ex07] => " + outputValue);
   }
 }
