@@ -24,19 +24,20 @@ public final class Example16PromptCodegenPipeline {
     PromptGeneratedActions.register(registry);
 
     Pipeline<String> pipeline = PipelineJsonLoader.loadUnary(pipelineFile, registry);
-    String outputValue = pipeline.run("  john   SMITH ").context();
+    String outputValue = pipeline.run("  john   SMITH ");
     System.out.println("output=" + outputValue);
   }
 
   private static Path findPipelineFile(String pipelineFileName) {
-    Path currentDir = Path.of("").toAbsolutePath();
+    Path currentDirectory = Path.of("").toAbsolutePath();
     while (true) {
-      Path candidatePath = currentDir.resolve("pipelines").resolve(pipelineFileName);
+      Path candidatePath = currentDirectory.resolve("pipelines").resolve(pipelineFileName);
       if (Files.exists(candidatePath)) return candidatePath;
-      Path parentDir = currentDir.getParent();
-      if (parentDir == null || parentDir.equals(currentDir)) break;
-      currentDir = parentDir;
+      Path parentDirectory = currentDirectory.getParent();
+      if (parentDirectory == null || parentDirectory.equals(currentDirectory)) break;
+      currentDirectory = parentDirectory;
     }
-    throw new IllegalStateException("Could not locate pipelines directory from current working directory");
+    throw new IllegalStateException(
+        "Could not locate pipelines directory from current working directory");
   }
 }
