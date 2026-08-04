@@ -13,7 +13,7 @@ public final class Example06PrePostPolicies {
         .addAction(TextSteps::strip)
         .addPostAction(PolicySteps::audit);
 
-    String outputValue = pipeline.run("   hi   ").context();
+    String outputValue = pipeline.run("   hi   ");
     System.out.println("[ex06] => '" + outputValue + "'");
   }
 }
