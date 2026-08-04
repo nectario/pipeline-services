@@ -32,6 +32,11 @@ jobs:
         run: chmod +x mvnw
       - name: Run Maven tests
         run: ./mvnw -q test
+      - name: Run informational Java benchmark smoke
+        run: >-
+          java
+          -cp "src/Java/pipeline-examples/target/classes:src/Java/pipeline-core/target/classes"
+          com.pipeline.examples.Benchmark01CorePipeline
 
   python:
     runs-on: ubuntu-latest
