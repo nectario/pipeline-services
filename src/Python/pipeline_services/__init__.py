@@ -1,15 +1,30 @@
-"""
-Pipeline Services (Python port).
+"""Pipeline Services Python reference port.
 
-This Python port mirrors the Mojo `pipeline_services` package as closely as practical:
-- `Pipeline` with `pre` / `main` / `post` phases
-- unary actions and control-aware actions
-- exception capture with `shortCircuitOnException` semantics
-- JSON loader with `$local` (registry) and `$remote` (HTTP) actions
+The vNext core is one Pipeline over one context, one ordinary Action shape,
+one execution-scoped short_circuit() operation, and one runner.
 """
 
-from .core.pipeline import ActionControl, ActionTiming, Pipeline, PipelineError, PipelineResult, StepControl
-from .core.pipeline_provider import PipelineProvider, PipelineProviderMode
+from .core.pipeline import (
+    Action,
+    ActionControl,
+    ActionTiming,
+    InvalidErrorHandlerError,
+    Pipeline,
+    PipelineError,
+    PipelineObserver,
+    PipelineResult,
+    StepAction,
+    StepControl,
+    UnaryOperator,
+    short_circuit,
+)
+from .core.pipeline_provider import (
+    PipelineProvider,
+    PipelineProviderMode,
+    default_instance_count,
+    default_pool_max,
+)
+from .core.pipeline_router import PipelineRouter
 from .core.registry import PipelineRegistry
 from .core.runtime_pipeline import RuntimePipeline
 from .core.metrics_actions import print_metrics
