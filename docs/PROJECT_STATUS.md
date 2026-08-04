@@ -1,5 +1,19 @@
 # Project Status
 
+## vNext contract-first redesign
+
+The next Pipeline Services implementation is being organized in four gated phases. Phase 1 defines the target contract before runtime code changes.
+
+The vNext design documents are indexed in [`docs/vnext/README.md`](vnext/README.md) and include:
+
+- the simplicity constitution;
+- the new portability contract;
+- the polyglot API naming matrix;
+- PipelineProvider and PipelineRouter lifecycle semantics;
+- machine-readable conformance scenarios under `spec/conformance/vnext/`.
+
+The vNext documents are a **target design contract**. They do not yet replace the executable `v0.1.0` behavior. The current implementation and [`PORTABILITY_CONTRACT.md`](PORTABILITY_CONTRACT.md) remain the preview runtime source of truth until the later implementation phases are merged.
+
 ## Release scope for v0.1.0
 
 `v0.1.0` is an initial public preview of Pipeline Services as a locality-aware software architecture framework.
