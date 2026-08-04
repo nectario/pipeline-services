@@ -15,7 +15,7 @@ public final class Example15MixedLocalRemote {
     remoteSpec.timeoutMillis = 1000;
     remoteSpec.retries = 0;
     remoteSpec.toJson = value -> value;
-    remoteSpec.fromJson = (ctx, body) -> body;
+    remoteSpec.fromJson = (context, body) -> body;
 
     Pipeline<String> pipeline = new Pipeline<String>("example15_mixed_local_remote", true)
         .addAction(TextSteps::strip)
@@ -24,7 +24,7 @@ public final class Example15MixedLocalRemote {
         .addAction(value -> value.toLowerCase())
         .addAction(value -> value + "|");
 
-    String outputValue = pipeline.run("  Hello   Remote  ").context();
+    String outputValue = pipeline.run("  Hello   Remote  ");
     System.out.println("output=" + outputValue);
   }
 }
