@@ -20,6 +20,20 @@ final class PipelineTest {
   }
 
   @Test
+  void checkedActionExceptionIsCapturedWithoutAdapterCode() {
+    Pipeline<String> pipeline = new Pipeline<String>("checked_exception", true)
+        .addAction(PipelineTest::throwCheckedException)
+        .addPostAction(value -> value + "P");
+
+    PipelineResult<String> result = pipeline.runDetailed("X");
+
+    assertEquals("XP", result.context());
+    assertTrue(result.shortCircuited());
+    assertEquals(1, result.errors().size());
+    assertEquals("checked boom", result.errors().getFirst().exception().getMessage());
+  }
+
+  @Test
   void shortCircuitOnExceptionTrueStopsAndCaptures() {
     Pipeline<String> pipeline = new Pipeline<String>("stop_on_error", true)
         .addAction(value -> value + "A")
@@ -135,6 +149,10 @@ final class PipelineTest {
         PipelineExecution::shortCircuit);
 
     assertTrue(error.getMessage().contains("active pipeline run"));
+  }
+
+  private static String throwCheckedException(String value) throws Exception {
+    throw new Exception("checked boom");
   }
 
   private static String appendAndShortCircuit(String value) {
