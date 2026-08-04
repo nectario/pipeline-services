@@ -1,5 +1,7 @@
 # Pipeline Services — Portability Contract (v2)
 
+> **Current preview contract.** This document describes the existing `v0.1.0` implementation surface. The contract-first redesign for the next implementation is defined in [`docs/vnext/PORTABILITY_CONTRACT.md`](vnext/PORTABILITY_CONTRACT.md) and indexed in [`docs/vnext/README.md`](vnext/README.md). Until the later runtime phases are merged, this document remains the executable-preview contract and the vNext documents remain the target design.
+
 This document is the source of truth for implementing Pipeline Services across languages (Java, Python, Mojo, …).
 It defines observable behavior and the minimal API surface a port should expose.
 

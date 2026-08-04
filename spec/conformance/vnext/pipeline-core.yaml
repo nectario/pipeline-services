@@ -1,0 +1,480 @@
+meta:
+  contract: pipeline-services-vnext
+  version: 1
+  status: design
+  purpose: >-
+    Define language-neutral behavioral scenarios for the vNext Pipeline Services
+    kernel, PipelineProvider, PipelineRouter, and action-origin extensions.
+
+canonical_terms:
+  context_flow: "Context -> Context"
+  phases:
+    - preActions
+    - actions
+    - postActions
+  provider_modes:
+    - NEW_INSTANCE_PER_EVENT
+    - SINGLETON
+    - POOLED
+  control_operation: shortCircuit
+
+requirements:
+  all_ports:
+    - direct_construction
+    - composition
+    - one_runner
+    - run_local_execution_state
+    - native_naming
+  where_idiomatic:
+    - subclassing
+    - builder
+
+scenarios:
+  - id: pipeline_action_order
+    area: pipeline
+    required: true
+    given:
+      preActions: [pre1, pre2]
+      actions: [main1, main2]
+      postActions: [post1, post2]
+    when: run
+    expect:
+      execution_order: [pre1, pre2, main1, main2, post1, post2]
+
+  - id: pipeline_context_propagation
+    area: pipeline
+    required: true
+    given:
+      input: A
+      actions:
+        - "append B"
+        - "append C"
+    when: run
+    expect:
+      final_context: ABC
+
+  - id: run_returns_context
+    area: pipeline
+    required: true
+    given:
+      input: A
+      actions:
+        - "append B"
+    when: run
+    expect:
+      return_type: context
+      final_context: AB
+
+  - id: run_detailed_uses_same_runner
+    area: pipeline
+    required: true
+    given:
+      input: A
+      actions:
+        - "append B"
+    when:
+      - run
+      - runDetailed
+    expect:
+      same_action_order: true
+      same_final_context: true
+      detailed_result_context: AB
+      separate_execution_engine: false
+
+  - id: direct_and_builder_equivalence
+    area: construction
+    required_where_supported: true
+    given:
+      pipeline_definitions:
+        - direct
+        - builder
+      actions: [a1, a2, a3]
+    when: run_each
+    expect:
+      same_plan: true
+      same_action_order: true
+      same_final_context: true
+      same_short_circuit_behavior: true
+
+  - id: composition_equivalence
+    area: construction
+    required: true
+    given:
+      pipeline_definitions:
+        - directly_owned_pipeline
+        - pipeline_composed_inside_application_service
+      actions: [a1, a2]
+    when: run_each
+    expect:
+      same_action_order: true
+      same_final_context: true
+      same_runner: true
+
+  - id: subclass_equivalence
+    area: construction
+    required_where_supported: true
+    given:
+      pipeline_definitions:
+        - direct
+        - subclass
+      actions: [a1, a2]
+    when: run_each
+    expect:
+      same_action_order: true
+      same_final_context: true
+      same_runner: true
+
+  - id: plan_freezes_before_shared_use
+    area: lifecycle
+    required: true
+    given:
+      pipeline: assembled
+    when:
+      - freeze_or_first_shared_run
+      - attempt_to_add_action
+    expect:
+      mutation_rejected: true
+      existing_plan_unchanged: true
+
+  - id: short_circuit_main
+    area: short_circuit
+    required: true
+    given:
+      actions:
+        - a1
+        - "a2 calls shortCircuit and returns updated context"
+        - a3
+      postActions: [post1]
+    when: run
+    expect:
+      execution_order: [a1, a2, post1]
+      a3_executed: false
+      updated_context_from_a2_preserved: true
+      short_circuited: true
+
+  - id: short_circuit_pre
+    area: short_circuit
+    required: true
+    given:
+      preActions:
+        - "pre1 calls shortCircuit"
+        - pre2
+      actions: [main1]
+      postActions: [post1]
+    when: run
+    expect:
+      execution_order: [pre1, pre2, post1]
+      main1_executed: false
+      short_circuited: true
+
+  - id: short_circuit_post
+    area: short_circuit
+    required: true
+    given:
+      actions: [main1]
+      postActions:
+        - "post1 calls shortCircuit"
+        - post2
+    when: run
+    expect:
+      execution_order: [main1, post1, post2]
+      short_circuited: true
+
+  - id: short_circuit_preserves_immutable_context
+    area: short_circuit
+    required: true
+    given:
+      input_context: immutable_valid_context
+      action: >-
+        create rejected_context, call shortCircuit(), and return rejected_context
+    when: run
+    expect:
+      final_context: rejected_context
+      short_circuited: true
+
+  - id: short_circuit_outside_run_fails
+    area: short_circuit
+    required: true
+    given:
+      active_pipeline_run: false
+    when: call_shortCircuit
+    expect:
+      clear_error: true
+      future_run_affected: false
+
+  - id: detached_action_can_short_circuit
+    area: short_circuit
+    required: true
+    given:
+      action_location: separate_module_or_class
+      action: "calls execution-scoped shortCircuit and returns updated context"
+    when: register_and_run
+    expect:
+      remaining_main_actions_skipped: true
+      updated_context_preserved: true
+      postActions_run: true
+
+  - id: nested_pipeline_targets_innermost_run
+    area: short_circuit
+    required: true
+    given:
+      outer_pipeline_action: invokes_inner_pipeline
+      inner_pipeline_action: calls_shortCircuit
+    when: run_outer
+    expect:
+      inner_remaining_actions_skipped: true
+      inner_postActions_run: true
+      outer_run_not_implicitly_short_circuited: true
+
+  - id: short_circuit_state_cleared_after_run
+    area: short_circuit
+    required: true
+    given:
+      reusable_pipeline: true
+    when:
+      - "run 1 short-circuits"
+      - "run 2 does not request short circuit"
+    expect:
+      run_2_executes_all_main_actions: true
+      state_leakage: false
+
+  - id: concurrent_singleton_short_circuit_isolation
+    area: concurrency
+    required: true
+    given:
+      provider_mode: SINGLETON
+      overlapping_runs:
+        - "run A short-circuits"
+        - "run B continues normally"
+    when: execute_concurrently
+    expect:
+      run_A_short_circuited: true
+      run_B_short_circuited: false
+      context_or_error_leakage: false
+
+  - id: exception_continue
+    area: errors
+    required: true
+    given:
+      shortCircuitOnException: false
+      actions:
+        - "a1 returns context A1"
+        - "a2 throws"
+        - "a3 appends 3"
+      postActions: [post1]
+    when: runDetailed
+    expect:
+      a3_input: A1
+      post1_executed: true
+      errors_recorded: 1
+      short_circuited: false
+
+  - id: exception_short_circuit_main
+    area: errors
+    required: true
+    given:
+      shortCircuitOnException: true
+      actions:
+        - "a1 returns context A1"
+        - "a2 throws"
+        - a3
+      postActions: [post1, post2]
+    when: runDetailed
+    expect:
+      a3_executed: false
+      execution_order: [a1, a2, post1, post2]
+      final_context_before_post: A1
+      errors_recorded: 1
+      short_circuited: true
+
+  - id: exception_short_circuit_pre
+    area: errors
+    required: true
+    given:
+      shortCircuitOnException: true
+      preActions:
+        - "pre1 throws"
+        - pre2
+      actions: [main1]
+      postActions: [post1]
+    when: runDetailed
+    expect:
+      execution_order: [pre1, pre2, post1]
+      main1_executed: false
+      errors_recorded: 1
+      short_circuited: true
+
+  - id: exception_in_post_does_not_skip_remaining_post
+    area: errors
+    required: true
+    given:
+      shortCircuitOnException: true
+      actions: [main1]
+      postActions:
+        - "post1 throws"
+        - post2
+    when: runDetailed
+    expect:
+      execution_order: [main1, post1, post2]
+      errors_recorded: 1
+      short_circuited: true
+
+  - id: error_handler_updates_context
+    area: errors
+    required: true
+    given:
+      input_context: immutable_context
+      action: throws
+      onError: "returns context with recorded domain error"
+    when: runDetailed
+    expect:
+      final_context_contains_domain_error: true
+      pipeline_error_recorded: true
+
+  - id: provider_new_instance_per_event
+    area: provider
+    required: true
+    given:
+      provider_mode: NEW_INSTANCE_PER_EVENT
+      pipeline_factory_counts_instances: true
+    when:
+      - getPipeline
+      - getPipeline
+    expect:
+      distinct_pipeline_identity: true
+      created_instance_count: 2
+
+  - id: provider_singleton
+    area: provider
+    required: true
+    given:
+      provider_mode: SINGLETON
+    when:
+      - getPipeline
+      - getPipeline
+    expect:
+      same_pipeline_identity: true
+      created_instance_count: 1
+
+  - id: provider_pooled_eager_creation
+    area: provider
+    required: true
+    given:
+      provider_mode: POOLED
+      instance_count: 4
+    when: construct_provider
+    expect:
+      created_instance_count: 4
+      creation_before_first_selection: true
+
+  - id: provider_pooled_round_robin_default
+    area: provider
+    required: true
+    given:
+      provider_mode: POOLED
+      pipeline_identities: [p0, p1, p2]
+    when: "call getPipeline five times"
+    expect:
+      selected_identities: [p0, p1, p2, p0, p1]
+
+  - id: provider_pooled_is_not_exclusive_pool
+    area: provider
+    required: true
+    given:
+      provider_mode: POOLED
+      all_selected_pipelines_are_executing: true
+    when: getPipeline
+    expect:
+      selection_waits_for_availability: false
+      borrow_operation_required: false
+      release_operation_required: false
+      worker_thread_created: false
+
+  - id: provider_convenience_run_delegates
+    area: provider
+    required_if_exposed: true
+    given:
+      provider_has_run_convenience: true
+    when: provider_run
+    expect:
+      equivalent_to_getPipeline_then_run: true
+      separate_runner: false
+
+  - id: router_selects_provider
+    area: router
+    required: true
+    given:
+      routes:
+        TRADE: trade_provider
+        QUOTE: quote_provider
+    when:
+      - "getPipelineProvider(TRADE)"
+      - "getPipelineProvider(QUOTE)"
+    expect:
+      selected_providers: [trade_provider, quote_provider]
+
+  - id: router_does_not_change_provider_mode
+    area: router
+    required: true
+    given:
+      routed_provider_mode: POOLED
+    when: route_event
+    expect:
+      provider_mode_after_routing: POOLED
+      router_reimplements_instance_selection: false
+
+  - id: local_generated_remote_action_equivalence
+    area: extensions
+    required: true
+    given:
+      actions_with_equivalent_behavior:
+        - handwritten_local
+        - llm_generated_local
+        - remote_adapter
+    when: run_each_through_pipeline
+    expect:
+      same_runner: true
+      same_context_contract: true
+      origin_specific_runner_branch: false
+
+  - id: prompt_is_compile_time_directive
+    area: llm
+    required: true
+    given:
+      source_pipeline_contains_prompt: true
+    when: prepare_runtime_pipeline
+    expect:
+      language_native_action_generated: true
+      compiled_pipeline_references_local_action: true
+      implicit_runtime_llm_call: false
+
+  - id: shared_json_vocabulary
+    area: configuration
+    required: true
+    given:
+      canonical_fields:
+        - pipeline
+        - shortCircuitOnException
+        - preActions
+        - actions
+        - postActions
+    when: load_in_each_language
+    expect:
+      language_specific_json_casing_required: false
+      same_semantic_plan: true
+
+  - id: one_runner_for_all_origins
+    area: architecture
+    required: true
+    given:
+      pipeline_origins:
+        - direct
+        - composition
+        - subclass_where_supported
+        - builder_where_supported
+        - json
+        - generated
+        - remote_adapter
+    when: execute
+    expect:
+      execution_engine_count_per_language: 1

@@ -1,7 +1,13 @@
 # PipelineServices_Contract_v1.yaml
 meta:
   version: "v1"
-  status: "active"
+  status: "current-preview"
+  applies_to: "v0.1.0 implementation"
+  vnext_design_contract: "docs/vnext/PORTABILITY_CONTRACT.md"
+  note: >
+    This file records the existing preview surface. The vNext contract-first
+    redesign is defined under docs/vnext and is not executable behavior until
+    the later implementation phases are merged.
   purpose: >
     Define the cross-language public surface (Java, Python, Mojo, and future ports)
     and the behavioral invariants for labeled pipelines, jumps, short-circuiting,
