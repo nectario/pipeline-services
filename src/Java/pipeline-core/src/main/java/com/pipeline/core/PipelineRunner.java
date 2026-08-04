@@ -100,7 +100,13 @@ final class PipelineRunner {
       Exception actionFailure = null;
 
       try {
-        C nextContext = registeredAction.action().execute(executionState.context());
+        C nextContext;
+        executionState.beginActionExecution();
+        try {
+          nextContext = registeredAction.action().execute(executionState.context());
+        } finally {
+          executionState.endActionExecution();
+        }
         executionState.context(
             Objects.requireNonNull(nextContext, "Action returned null: " + actionName));
       } catch (Exception exception) {
