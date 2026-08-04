@@ -12,6 +12,7 @@ The work is organized contract-first: behavior is defined once, implemented firs
 - [Provider and Router Contract](PROVIDER_ROUTER_CONTRACT.md) — instance lifecycle, pooled selection, and event routing.
 - [Java Reference Implementation](JAVA_REFERENCE_IMPLEMENTATION.md) — the Phase 2 Java API and internals.
 - [Java Migration Guide](JAVA_MIGRATION.md) — preview-to-vNext Java changes.
+- [Java Benchmark Smoke](JAVA_BENCHMARK.md) — informational `run()` versus `runDetailed()` measurements.
 - [Conformance Scenarios](../../spec/conformance/vnext/pipeline-core.yaml) — machine-readable behavioral scenarios for every port.
 
 ## Status
