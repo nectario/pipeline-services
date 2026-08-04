@@ -34,6 +34,8 @@ final class PipelineRunner {
     notifyPipelineStarted(plan);
 
     PipelineExecution.Scope executionScope = PipelineExecution.open(executionState);
+    Throwable executionFailure = null;
+
     try {
       try {
         executeActions(
@@ -53,7 +55,11 @@ final class PipelineRunner {
               true,
               collectTimings);
         }
-      } finally {
+      } catch (Throwable failure) {
+        executionFailure = failure;
+      }
+
+      try {
         executeActions(
             plan,
             executionState,
@@ -61,14 +67,22 @@ final class PipelineRunner {
             plan.postActions(),
             false,
             collectTimings);
+      } catch (Throwable postFailure) {
+        executionFailure = combineFailures(executionFailure, postFailure);
       }
     } finally {
       try {
         executionScope.close();
+      } catch (Throwable scopeFailure) {
+        executionFailure = combineFailures(executionFailure, scopeFailure);
       } finally {
         long elapsedNanos = Math.max(0L, System.nanoTime() - runStartNanos);
         notifyPipelineCompleted(plan, executionState, elapsedNanos);
       }
+    }
+
+    if (executionFailure != null) {
+      throw propagate(executionFailure);
     }
 
     return executionState;
@@ -83,6 +97,7 @@ final class PipelineRunner {
       boolean collectTimings) {
 
     boolean observerEnabled = plan.observer() != PipelineObserver.NOOP;
+    RuntimeException deferredPostFailure = null;
 
     for (int actionIndex = 0; actionIndex < registeredActions.size(); actionIndex++) {
       RegisteredAction<C> registeredAction = registeredActions.get(actionIndex);
@@ -98,6 +113,7 @@ final class PipelineRunner {
           (collectTimings || observerEnabled) ? System.nanoTime() : 0L;
       boolean actionSucceeded = true;
       Exception actionFailure = null;
+      RuntimeException invalidErrorHandlerFailure = null;
 
       try {
         C nextContext;
@@ -112,7 +128,12 @@ final class PipelineRunner {
       } catch (Exception exception) {
         actionSucceeded = false;
         actionFailure = exception;
-        executionState.recordError(executionState.context(), exception);
+        try {
+          executionState.recordError(executionState.context(), exception);
+        } catch (RuntimeException errorHandlerFailure) {
+          invalidErrorHandlerFailure = errorHandlerFailure;
+          executionState.requestShortCircuit();
+        }
         if (plan.shortCircuitOnException()) {
           executionState.requestShortCircuit();
         }
@@ -141,9 +162,23 @@ final class PipelineRunner {
         notifyShortCircuited(plan, phase, actionIndex, actionName);
       }
 
+      if (invalidErrorHandlerFailure != null) {
+        if (phase == StepPhase.POST) {
+          deferredPostFailure = combineRuntimeFailures(
+              deferredPostFailure,
+              invalidErrorHandlerFailure);
+        } else {
+          throw invalidErrorHandlerFailure;
+        }
+      }
+
       if (stopOnShortCircuit && executionState.isShortCircuited()) {
         break;
       }
+    }
+
+    if (deferredPostFailure != null) {
+      throw deferredPostFailure;
     }
   }
 
@@ -158,6 +193,30 @@ final class PipelineRunner {
     };
     if (registeredName == null) return prefix + actionIndex;
     return prefix + actionIndex + ":" + registeredName;
+  }
+
+  private static Throwable combineFailures(Throwable firstFailure, Throwable nextFailure) {
+    if (firstFailure == null) return nextFailure;
+    if (firstFailure != nextFailure) firstFailure.addSuppressed(nextFailure);
+    return firstFailure;
+  }
+
+  private static RuntimeException combineRuntimeFailures(
+      RuntimeException firstFailure,
+      RuntimeException nextFailure) {
+    if (firstFailure == null) return nextFailure;
+    if (firstFailure != nextFailure) firstFailure.addSuppressed(nextFailure);
+    return firstFailure;
+  }
+
+  private static RuntimeException propagate(Throwable failure) {
+    if (failure instanceof RuntimeException runtimeException) {
+      return runtimeException;
+    }
+    if (failure instanceof Error error) {
+      throw error;
+    }
+    return new IllegalStateException("Unexpected checked Pipeline failure", failure);
   }
 
   private static <C> void notifyPipelineStarted(PipelinePlan<C> plan) {
