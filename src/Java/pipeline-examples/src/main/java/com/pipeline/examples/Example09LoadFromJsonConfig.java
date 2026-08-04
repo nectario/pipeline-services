@@ -12,7 +12,7 @@ public final class Example09LoadFromJsonConfig {
     try (InputStream in = Example09LoadFromJsonConfig.class.getResourceAsStream("/pipelines/clean_text.json")) {
       if (in == null) throw new IllegalStateException("Missing resource: /pipelines/clean_text.json");
       Pipeline<String> pipeline = PipelineJsonLoader.loadUnary(in);
-      String outputValue = pipeline.run("  Hello   <b>World</b>  ").context();
+      String outputValue = pipeline.run("  Hello   <b>World</b>  ");
       System.out.println("[ex09] => " + outputValue);
     }
   }
