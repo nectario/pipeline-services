@@ -2,122 +2,103 @@ package com.pipeline.core;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 final class PipelineProviderTest {
 
   @Test
-  void sharedReusesTheSamePipelineInstance() {
-    AtomicInteger instanceCounter = new AtomicInteger(0);
-    Supplier<Pipeline<String>> pipelineFactory = () -> new Pipeline<String>("shared", true)
-        .addAction(new InstanceIdAppendAction(instanceCounter));
+  void newInstancePerEventCreatesOnePipelineForEverySelection() {
+    AtomicInteger instanceCounter = new AtomicInteger();
+    Supplier<Pipeline<String>> factory = () -> identifiedPipeline(
+        "per_event",
+        instanceCounter.incrementAndGet());
 
-    PipelineProvider<String> provider = PipelineProvider.shared(pipelineFactory);
+    PipelineProvider<String> provider = PipelineProvider.newInstancePerEvent(factory);
 
-    String first = provider.run("a").context();
-    String second = provider.run("b").context();
+    Pipeline<String> first = provider.getPipeline();
+    Pipeline<String> second = provider.getPipeline();
 
-    assertEquals(idSuffix(first), idSuffix(second));
+    assertEquals(PipelineProviderMode.NEW_INSTANCE_PER_EVENT, provider.mode());
+    assertEquals(0, provider.instanceCount());
+    assertNotSame(first, second);
+    assertEquals("event|1", first.run("event"));
+    assertEquals("event|2", second.run("event"));
   }
 
   @Test
-  void perRunCreatesANewPipelineInstanceEachRun() {
-    AtomicInteger instanceCounter = new AtomicInteger(0);
-    Supplier<Pipeline<String>> pipelineFactory = () -> new Pipeline<String>("per_run", true)
-        .addAction(new InstanceIdAppendAction(instanceCounter));
+  void singletonAlwaysReturnsTheSameFrozenPipeline() {
+    Pipeline<String> pipeline = identifiedPipeline("singleton", 7);
+    PipelineProvider<String> provider = PipelineProvider.singleton(pipeline);
 
-    PipelineProvider<String> provider = PipelineProvider.perRun(pipelineFactory);
-
-    String first = provider.run("a").context();
-    String second = provider.run("b").context();
-
-    assertNotEquals(idSuffix(first), idSuffix(second));
+    assertEquals(PipelineProviderMode.SINGLETON, provider.mode());
+    assertEquals(1, provider.instanceCount());
+    assertSame(pipeline, provider.getPipeline());
+    assertSame(pipeline, provider.getPipeline());
+    assertEquals("event|7", provider.run("event"));
+    assertEquals(true, pipeline.isFrozen());
   }
 
   @Test
-  void pooledNeverSharesAPipelineInstanceConcurrently() throws Exception {
-    AtomicInteger instanceCounter = new AtomicInteger(0);
-    CountDownLatch startedLatch = new CountDownLatch(2);
-    CountDownLatch proceedLatch = new CountDownLatch(1);
+  void pooledEagerlyCreatesFixedInstancesAndSelectsRoundRobin() {
+    AtomicInteger instanceCounter = new AtomicInteger();
+    PipelineProvider<String> provider = PipelineProvider.pooled(
+        () -> identifiedPipeline("pooled", instanceCounter.incrementAndGet()),
+        3);
 
-    Supplier<Pipeline<String>> pipelineFactory = () -> new Pipeline<String>("pooled", true)
-        .addAction(new BlockingIdAppendAction(instanceCounter, startedLatch, proceedLatch));
+    assertEquals(PipelineProviderMode.POOLED, provider.mode());
+    assertEquals(3, provider.instanceCount());
+    assertEquals(3, instanceCounter.get(), "pool must be created eagerly");
 
-    PipelineProvider<String> provider = PipelineProvider.pooled(pipelineFactory, 2);
+    Pipeline<String> first = provider.getPipeline();
+    Pipeline<String> second = provider.getPipeline();
+    Pipeline<String> third = provider.getPipeline();
+    Pipeline<String> fourth = provider.getPipeline();
 
-    CapturedResult firstCaptured = new CapturedResult();
-    CapturedResult secondCaptured = new CapturedResult();
-
-    Thread firstThread = new Thread(() -> firstCaptured.value = provider.run("a").context(), "test-run-1");
-    Thread secondThread = new Thread(() -> secondCaptured.value = provider.run("b").context(), "test-run-2");
-
-    firstThread.start();
-    secondThread.start();
-
-    assertTrue(startedLatch.await(2, TimeUnit.SECONDS), "both runs should start");
-    proceedLatch.countDown();
-
-    firstThread.join(2_000);
-    secondThread.join(2_000);
-
-    assertNotEquals(idSuffix(firstCaptured.value), idSuffix(secondCaptured.value));
+    assertNotSame(first, second);
+    assertNotSame(second, third);
+    assertSame(first, fourth);
+    assertEquals("event|1", first.run("event"));
+    assertEquals("event|2", second.run("event"));
+    assertEquals("event|3", third.run("event"));
   }
 
-  private static String idSuffix(String value) {
-    int split = value.lastIndexOf('|');
-    if (split < 0) return "";
-    return value.substring(split + 1);
+  @Test
+  void providerBuilderDelegatesToTheSameLifecycleImplementation() {
+    AtomicInteger instanceCounter = new AtomicInteger();
+    PipelineProvider<String> provider = PipelineProvider.<String>builder(
+            () -> identifiedPipeline("builder", instanceCounter.incrementAndGet()))
+        .mode(PipelineProviderMode.POOLED)
+        .instanceCount(2)
+        .build();
+
+    assertEquals(PipelineProviderMode.POOLED, provider.mode());
+    assertEquals(2, provider.instanceCount());
+    assertEquals(2, instanceCounter.get());
   }
 
-  private static final class CapturedResult {
-    private volatile String value = "";
+  @Test
+  void routerSelectsAProviderWithoutChangingProviderOrPipelineSemantics() {
+    PipelineProvider<String> left = PipelineProvider.singleton(
+        identifiedPipeline("left", 1));
+    PipelineProvider<String> right = PipelineProvider.singleton(
+        identifiedPipeline("right", 2));
+
+    PipelineRouter<String, String> router = event ->
+        event.startsWith("L") ? left : right;
+
+    assertSame(left, router.getPipelineProvider("LEFT"));
+    assertSame(right, router.getPipelineProvider("RIGHT"));
+    assertEquals("value|1", router.run("LEFT", "value"));
+    assertEquals("value|2", router.run("RIGHT", "value"));
   }
 
-  private static final class InstanceIdAppendAction implements UnaryOperator<String> {
-    private final int instanceId;
-
-    private InstanceIdAppendAction(AtomicInteger counter) {
-      this.instanceId = counter.incrementAndGet();
-    }
-
-    @Override
-    public String apply(String input) {
-      return input + "|" + instanceId;
-    }
-  }
-
-  private static final class BlockingIdAppendAction implements UnaryOperator<String> {
-    private final int instanceId;
-    private final CountDownLatch startedLatch;
-    private final CountDownLatch proceedLatch;
-
-    private BlockingIdAppendAction(AtomicInteger counter, CountDownLatch startedLatch, CountDownLatch proceedLatch) {
-      this.instanceId = counter.incrementAndGet();
-      this.startedLatch = startedLatch;
-      this.proceedLatch = proceedLatch;
-    }
-
-    @Override
-    public String apply(String input) {
-      startedLatch.countDown();
-      try {
-        if (!proceedLatch.await(2, TimeUnit.SECONDS)) {
-          throw new IllegalStateException("Timed out waiting for proceedLatch");
-        }
-      } catch (InterruptedException interruptedException) {
-        Thread.currentThread().interrupt();
-        throw new IllegalStateException("Interrupted while waiting for proceedLatch");
-      }
-      return input + "|" + instanceId;
-    }
+  private static Pipeline<String> identifiedPipeline(String name, int instanceId) {
+    return new Pipeline<String>(name)
+        .addAction(value -> value + "|" + instanceId);
   }
 }
-
