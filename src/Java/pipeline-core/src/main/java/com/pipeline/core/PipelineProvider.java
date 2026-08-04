@@ -3,7 +3,6 @@ package com.pipeline.core;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /** Creates or selects reusable Pipeline instances without scheduling work. */
@@ -11,18 +10,17 @@ public final class PipelineProvider<C> {
   private final PipelineProviderMode mode;
   private final Supplier<? extends Pipeline<C>> pipelineFactory;
   private final Pipeline<C> singletonPipeline;
-  private final List<Pipeline<C>> pooledPipelines;
-  private final AtomicLong nextSelection = new AtomicLong();
+  private final PipelineSelector<C> pooledSelector;
 
   private PipelineProvider(
       PipelineProviderMode mode,
       Supplier<? extends Pipeline<C>> pipelineFactory,
       Pipeline<C> singletonPipeline,
-      List<Pipeline<C>> pooledPipelines) {
+      PipelineSelector<C> pooledSelector) {
     this.mode = Objects.requireNonNull(mode, "mode");
     this.pipelineFactory = pipelineFactory;
     this.singletonPipeline = singletonPipeline;
-    this.pooledPipelines = pooledPipelines == null ? List.of() : List.copyOf(pooledPipelines);
+    this.pooledSelector = pooledSelector;
   }
 
   public static <C> PipelineProvider<C> newInstancePerEvent(
@@ -31,7 +29,7 @@ public final class PipelineProvider<C> {
         PipelineProviderMode.NEW_INSTANCE_PER_EVENT,
         Objects.requireNonNull(pipelineFactory, "pipelineFactory"),
         null,
-        List.of());
+        null);
   }
 
   public static <C> PipelineProvider<C> singleton(Pipeline<C> pipeline) {
@@ -40,7 +38,7 @@ public final class PipelineProvider<C> {
         PipelineProviderMode.SINGLETON,
         null,
         frozenPipeline,
-        List.of());
+        null);
   }
 
   public static <C> PipelineProvider<C> singleton(
@@ -69,7 +67,7 @@ public final class PipelineProvider<C> {
         PipelineProviderMode.POOLED,
         null,
         null,
-        pipelines);
+        new RoundRobinPipelineSelector<>(pipelines));
   }
 
   public static <C> PipelineProvider<C> pooled(
@@ -111,7 +109,7 @@ public final class PipelineProvider<C> {
     return switch (mode) {
       case NEW_INSTANCE_PER_EVENT -> 0;
       case SINGLETON -> 1;
-      case POOLED -> pooledPipelines.size();
+      case POOLED -> pooledSelector.instanceCount();
     };
   }
 
@@ -120,7 +118,7 @@ public final class PipelineProvider<C> {
       case NEW_INSTANCE_PER_EVENT ->
           requirePipeline(pipelineFactory.get(), "pipelineFactory.get()").freeze();
       case SINGLETON -> singletonPipeline;
-      case POOLED -> pooledPipelines.get(nextPooledIndex());
+      case POOLED -> pooledSelector.selectPipeline();
     };
   }
 
@@ -130,11 +128,6 @@ public final class PipelineProvider<C> {
 
   public PipelineResult<C> runDetailed(C context) {
     return getPipeline().runDetailed(context);
-  }
-
-  private int nextPooledIndex() {
-    long selection = nextSelection.getAndIncrement();
-    return Math.floorMod(selection, pooledPipelines.size());
   }
 
   private static <C> Pipeline<C> requirePipeline(
