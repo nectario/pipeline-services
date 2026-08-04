@@ -49,6 +49,8 @@ pipeline.addAction(context -> {
 
 The preview `StepAction<C>` and `ActionControl<C>` overloads remain temporarily available as compatibility adapters, but new code should use the canonical one-argument Action shape.
 
+`shortCircuit()` must be called while the Action body is actively executing. It cannot be invoked from an observer, error handler, or detached asynchronous task.
+
 ## 3. Actions may still live anywhere
 
 ```java
@@ -183,3 +185,16 @@ New application code should prefer ordinary Pipeline construction.
 `com.pipeline.api.Pipeline<I, C>` remains a legacy extension for typed transformations, labels, and jumps.
 
 The vNext core is the single-context `com.pipeline.core.Pipeline<C>`. Type-changing chains and arbitrary jump workflows are outside the core contract and will be separated during extension cleanup.
+
+## 13. Diagnostic accessor names
+
+Preview diagnostic vocabulary that used `step` or a generic `index` now uses explicit Action terminology:
+
+```java
+pipelineError.actionIndex();
+pipelineError.actionName();
+actionTiming.actionIndex();
+actionTiming.actionName();
+```
+
+This aligns Java with the vNext `preActions`, `actions`, and `postActions` vocabulary.
