@@ -9,23 +9,22 @@ public final class Example13RuntimeResetAndFreeze {
   private Example13RuntimeResetAndFreeze() {}
 
   public static void run() {
-    // Build incrementally at runtime
-    var rt = new RuntimePipeline<>("adhoc_session", /*shortCircuit=*/false, "   First   Input   ");
-    rt.addPreAction(PolicySteps::rateLimit);
-    rt.addAction(TextSteps::strip);
-    rt.addAction(TextSteps::normalizeWhitespace);
-    rt.addPostAction(PolicySteps::audit);
-    System.out.println("[ex13-runtime] session1 -> " + rt.value());
+    RuntimePipeline<String> runtimePipeline = new RuntimePipeline<>(
+        "adhoc_session",
+        /*shortCircuit=*/false,
+        "   First   Input   ");
+    runtimePipeline.addPreAction(PolicySteps::rateLimit);
+    runtimePipeline.addAction(TextSteps::strip);
+    runtimePipeline.addAction(TextSteps::normalizeWhitespace);
+    runtimePipeline.addPostAction(PolicySteps::audit);
+    System.out.println("[ex13-runtime] session1 -> " + runtimePipeline.value());
 
-    // Start another session with a different input
-    rt.reset("   Second     Input   ");
-    rt.addAction(TextSteps::truncateAt280);
-    System.out.println("[ex13-runtime] session2 -> " + rt.value());
+    runtimePipeline.reset("   Second     Input   ");
+    runtimePipeline.addAction(TextSteps::truncateAt280);
+    System.out.println("[ex13-runtime] session2 -> " + runtimePipeline.value());
 
-    // Freeze the recorded steps (pre/main/post) into a reusable immutable Pipeline
-    Pipeline<String> immutable = rt.toImmutable();
-    String outputValue = immutable.run("  Reusable   pipeline   input  ").context();
+    Pipeline<String> immutablePipeline = runtimePipeline.toImmutable();
+    String outputValue = immutablePipeline.run("  Reusable   pipeline   input  ");
     System.out.println("[ex13-runtime] frozen -> " + outputValue);
   }
 }
-
