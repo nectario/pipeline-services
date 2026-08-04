@@ -2,7 +2,7 @@ package com.pipeline.examples;
 
 import com.pipeline.core.Pipeline;
 import com.pipeline.core.PipelineProvider;
-import com.pipeline.examples.adapters.PooledScratchNormalizeAction;
+import com.pipeline.examples.steps.TextSteps;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,15 +11,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+/** Demonstrates the vNext fixed-instance PipelineProvider pool. */
 public final class Example18ProgrammaticPooledActions {
   private Example18ProgrammaticPooledActions() {}
 
   public static void run() throws Exception {
     PipelineProvider<String> provider = PipelineProvider.pooled(
         () -> new Pipeline<String>("programmatic_pooled", true)
-            .addAction("normalize_whitespace", new PooledScratchNormalizeAction()),
-        64
-    );
+            .addAction("normalize_whitespace", TextSteps::normalizeWhitespace),
+        8);
 
     int runCount = 30;
     ExecutorService executor = Executors.newFixedThreadPool(8);
@@ -49,7 +49,7 @@ public final class Example18ProgrammaticPooledActions {
 
     @Override
     public String call() {
-      return provider.run(input).context();
+      return provider.run(input);
     }
   }
 }
