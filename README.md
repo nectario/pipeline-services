@@ -29,6 +29,7 @@ Key documents:
 - [API Naming Matrix](docs/vnext/API_NAMING_MATRIX.md)
 - [Java Reference Implementation](docs/vnext/JAVA_REFERENCE_IMPLEMENTATION.md)
 - [Java Migration Guide](docs/vnext/JAVA_MIGRATION.md)
+- [Java Benchmark Smoke](docs/vnext/JAVA_BENCHMARK.md)
 - [Project Status](docs/PROJECT_STATUS.md)
 
 ## The core idea
@@ -104,12 +105,14 @@ pipeline.addAction(OrderActions::validateOrder);
 
 `shortCircuit()`:
 
-- may only be called during an active Pipeline run;
+- may only be called while a Pipeline Action body is actively executing;
 - affects the innermost active run;
 - lets the current Action return its updated context normally;
 - skips remaining main Actions;
 - never skips remaining postActions;
 - remains isolated across nested and overlapping runs.
+
+Observer callbacks, error handlers, and detached asynchronous work cannot use ambient `shortCircuit()` to control a run. The decision must be made on the active Action execution path before that Action returns.
 
 ### Checked exceptions
 
