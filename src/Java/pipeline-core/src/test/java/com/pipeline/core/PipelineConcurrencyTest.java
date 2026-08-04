@@ -54,7 +54,7 @@ final class PipelineConcurrencyTest {
   }
 
   @Test
-  void nestedShortCircuitTargetsOnlyTheInnermostActiveRun() {
+  void nestedShortCircuitTargetsTheInnermostRunThenReturnsToTheOuterRun() {
     Pipeline<String> innerPipeline = new Pipeline<String>("inner")
         .addAction(value -> {
           shortCircuit();
@@ -64,12 +64,16 @@ final class PipelineConcurrencyTest {
         .addPostAction(value -> value + "|IP");
 
     Pipeline<String> outerPipeline = new Pipeline<String>("outer")
-        .addAction(value -> value + ":" + innerPipeline.run("inner"))
+        .addAction(value -> {
+          String innerResult = innerPipeline.run("inner");
+          shortCircuit();
+          return value + ":" + innerResult + "|O1";
+        })
         .addAction(value -> value + "|O2")
         .addPostAction(value -> value + "|OP");
 
     assertEquals(
-        "outer:inner|I1|IP|O2|OP",
+        "outer:inner|I1|IP|O1|OP",
         outerPipeline.run("outer"));
   }
 
