@@ -15,10 +15,14 @@ public final class Example17JsonSingletonMode {
   private Example17JsonSingletonMode() {}
 
   public static void run() throws Exception {
-    try (InputStream inputStream = Example17JsonSingletonMode.class.getResourceAsStream("/pipelines/singleton_mode_pooled.json")) {
-      if (inputStream == null) throw new IllegalStateException("Missing resource: /pipelines/singleton_mode_pooled.json");
+    try (InputStream inputStream = Example17JsonSingletonMode.class.getResourceAsStream(
+        "/pipelines/singleton_mode_pooled.json")) {
+      if (inputStream == null) {
+        throw new IllegalStateException(
+            "Missing resource: /pipelines/singleton_mode_pooled.json");
+      }
 
-        Pipeline<String> pipeline = PipelineJsonLoader.loadUnary(inputStream);
+      Pipeline<String> pipeline = PipelineJsonLoader.loadUnary(inputStream);
 
       int runCount = 50;
       ExecutorService executor = Executors.newFixedThreadPool(8);
@@ -29,8 +33,8 @@ public final class Example17JsonSingletonMode {
           futures.add(executor.submit(new PipelineRunTask(pipeline, input)));
         }
 
-        for (int index = 0; index < futures.size(); index++) {
-          System.out.println("[ex17] => " + futures.get(index).get());
+        for (Future<String> future : futures) {
+          System.out.println("[ex17] => " + future.get());
         }
       } finally {
         executor.shutdownNow();
@@ -49,7 +53,7 @@ public final class Example17JsonSingletonMode {
 
     @Override
     public String call() {
-      return pipeline.run(input).context();
+      return pipeline.run(input);
     }
   }
 }
