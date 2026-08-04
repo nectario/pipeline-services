@@ -85,19 +85,23 @@ final class ExecutionState<C> {
         Objects.requireNonNull(exception, "exception"));
     errors.add(pipelineError);
 
-    C updatedContext = currentContext;
+    final C updatedContext;
     try {
-      updatedContext = Objects.requireNonNull(
-          plan.errorHandler().apply(currentContext, pipelineError),
-          "onError returned null");
-    } catch (RuntimeException handlerFailure) {
-      errors.add(new PipelineError(
-          plan.pipelineName(),
-          phase,
-          actionIndex,
-          actionName,
-          handlerFailure));
-      requestShortCircuit();
+      updatedContext = plan.errorHandler().apply(currentContext, pipelineError);
+    } catch (RuntimeException errorHandlerFailure) {
+      IllegalStateException failure = new IllegalStateException(
+          "onError failed for pipeline '" + plan.pipelineName()
+              + "' at Action '" + actionName + "'",
+          errorHandlerFailure);
+      failure.addSuppressed(exception);
+      throw failure;
+    }
+
+    if (updatedContext == null) {
+      throw new IllegalStateException(
+          "onError returned null for pipeline '" + plan.pipelineName()
+              + "' at Action '" + actionName + "'",
+          exception);
     }
 
     context(updatedContext);
