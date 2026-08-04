@@ -1,405 +1,429 @@
 package com.pipeline.core;
 
-import com.pipeline.metrics.Metrics;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Objects;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
-public final class Pipeline<C> {
-    private static final Logger log = LoggerFactory.getLogger(Pipeline.class);
+/**
+ * A reusable, single-context pipeline.
+ *
+ * <p>Actions are registered during assembly. The plan freezes explicitly or on first run.
+ * Every run receives independent execution state, so one frozen Pipeline may be reused concurrently
+ * when its user-provided Actions are themselves concurrency-safe.</p>
+ */
+public class Pipeline<C> {
+  private final String pipelineName;
+  private final Object assemblyLock = new Object();
+  private final List<RegisteredAction<C>> preActions = new ArrayList<>();
+  private final List<RegisteredAction<C>> actions = new ArrayList<>();
+  private final List<RegisteredAction<C>> postActions = new ArrayList<>();
 
-    private final String name;
-    private final boolean shortCircuitOnException;
-    private volatile BiFunction<C, PipelineError, C> onError = (ctx, err) -> ctx;
+  private boolean shortCircuitOnException;
+  private BiFunction<C, PipelineError, C> errorHandler = (context, error) -> context;
+  private PipelineObserver observer = PipelineObserver.NOOP;
+  private volatile PipelinePlan<C> frozenPlan;
 
-    private volatile boolean pooledLocalActionsEnabled;
+  public Pipeline(String pipelineName) {
+    this(pipelineName, true);
+  }
 
-    private final List<RegisteredAction<C>> preActions = new ArrayList<>();
-    private final List<RegisteredAction<C>> actions = new ArrayList<>();
-    private final List<RegisteredAction<C>> postActions = new ArrayList<>();
+  public Pipeline(String pipelineName, boolean shortCircuitOnException) {
+    String normalizedName = Objects.requireNonNull(pipelineName, "pipelineName").strip();
+    if (normalizedName.isEmpty()) {
+      throw new IllegalArgumentException("pipelineName must not be blank");
+    }
+    this.pipelineName = normalizedName;
+    this.shortCircuitOnException = shortCircuitOnException;
+  }
 
-    public Pipeline(String name) {
-        this(name, true);
+  @SafeVarargs
+  public static <C> Pipeline<C> build(
+      String pipelineName,
+      boolean shortCircuitOnException,
+      Action<C>... actions) {
+    Pipeline<C> pipeline = new Pipeline<>(pipelineName, shortCircuitOnException);
+    if (actions != null) {
+      for (Action<C> action : actions) pipeline.addAction(action);
+    }
+    return pipeline.freeze();
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  @SafeVarargs
+  public static <C> Pipeline<C> build(
+      String pipelineName,
+      boolean shortCircuitOnException,
+      UnaryOperator<C>... actions) {
+    Pipeline<C> pipeline = new Pipeline<>(pipelineName, shortCircuitOnException);
+    if (actions != null) {
+      for (UnaryOperator<C> action : actions) pipeline.addAction(action);
+    }
+    return pipeline.freeze();
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @SafeVarargs
+  public static <C> Pipeline<C> build(
+      String pipelineName,
+      boolean shortCircuitOnException,
+      StepAction<C>... actions) {
+    Pipeline<C> pipeline = new Pipeline<>(pipelineName, shortCircuitOnException);
+    if (actions != null) {
+      for (StepAction<C> action : actions) pipeline.addAction(action);
+    }
+    return pipeline.freeze();
+  }
+
+  public static <C> Builder<C> builder(String pipelineName) {
+    return new Builder<>(pipelineName);
+  }
+
+  public final Pipeline<C> shortCircuitOnException(boolean enabled) {
+    synchronized (assemblyLock) {
+      ensureMutable();
+      shortCircuitOnException = enabled;
+      return this;
+    }
+  }
+
+  /** Legacy alias retained during the preview migration. */
+  @Deprecated
+  public final Pipeline<C> shortCircuit(boolean enabled) {
+    return shortCircuitOnException(enabled);
+  }
+
+  public final Pipeline<C> onError(BiFunction<C, PipelineError, C> handler) {
+    synchronized (assemblyLock) {
+      ensureMutable();
+      errorHandler = handler == null ? ((context, error) -> context) : handler;
+      return this;
+    }
+  }
+
+  public final Pipeline<C> observer(PipelineObserver pipelineObserver) {
+    synchronized (assemblyLock) {
+      ensureMutable();
+      observer = pipelineObserver == null ? PipelineObserver.NOOP : pipelineObserver;
+      return this;
+    }
+  }
+
+  public final Pipeline<C> addPreAction(Action<C> action) {
+    return addPreAction(null, action);
+  }
+
+  public final Pipeline<C> addAction(Action<C> action) {
+    return addAction(null, action);
+  }
+
+  public final Pipeline<C> addPostAction(Action<C> action) {
+    return addPostAction(null, action);
+  }
+
+  public final Pipeline<C> addPreAction(String actionName, Action<C> action) {
+    register(preActions, actionName, action);
+    return this;
+  }
+
+  public final Pipeline<C> addAction(String actionName, Action<C> action) {
+    register(actions, actionName, action);
+    return this;
+  }
+
+  public final Pipeline<C> addPostAction(String actionName, Action<C> action) {
+    register(postActions, actionName, action);
+    return this;
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  public final Pipeline<C> addPreAction(UnaryOperator<C> action) {
+    return addPreAction(null, action);
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  public final Pipeline<C> addAction(UnaryOperator<C> action) {
+    return addAction(null, action);
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  public final Pipeline<C> addPostAction(UnaryOperator<C> action) {
+    return addPostAction(null, action);
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  public final Pipeline<C> addPreAction(String actionName, UnaryOperator<C> action) {
+    return addPreAction(actionName, Action.from(action));
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  public final Pipeline<C> addAction(String actionName, UnaryOperator<C> action) {
+    return addAction(actionName, Action.from(action));
+  }
+
+  /** Compatibility overload for ordinary {@link UnaryOperator} implementations. */
+  public final Pipeline<C> addPostAction(String actionName, UnaryOperator<C> action) {
+    return addPostAction(actionName, Action.from(action));
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @Deprecated
+  public final Pipeline<C> addPreAction(StepAction<C> action) {
+    return addPreAction(null, action);
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @Deprecated
+  public final Pipeline<C> addAction(StepAction<C> action) {
+    return addAction(null, action);
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @Deprecated
+  public final Pipeline<C> addPostAction(StepAction<C> action) {
+    return addPostAction(null, action);
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @Deprecated
+  public final Pipeline<C> addPreAction(String actionName, StepAction<C> action) {
+    return addPreAction(actionName, adapt(action));
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @Deprecated
+  public final Pipeline<C> addAction(String actionName, StepAction<C> action) {
+    return addAction(actionName, adapt(action));
+  }
+
+  /** Compatibility overload for the preview control-aware Action shape. */
+  @Deprecated
+  public final Pipeline<C> addPostAction(String actionName, StepAction<C> action) {
+    return addPostAction(actionName, adapt(action));
+  }
+
+  /** Marks the innermost active Pipeline run as short-circuited. */
+  public final void shortCircuit() {
+    PipelineExecution.shortCircuit();
+  }
+
+  /** Returns the final context through the one canonical runner. */
+  public final C run(C input) {
+    return PipelineRunner.run(plan(), input);
+  }
+
+  /** Returns the final context plus diagnostics through the same canonical runner. */
+  public final PipelineResult<C> runDetailed(C input) {
+    return PipelineRunner.runDetailed(plan(), input);
+  }
+
+  /** Legacy diagnostic alias retained during the preview migration. */
+  @Deprecated
+  public final PipelineResult<C> execute(C input) {
+    return runDetailed(input);
+  }
+
+  /** Freezes structural configuration and returns this Pipeline. */
+  public final Pipeline<C> freeze() {
+    plan();
+    return this;
+  }
+
+  public final boolean isFrozen() {
+    return frozenPlan != null;
+  }
+
+  public final String pipelineName() {
+    return pipelineName;
+  }
+
+  /** Legacy name retained during the preview migration. */
+  public final String name() {
+    return pipelineName;
+  }
+
+  public final boolean shortCircuitOnException() {
+    PipelinePlan<C> currentPlan = frozenPlan;
+    return currentPlan == null
+        ? shortCircuitOnException
+        : currentPlan.shortCircuitOnException();
+  }
+
+  public final int size() {
+    PipelinePlan<C> currentPlan = frozenPlan;
+    return currentPlan == null ? actions.size() : currentPlan.actions().size();
+  }
+
+  private void register(
+      List<RegisteredAction<C>> destination,
+      String actionName,
+      Action<C> action) {
+    Objects.requireNonNull(action, "action");
+    synchronized (assemblyLock) {
+      ensureMutable();
+      destination.add(RegisteredAction.of(actionName, action));
+    }
+  }
+
+  private PipelinePlan<C> plan() {
+    PipelinePlan<C> currentPlan = frozenPlan;
+    if (currentPlan != null) return currentPlan;
+
+    synchronized (assemblyLock) {
+      currentPlan = frozenPlan;
+      if (currentPlan == null) {
+        currentPlan = new PipelinePlan<>(
+            pipelineName,
+            shortCircuitOnException,
+            errorHandler,
+            observer,
+            preActions,
+            actions,
+            postActions);
+        frozenPlan = currentPlan;
+      }
+      return currentPlan;
+    }
+  }
+
+  private void ensureMutable() {
+    if (frozenPlan != null) {
+      throw new IllegalStateException("Pipeline '" + pipelineName + "' is frozen");
+    }
+  }
+
+  private static <C> Action<C> adapt(StepAction<C> action) {
+    Objects.requireNonNull(action, "action");
+    return context -> action.apply(context, CurrentActionControl.instance());
+  }
+
+  public static final class Builder<C> {
+    private final Pipeline<C> pipeline;
+
+    private Builder(String pipelineName) {
+      pipeline = new Pipeline<>(pipelineName);
     }
 
-    public Pipeline(String name, boolean shortCircuitOnException) {
-        this.name = Objects.requireNonNull(name, "name");
-        this.shortCircuitOnException = shortCircuitOnException;
+    public Builder<C> shortCircuitOnException(boolean enabled) {
+      pipeline.shortCircuitOnException(enabled);
+      return this;
     }
 
-    @SafeVarargs
-    public static <C> Pipeline<C> build(String name, boolean shortCircuitOnException, StepAction<C>... actions) {
-        var p = new Pipeline<C>(name, shortCircuitOnException);
-        if (actions != null) for (var a : actions) p.addAction(a);
-        return p;
-    }
-
-    @SafeVarargs
-    public static <C> Pipeline<C> build(String name, boolean shortCircuitOnException, UnaryOperator<C>... actions) {
-        var p = new Pipeline<C>(name, shortCircuitOnException);
-        if (actions != null) for (var a : actions) p.addAction(a);
-        return p;
-    }
-
-    public static <C> Builder<C> builder(String name) {
-        return new Builder<>(name);
-    }
-
-    public static final class Builder<C> {
-        private final String name;
-        private boolean shortCircuitOnException = true;
-        private BiFunction<C, PipelineError, C> onError = (ctx, err) -> ctx;
-        private final List<RegisteredAction<C>> pre = new ArrayList<>();
-        private final List<RegisteredAction<C>> main = new ArrayList<>();
-        private final List<RegisteredAction<C>> post = new ArrayList<>();
-
-        public Builder(String name) { this.name = name; }
-
-        public Builder<C> shortCircuitOnException(boolean b) { this.shortCircuitOnException = b; return this; }
-        public Builder<C> shortCircuit(boolean b) { return shortCircuitOnException(b); } // legacy alias
-
-        public Builder<C> onError(BiFunction<C, PipelineError, C> handler) {
-            this.onError = (handler == null) ? ((ctx, err) -> ctx) : handler;
-            return this;
-        }
-
-        public Builder<C> addPreAction(String name, StepAction<C> action) {
-            pre.add(RegisteredAction.named(name, action));
-            return this;
-        }
-        public Builder<C> addAction(String name, StepAction<C> action) {
-            main.add(RegisteredAction.named(name, action));
-            return this;
-        }
-        public Builder<C> addPostAction(String name, StepAction<C> action) {
-            post.add(RegisteredAction.named(name, action));
-            return this;
-        }
-
-        /** Convenience placeholder: registers an identity action with the provided name. */
-        public Builder<C> addPreAction(String name) { pre.add(RegisteredAction.named(name, identity())); return this; }
-
-        /** Convenience placeholder: registers an identity action with the provided name. */
-        public Builder<C> addAction(String name) { main.add(RegisteredAction.named(name, identity())); return this; }
-
-        /** Convenience placeholder: registers an identity action with the provided name. */
-        public Builder<C> addPostAction(String name) { post.add(RegisteredAction.named(name, identity())); return this; }
-
-        public Builder<C> addPreAction(StepAction<C> action) { return addPreAction(null, action); }
-        public Builder<C> addAction(StepAction<C> action) { return addAction(null, action); }
-        public Builder<C> addPostAction(StepAction<C> action) { return addPostAction(null, action); }
-
-        public Builder<C> addPreAction(UnaryOperator<C> fn) { return addPreAction(null, fn); }
-        public Builder<C> addAction(UnaryOperator<C> fn) { return addAction(null, fn); }
-        public Builder<C> addPostAction(UnaryOperator<C> fn) { return addPostAction(null, fn); }
-
-        public Builder<C> addPreAction(String name, UnaryOperator<C> fn) { return addPreAction(name, adapt(fn)); }
-        public Builder<C> addAction(String name, UnaryOperator<C> fn) { return addAction(name, adapt(fn)); }
-        public Builder<C> addPostAction(String name, UnaryOperator<C> fn) { return addPostAction(name, adapt(fn)); }
-
-        public Pipeline<C> build() {
-            Pipeline<C> p = new Pipeline<>(name, shortCircuitOnException);
-            p.onError(onError);
-            for (var a : pre) p.preActions.add(a);
-            for (var a : main) p.actions.add(a);
-            for (var a : post) p.postActions.add(a);
-            return p;
-        }
-
-    }
-
-    public Pipeline<C> onError(BiFunction<C, PipelineError, C> handler) {
-        this.onError = (handler == null) ? ((ctx, err) -> ctx) : handler;
-        return this;
-    }
-
-    public Pipeline<C> addPreAction(StepAction<C> action) { return addPreAction(null, action); }
-    public Pipeline<C> addAction(StepAction<C> action) { return addAction(null, action); }
-    public Pipeline<C> addPostAction(StepAction<C> action) { return addPostAction(null, action); }
-
-    public Pipeline<C> addPreAction(UnaryOperator<C> fn) { return addPreAction(null, fn); }
-    public Pipeline<C> addAction(UnaryOperator<C> fn) { return addAction(null, fn); }
-    public Pipeline<C> addPostAction(UnaryOperator<C> fn) { return addPostAction(null, fn); }
-
-    /** Convenience placeholder: registers an identity action with the provided name. */
-    public Pipeline<C> addPreAction(String actionName) { return addPreAction(actionName, identity()); }
-
-    /** Convenience placeholder: registers an identity action with the provided name. */
-    public Pipeline<C> addAction(String actionName) { return addAction(actionName, identity()); }
-
-    /** Convenience placeholder: registers an identity action with the provided name. */
-    public Pipeline<C> addPostAction(String actionName) { return addPostAction(actionName, identity()); }
-
-    public Pipeline<C> addPreAction(String actionName, StepAction<C> action) {
-        preActions.add(RegisteredAction.named(actionName, action));
-        return this;
-    }
-    public Pipeline<C> addAction(String actionName, StepAction<C> action) {
-        actions.add(RegisteredAction.named(actionName, action));
-        return this;
-    }
-    public Pipeline<C> addPostAction(String actionName, StepAction<C> action) {
-        postActions.add(RegisteredAction.named(actionName, action));
-        return this;
-    }
-
-    public Pipeline<C> addPreAction(String actionName, UnaryOperator<C> fn) { return addPreAction(actionName, adapt(fn)); }
-    public Pipeline<C> addAction(String actionName, UnaryOperator<C> fn) { return addAction(actionName, adapt(fn)); }
-    public Pipeline<C> addPostAction(String actionName, UnaryOperator<C> fn) { return addPostAction(actionName, adapt(fn)); }
-
-    public PipelineResult<C> run(C input) {
-        var rec = Metrics.recorder();
-
-        long runStartNanos = System.nanoTime();
-        C ctx = Objects.requireNonNull(input, "input");
-        DefaultActionControl<C> control = new DefaultActionControl<>(name, onError);
-        control.beginRun(runStartNanos);
-
-        // pre: always run all pre-actions
-        ctx = runPhase(control, rec, StepPhase.PRE, ctx, preActions, /*stopOnShortCircuit=*/false);
-
-        // main: stop when control short-circuits
-        if (!control.isShortCircuited()) {
-            ctx = runPhase(control, rec, StepPhase.MAIN, ctx, actions, /*stopOnShortCircuit=*/true);
-        }
-
-        // post: always run all post-actions
-        ctx = runPhase(control, rec, StepPhase.POST, ctx, postActions, /*stopOnShortCircuit=*/false);
-
-        long totalNanos = System.nanoTime() - runStartNanos;
-        return new PipelineResult<>(ctx, control.isShortCircuited(), control.errors(), control.actionTimings(), totalNanos);
-    }
-
-    /** @deprecated Renamed to {@link #run(Object)}. */
+    /** Legacy alias retained during the preview migration. */
     @Deprecated
-    public PipelineResult<C> execute(C input) {
-        return run(input);
+    public Builder<C> shortCircuit(boolean enabled) {
+      return shortCircuitOnException(enabled);
     }
 
-    public String name() { return name; }
-    public boolean shortCircuitOnException() { return shortCircuitOnException; }
-    public int size() { return actions.size(); }
-
-    void enablePooledLocalActions(ActionPoolCache actionPoolCache) {
-        Objects.requireNonNull(actionPoolCache, "actionPoolCache");
-        if (pooledLocalActionsEnabled) return;
-        synchronized (this) {
-            if (pooledLocalActionsEnabled) return;
-            pooledLocalActionsEnabled = true;
-        }
-
-        enablePooledLocalActionsForPhase(actionPoolCache, StepPhase.PRE, preActions);
-        enablePooledLocalActionsForPhase(actionPoolCache, StepPhase.MAIN, actions);
-        enablePooledLocalActionsForPhase(actionPoolCache, StepPhase.POST, postActions);
+    public Builder<C> onError(BiFunction<C, PipelineError, C> handler) {
+      pipeline.onError(handler);
+      return this;
     }
 
-    private void enablePooledLocalActionsForPhase(
-        ActionPoolCache actionPoolCache,
-        StepPhase phase,
-        List<RegisteredAction<C>> registeredActions
-    ) {
-        for (int index = 0; index < registeredActions.size(); index++) {
-            RegisteredAction<C> registeredAction = registeredActions.get(index);
-            StepAction<C> action = registeredAction.action();
-            if (action instanceof PooledAction<?>) continue;
-
-            PoolablePrototype poolablePrototype = poolablePrototype(action);
-            if (poolablePrototype == null) continue;
-
-            String actionLabel = registeredAction.name();
-            String normalizedLabel = (actionLabel == null) ? "" : actionLabel.strip();
-
-            ActionCacheKey actionCacheKey = new ActionCacheKey(name, phase, index, normalizedLabel);
-            ActionPoolCache.ActionPoolEntry entry = actionPoolCache.entry(
-                actionCacheKey,
-                poolablePrototype.actionClass(),
-                poolablePrototype.invokeStyle());
-            entry.pool().trySeed(poolablePrototype.prototype());
-
-            StepAction<C> pooledAction = new PooledAction<>(entry.pool(), poolablePrototype.invokeStyle(), actionCacheKey.toString());
-            registeredActions.set(index, RegisteredAction.named(actionLabel, pooledAction));
-        }
+    public Builder<C> observer(PipelineObserver observer) {
+      pipeline.observer(observer);
+      return this;
     }
 
-    private C runPhase(DefaultActionControl<C> control,
-                       com.pipeline.metrics.MetricsRecorder rec,
-                       StepPhase phase,
-                       C start,
-                       List<RegisteredAction<C>> list,
-                       boolean stopOnShortCircuit) {
-        C ctx = start;
-        for (int i = 0; i < list.size(); i++) {
-            RegisteredAction<C> reg = list.get(i);
-            String actionName = formatStepName(phase, i, reg.name());
-            control.beginStep(phase, i, actionName);
-
-            boolean wasShortCircuited = control.isShortCircuited();
-
-            long actionStartNanos = System.nanoTime();
-            boolean actionSucceeded = true;
-            long elapsedNanos;
-            try {
-                C next = reg.action().apply(ctx, control);
-                if (next == null) throw new IllegalStateException("Step returned null: " + actionName);
-                ctx = next;
-            } catch (Exception ex) {
-                actionSucceeded = false;
-                rec.onStepError(name, actionName, ex);
-                ctx = control.recordError(ctx, ex);
-                if (shortCircuitOnException) {
-                    control.shortCircuit();
-                    log.debug("short-circuit '{}' at {} due to exception", name, actionName, ex);
-                }
-            } finally {
-                elapsedNanos = System.nanoTime() - actionStartNanos;
-                control.recordTiming(elapsedNanos, actionSucceeded);
-                if (actionSucceeded) {
-                    rec.onStepSuccess(name, actionName, elapsedNanos);
-                }
-            }
-
-            boolean isShortCircuitedNow = control.isShortCircuited();
-            if (!wasShortCircuited && isShortCircuitedNow) {
-                rec.onShortCircuit(name, actionName);
-            }
-
-            if (stopOnShortCircuit && isShortCircuitedNow) break;
-        }
-        return ctx;
+    public Builder<C> addPreAction(Action<C> action) {
+      pipeline.addPreAction(action);
+      return this;
     }
 
-    private static String formatStepName(StepPhase phase, int idx, String labelOrNull) {
-        String p = switch (phase) {
-            case PRE -> "pre";
-            case MAIN -> "s";
-            case POST -> "post";
-        };
-        if (labelOrNull == null || labelOrNull.isBlank()) return p + idx;
-        return p + idx + ":" + labelOrNull;
+    public Builder<C> addAction(Action<C> action) {
+      pipeline.addAction(action);
+      return this;
     }
 
-    private static <C> StepAction<C> adapt(UnaryOperator<C> fn) {
-        Objects.requireNonNull(fn, "fn");
-        return new UnaryAdapterAction<>(fn);
+    public Builder<C> addPostAction(Action<C> action) {
+      pipeline.addPostAction(action);
+      return this;
     }
 
-    private static <C> StepAction<C> identity() {
-        return (ctx, control) -> ctx;
+    public Builder<C> addPreAction(String actionName, Action<C> action) {
+      pipeline.addPreAction(actionName, action);
+      return this;
     }
 
-    private record PoolablePrototype(Object prototype, Class<?> actionClass, ActionInvokeStyle invokeStyle) {}
-
-    private PoolablePrototype poolablePrototype(StepAction<C> action) {
-        if (action instanceof UnaryAdapterAction<?> unaryAdapterAction) {
-            Object unaryOperator = unaryAdapterAction.unaryOperator();
-            if (!(unaryOperator instanceof ResettableAction)) return null;
-            return new PoolablePrototype(unaryOperator, unaryOperator.getClass(), ActionInvokeStyle.UNARY_OPERATOR);
-        }
-        if (!(action instanceof ResettableAction)) return null;
-        return new PoolablePrototype(action, action.getClass(), ActionInvokeStyle.STEP_ACTION);
+    public Builder<C> addAction(String actionName, Action<C> action) {
+      pipeline.addAction(actionName, action);
+      return this;
     }
 
-    private record RegisteredAction<C>(String name, StepAction<C> action) {
-        private RegisteredAction {
-            action = Objects.requireNonNull(action, "action");
-        }
-
-        static <C> RegisteredAction<C> named(String name, StepAction<C> action) {
-            return new RegisteredAction<>(name, action);
-        }
+    public Builder<C> addPostAction(String actionName, Action<C> action) {
+      pipeline.addPostAction(actionName, action);
+      return this;
     }
 
-    private static final class UnaryAdapterAction<C> implements StepAction<C> {
-        private final UnaryOperator<C> unaryOperator;
-
-        private UnaryAdapterAction(UnaryOperator<C> unaryOperator) {
-            this.unaryOperator = Objects.requireNonNull(unaryOperator, "unaryOperator");
-        }
-
-        private UnaryOperator<C> unaryOperator() {
-            return unaryOperator;
-        }
-
-        @Override
-        public C apply(C ctx, ActionControl<C> control) {
-            return unaryOperator.apply(ctx);
-        }
+    public Builder<C> addPreAction(UnaryOperator<C> action) {
+      pipeline.addPreAction(action);
+      return this;
     }
 
-    private static final class DefaultActionControl<C> implements ActionControl<C> {
-        private final String pipelineName;
-        private final BiFunction<C, PipelineError, C> onError;
-        private final List<PipelineError> errors = new ArrayList<>();
-        private final List<ActionTiming> actionTimings = new ArrayList<>();
-
-        private boolean shortCircuited;
-
-        private StepPhase phase = StepPhase.MAIN;
-        private int index = 0;
-        private String stepName = "?";
-        private long runStartNanos;
-
-        private DefaultActionControl(String pipelineName, BiFunction<C, PipelineError, C> onError) {
-            this.pipelineName = Objects.requireNonNull(pipelineName, "pipelineName");
-            this.onError = Objects.requireNonNull(onError, "onError");
-        }
-
-        private void beginRun(long startNanos) {
-            this.runStartNanos = startNanos;
-        }
-
-        private void beginStep(StepPhase phase, int index, String stepName) {
-            this.phase = Objects.requireNonNull(phase, "phase");
-            this.index = index;
-            this.stepName = Objects.requireNonNull(stepName, "stepName");
-        }
-
-        private void recordTiming(long elapsedNanos, boolean success) {
-            actionTimings.add(new ActionTiming(phase, index, stepName, elapsedNanos, success));
-        }
-
-        @Override
-        public void shortCircuit() {
-            this.shortCircuited = true;
-        }
-
-        @Override
-        public boolean isShortCircuited() {
-            return shortCircuited;
-        }
-
-        @Override
-        public C recordError(C ctx, Exception exception) {
-            PipelineError err = new PipelineError(pipelineName, phase, index, stepName, exception);
-            errors.add(err);
-            C next = onError.apply(ctx, err);
-            if (next == null) throw new IllegalStateException("onError returned null");
-            return next;
-        }
-
-        @Override
-        public List<PipelineError> errors() {
-            return List.copyOf(errors);
-        }
-
-        @Override
-        public String pipelineName() {
-            return pipelineName;
-        }
-
-        @Override
-        public long runStartNanos() {
-            return runStartNanos;
-        }
-
-        @Override
-        public List<ActionTiming> actionTimings() {
-            return List.copyOf(actionTimings);
-        }
+    public Builder<C> addAction(UnaryOperator<C> action) {
+      pipeline.addAction(action);
+      return this;
     }
+
+    public Builder<C> addPostAction(UnaryOperator<C> action) {
+      pipeline.addPostAction(action);
+      return this;
+    }
+
+    public Builder<C> addPreAction(String actionName, UnaryOperator<C> action) {
+      pipeline.addPreAction(actionName, action);
+      return this;
+    }
+
+    public Builder<C> addAction(String actionName, UnaryOperator<C> action) {
+      pipeline.addAction(actionName, action);
+      return this;
+    }
+
+    public Builder<C> addPostAction(String actionName, UnaryOperator<C> action) {
+      pipeline.addPostAction(actionName, action);
+      return this;
+    }
+
+    @Deprecated
+    public Builder<C> addPreAction(StepAction<C> action) {
+      pipeline.addPreAction(action);
+      return this;
+    }
+
+    @Deprecated
+    public Builder<C> addAction(StepAction<C> action) {
+      pipeline.addAction(action);
+      return this;
+    }
+
+    @Deprecated
+    public Builder<C> addPostAction(StepAction<C> action) {
+      pipeline.addPostAction(action);
+      return this;
+    }
+
+    @Deprecated
+    public Builder<C> addPreAction(String actionName, StepAction<C> action) {
+      pipeline.addPreAction(actionName, action);
+      return this;
+    }
+
+    @Deprecated
+    public Builder<C> addAction(String actionName, StepAction<C> action) {
+      pipeline.addAction(actionName, action);
+      return this;
+    }
+
+    @Deprecated
+    public Builder<C> addPostAction(String actionName, StepAction<C> action) {
+      pipeline.addPostAction(actionName, action);
+      return this;
+    }
+
+    public Pipeline<C> build() {
+      return pipeline.freeze();
+    }
+  }
 }
