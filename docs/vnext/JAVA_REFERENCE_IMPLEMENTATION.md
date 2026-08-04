@@ -144,7 +144,7 @@ static OrderContext validate(OrderContext context) {
 
 `shortCircuit()`:
 
-- may only be called during an active Pipeline run;
+- may only be called while a Pipeline Action body is actively executing;
 - marks the innermost active run;
 - allows the current Action to return its updated context normally;
 - skips remaining main Actions;
@@ -152,6 +152,8 @@ static OrderContext validate(OrderContext context) {
 - is isolated across nested and overlapping runs.
 
 A subclass may call the inherited `shortCircuit()` convenience method. A Pipeline instance also exposes the same convenience method. Both delegate to the same execution-scoped operation.
+
+Observer callbacks, error handlers, and other code running between Action bodies cannot short-circuit a run. The execution scope is thread-local in Java, so a detached asynchronous task cannot call `shortCircuit()` on behalf of its parent Action. The short-circuit decision must be made on the active Action execution path before that Action returns.
 
 ## 7. Running a Pipeline
 
