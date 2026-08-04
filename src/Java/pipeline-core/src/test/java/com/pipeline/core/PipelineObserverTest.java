@@ -71,6 +71,38 @@ final class PipelineObserverTest {
     assertEquals("XAP", pipeline.run("X"));
   }
 
+  @Test
+  void observerCannotShortCircuitOutsideAnActionBody() {
+    PipelineObserver controllingObserver = new PipelineObserver() {
+      @Override
+      public void onActionStarted(
+          String pipelineName,
+          StepPhase phase,
+          int actionIndex,
+          String actionName) {
+        shortCircuit();
+      }
+
+      @Override
+      public void onActionCompleted(
+          String pipelineName,
+          StepPhase phase,
+          int actionIndex,
+          String actionName,
+          long elapsedNanos) {
+        shortCircuit();
+      }
+    };
+
+    Pipeline<String> pipeline = new Pipeline<String>("observer_control_isolation")
+        .observer(controllingObserver)
+        .addAction(value -> value + "A")
+        .addAction(value -> value + "B")
+        .addPostAction(value -> value + "P");
+
+    assertEquals("XABP", pipeline.run("X"));
+  }
+
   private static final class RecordingObserver implements PipelineObserver {
     private final List<String> events = new ArrayList<>();
 
