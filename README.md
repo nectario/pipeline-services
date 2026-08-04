@@ -1,221 +1,331 @@
 # Pipeline Services
+
 [![CI](https://github.com/nectario/pipeline-services/actions/workflows/ci.yml/badge.svg)](https://github.com/nectario/pipeline-services/actions/workflows/ci.yml)
 
-Pipeline Services is a locality-aware software architecture framework for composing application behavior as typed, observable pipelines of actions.
+Pipeline Services is a polyglot application-architecture framework for expressing behavior as a clear sequence of Actions over one context.
 
-It is a middle path between monoliths and microservices: keep modularity and clear execution flow, default to local execution when locality is the right design, and distribute only when distribution is truly warranted.
+```text
+preActions → actions → postActions
+```
 
-Pipeline Services is application architecture, not cloud/platform/deployment infrastructure.
-
-Java is the reference implementation in this repository. Python, TypeScript, Rust, Go, C#, and C++ are contract-aligned reference ports with tests and examples. Mojo is a strategic target and experimental runtime-evolution track.
+It is designed to be robust, local-first, portable, and above all simple.
 
 ## Project status
-- `v0.1.0` is an initial public preview focused on the Java reference implementation and the shared portability contract.
-- The non-Java ports are in-repo reference ports, not independently published public releases today.
-- See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for the maturity matrix, release surface, and compatibility boundaries.
 
-## Release scope for v0.1.0
-- Java is the reference implementation and the primary compatibility anchor.
-- Python, TypeScript, Rust, Go, C#, and C++ validate the portability contract through in-repo tests and examples.
-- Mojo remains manual/experimental for now, and `pipeline-disruptor` remains experimental and single-thread today.
-- Standalone publication to Maven Central, PyPI, npm, crates.io, NuGet, or other package registries is explicitly out of scope for this release.
+`v0.1.0` remains an initial public preview.
 
-## Requirements
-- Java
-- Python
-- Mojo
-- TypeScript
-- C++
-- C#
-- Go
-- Rust
+The simplicity reset is organized in four phases:
 
-## What this framework tries to solve
-Most “systems” (services, batch jobs, agents, workflows, trading engines, orchestration) are ultimately a **series of actions**: validate → enrich → transform → call out to something → decide → persist → observe. The problem is that this logic often ends up scattered across classes, functions, and ad-hoc conventions.
+- **Phase 1 complete:** shared vNext contract, naming matrix, provider/router contract, and conformance scenarios.
+- **Phase 2 complete in Java:** the Java reference kernel now implements the vNext model.
+- **Phase 3 pending:** migrate Python, TypeScript, Rust, Go, C#, C++, and Mojo to the same semantics with native language formatting.
+- **Phase 4 pending:** consolidate configuration, remote, LLM, observability, and other extensions around the final kernel.
 
-Pipeline Services makes the structure explicit: **preActions → actions → postActions**, with a consistent execution model across languages. That gives you a clear mental model, better reviewability, and a repeatable way to build complex systems without accumulating accidental complexity.
+Key documents:
 
-It’s also a pragmatic response to the “microservices everywhere” era. Many teams have pulled back from microservices due to the hidden costs of distributed systems: operational overhead, cross-service coordination, versioning and deployment complexity, network latency/reliability, harder debugging and tracing, and data consistency challenges. Pipeline Services keeps modularity and composability, but shifts complexity back into a clear in-process design primitive (actions) you can still deploy as a single service, a batch job, or a component inside a larger system.
+- [vNext overview](docs/vnext/README.md)
+- [Simplicity Constitution](docs/vnext/SIMPLICITY_CONSTITUTION.md)
+- [Portability Contract](docs/vnext/PORTABILITY_CONTRACT.md)
+- [API Naming Matrix](docs/vnext/API_NAMING_MATRIX.md)
+- [Java Reference Implementation](docs/vnext/JAVA_REFERENCE_IMPLEMENTATION.md)
+- [Java Migration Guide](docs/vnext/JAVA_MIGRATION.md)
+- [Project Status](docs/PROJECT_STATUS.md)
 
-In a world where a lot of code is generated automatically, pipelines also act as a *forcing function*: you can constrain generated code into a clean, composable pattern where each unit is an action with a clear input/output contract. You can mix:
-- **Local actions** (pure transforms / domain logic)
-- **Remote actions** (HTTP calls with sensible defaults and minimal repetition)
-- **Prompt actions** (prompt-directed steps that compile into checked-in, testable code per target language)
+## The core idea
 
-This approach is driven by the creator’s 25+ years building complex Wall Street systems (trading and high-performance platforms) and identifying pipelines as a highly effective structure for clarity, reusability, robustness, and long-term maintainability.
+A Pipeline operates on one generic context type:
 
-### What you get
-- **A simpler system design primitive**: a runnable architecture that reads like a story.
-- **Reusability by construction**: actions are small units you can share across pipelines and ports.
-- **Robustness by default**: consistent error capture, stop-vs-continue controls, and predictable execution phases.
-- **Observability as a plug-in**: timings/metrics live in actions (keeps the core clean and portable).
-- **Prompt-to-code without chaos**: prompts stay as source-of-truth, while generated code stays reviewable, testable, and language-native.
-
-This repo is organized around a shared, language-agnostic behavior contract (`docs/PORTABILITY_CONTRACT.md`) so ports can stay consistent on:
-- short-circuit semantics
-- exception capture vs continue
-- JSON pipeline configuration shape (`actions`, `$local`, `$remote`, `remoteDefaults`)
-- built-in timings/metrics hooks
-
-## Core model (recommended)
-- A pipeline is an ordered list of **actions** that transform a context value.
-- Two action shapes are supported across ports:
-  - Unary: `C → C`
-  - Control-aware: `(C, control) → C` (explicit short-circuit + error recording)
-- A pipeline has three phases: `pre` → `main` → `post`.
-
-![Pipeline execution model](docs/images/pipeline-execution-model.svg)
-
-## Design goals
-- **Simplicity and clarity first**: the common path should read like a list of actions (method refs/lambdas or JSON).
-- **Portability by contract**: behavior is defined once in `docs/PORTABILITY_CONTRACT.md` and re-implemented per language.
-- **Robustness without ceremony**: exceptions are captured; stop-vs-continue is a pipeline setting; post-actions still run.
-- **Low-friction remote actions**: meaningful defaults (`remoteDefaults`) with per-action overrides; avoid repeating config.
-- **Metrics out of the box**: timings are captured and can be emitted via a post-action (keeps the core clean).
-
-## Java modules (Maven)
-```
-pipeline-core        # Pipeline<C>, StepAction<C>, ActionControl<C> (legacy: StepControl<C>), PipelineResult<C>, RuntimePipeline<T>, metrics
-pipeline-config      # Minimal JSON loader for unary String pipelines
-pipeline-remote      # HTTP action adapter (json GET/POST)
-pipeline-prompt      # Prompt-to-code generated actions (optional check-in) + Java helpers
-pipeline-api         # Higher-level facade (labels/jumps/beans/inline JSON + optional metrics)
-pipeline-disruptor   # Experimental runner wrapper (single-thread for now)
-pipeline-examples    # Runnable examples (+ main runner)
+```text
+Pipeline<Context>
+Context → Context
 ```
 
-## Ports
-- Java: reference implementation (`src/Java/`)
-- Python: contract-aligned in-repo reference port (`src/Python/`)
-- TypeScript: contract-aligned in-repo reference port (`src/typescript/`)
-- Rust: contract-aligned in-repo reference port (`src/Rust/`)
-- Go: contract-aligned in-repo reference port (`src/Go/`)
-- C#: contract-aligned in-repo reference port (`src/CSharp/`)
-- C++: contract-aligned in-repo reference port (`src/Cpp/`)
-- Mojo: strategic target and experimental reference port (`src/Mojo/pipeline_services/`)
+An Action is an ordinary function:
 
-These ports live in-repo to validate the shared contract. `v0.1.0` does not imply separate registry publication or identical maturity across every port.
+```text
+Context action(Context context)
+```
 
-## Experimental directories
-- `src/Java/pipeline-api-pr/` is an incubating Java API work area that is not part of the release build or the public `v0.1.0` compatibility surface. See [src/Java/pipeline-api-pr/README.md](src/Java/pipeline-api-pr/README.md).
-- `statemachine/` is a standalone experiment and is not part of the main Pipeline Services release surface. See [statemachine/README.md](statemachine/README.md).
-- `archive/` contains historical snapshots and is not part of the supported release surface.
+Actions may be declared anywhere. They may be handwritten, remote adapters, or generated from an LLM prompt. Once resolved, every Action executes through the same runner.
 
-![Portability contract](docs/images/portability-contract.svg)
+The shared behavior is:
 
-## Why Mojo
-Mojo is a primary target for a future “fast, portable pipeline runtime” story: compile-time performance, predictable execution, and an ecosystem that can still interop with Python when needed.
+1. Run every `preAction` in registration order.
+2. Run main `actions` until completion or `shortCircuit()`.
+3. Run every `postAction`, even after short circuit or handled Action errors.
+4. Return the final context.
 
-This repo includes a Mojo port that follows the shared behavior contract so semantics stay comparable across languages. CI for Mojo remains manual until the toolchain is pinned cleanly for GitHub-hosted runners.
+## Java quick start
 
-## Quick start
-
-### Java (reference implementation)
-Requirements: Java 21+, Maven 3.9+ (wrapper included)
+Requirements: Java 21+ and Maven 3.9+; the Maven wrapper is included.
 
 ```bash
 ./mvnw -q clean test
 ```
 
-Run all examples:
+### Direct construction
 
-```bash
-./mvnw -q -pl pipeline-examples exec:java -Dexec.mainClass=com.pipeline.examples.ExamplesMain
-```
-
-Example (`Pipeline<C>`)
+Direct construction is the primary Java style:
 
 ```java
 import com.pipeline.core.Pipeline;
-import com.pipeline.core.PipelineResult;
-import com.pipeline.examples.steps.PolicySteps;
-import com.pipeline.examples.steps.TextSteps;
 
-Pipeline<String> pipeline = new Pipeline<>("clean_text", /*shortCircuitOnException=*/true)
-    .addPreAction(PolicySteps::rateLimit)
-    .addAction(TextSteps::strip)
-    .addAction(TextSteps::normalizeWhitespace)
-    .addAction((s, control) -> {
-      if (s.length() > 280) {
-        control.shortCircuit();        // explicit short-circuit (stops MAIN actions)
-        return s.substring(0, 280);
-      }
-      return s;
-    })
-    .addPostAction(PolicySteps::audit);
+Pipeline<String> pipeline = new Pipeline<String>("cleanText")
+    .addPreAction(String::strip)
+    .addAction(value -> value.replaceAll("\\s+", " "))
+    .addAction(String::toUpperCase)
+    .addPostAction(value -> value + "|");
 
-PipelineResult<String> result = pipeline.run("  Hello   World  ");
-System.out.println(result.context());
+String output = pipeline.run("  Hello   World  ");
 ```
 
-### Mojo port
-Mojo toolchain lives under `pipeline_services/pixi.toml`.
+### Short circuit
 
-```bash
-cd pipeline_services
-pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example01_text_clean.mojo
-pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example02_json_loader.mojo
-pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example05_metrics_post_action.mojo
+The public control operation is one function:
+
+```java
+import static com.pipeline.core.PipelineExecution.shortCircuit;
+
+static OrderContext validateOrder(OrderContext context) {
+    if (!context.isValid()) {
+        shortCircuit();
+        return context.reject("Invalid order");
+    }
+
+    return context;
+}
 ```
 
-Notes:
-- JSON loading uses a registry for `$local` actions and supports `$remote` HTTP actions.
+Register it like any other Action:
 
-### Python port
-```bash
-cd src/Python
-python3 -m pipeline_services.examples.example01_text_clean
-python3 -m pipeline_services.examples.example02_json_loader
-python3 -m pipeline_services.examples.example05_metrics_post_action
-python3 -m pipeline_services.examples.benchmark01_pipeline_run
+```java
+pipeline.addAction(OrderActions::validateOrder);
 ```
 
-### TypeScript port
-```bash
-cd src/typescript
-npm ci
-npm run build
-npm test
-node dist/src/pipeline_services/examples/example01_text_clean.js
+`shortCircuit()`:
+
+- may only be called during an active Pipeline run;
+- affects the innermost active run;
+- lets the current Action return its updated context normally;
+- skips remaining main Actions;
+- never skips remaining postActions;
+- remains isolated across nested and overlapping runs.
+
+### Checked exceptions
+
+Java Actions may declare checked exceptions directly:
+
+```java
+static OrderContext loadCustomer(OrderContext context) throws IOException {
+    return context;
+}
+
+pipeline.addAction(OrderActions::loadCustomer);
 ```
 
-### Rust port
-```bash
-cd src/Rust
-cargo test
-cargo run --example example01_text_clean
+The Pipeline records the error and applies `shortCircuitOnException`.
+
+### Simple and detailed execution
+
+The common path returns the final context:
+
+```java
+OrderContext output = pipeline.run(input);
 ```
 
-### C++ port
-```bash
-cd src/Cpp
-cmake -S . -B build
-cmake --build build -j
-ctest --test-dir build
-./build/example01_text_clean
+Diagnostics use the same runner:
+
+```java
+PipelineResult<OrderContext> result = pipeline.runDetailed(input);
+
+result.context();
+result.shortCircuited();
+result.errors();
+result.actionTimings();
 ```
 
-### Go port
-```bash
-cd src/Go
-go test ./...
-go run ./examples/example01_text_clean
+`run()` avoids per-Action timing allocations. `runDetailed()` collects them.
+
+## Construction styles
+
+All construction styles create the same immutable Pipeline plan and use the same runner.
+
+### Composition
+
+```java
+public final class OrderProcessor {
+    private final Pipeline<OrderContext> pipeline;
+
+    public OrderProcessor() {
+        pipeline = new Pipeline<OrderContext>("orderPipeline")
+            .addPreAction(this::validate)
+            .addAction(this::price)
+            .addPostAction(this::audit);
+    }
+
+    public OrderContext process(OrderContext context) {
+        return pipeline.run(context);
+    }
+}
 ```
 
-### C# port
-```bash
-cd src/CSharp
-dotnet test ./pipeline_services_tests/PipelineServices.Tests.csproj
-dotnet run --project pipeline_services_examples -- example01_text_clean
+### Subclassing
+
+```java
+public final class OrderPipeline extends Pipeline<OrderContext> {
+    public OrderPipeline() {
+        super("orderPipeline");
+
+        addPreAction(this::validate);
+        addAction(this::price);
+        addPostAction(this::audit);
+    }
+}
 ```
 
-## Prompt-to-code (compile phase)
+### Builder
 
-![Prompt-to-code flow](docs/images/prompt-to-code-flow.svg)
+```java
+Pipeline<OrderContext> pipeline =
+    Pipeline.<OrderContext>builder("orderPipeline")
+        .addPreAction(OrderActions::validate)
+        .addAction(OrderActions::price)
+        .addPostAction(OrderActions::audit)
+        .build();
+```
 
-Pipelines can include `$prompt` actions in the **source** JSON. `$prompt` is a compile-time directive: a prompt compiler generates:
-- Per-language **compiled pipelines**: `pipelines/generated/<lang>/<pipeline>.json` (with `$prompt → $local` rewrites)
-- Per-language **generated actions** (code) that implement the prompt contract
+The builder is optional and deliberately thin. It has no alternate vocabulary or runtime behavior.
+
+## Pipeline plans and concurrency
+
+A Pipeline freezes explicitly or on first execution. Structural mutation after freezing fails clearly.
+
+Each `run()` and `runDetailed()` receives independent framework state. A frozen Pipeline can therefore be reused concurrently, provided the user-supplied Actions and dependencies are themselves concurrency-safe.
+
+## PipelineProvider
+
+`PipelineProvider` controls Pipeline-instance lifecycle and selection:
+
+```java
+PipelineProvider<OrderContext> perEvent =
+    PipelineProvider.newInstancePerEvent(OrderPipeline::new);
+
+PipelineProvider<OrderContext> singleton =
+    PipelineProvider.singleton(new OrderPipeline());
+
+PipelineProvider<OrderContext> pooled =
+    PipelineProvider.pooled(OrderPipeline::new, 8);
+```
+
+The modes are:
+
+```text
+NEW_INSTANCE_PER_EVENT
+SINGLETON
+POOLED
+```
+
+POOLED eagerly creates a fixed collection of reusable Pipeline instances and selects round robin by default.
+
+It does **not** imply:
+
+- a thread pool;
+- task scheduling;
+- a work queue;
+- borrow/release semantics;
+- waiting for an available instance;
+- exclusive ownership.
+
+Future versions may add other selection strategies without renaming the POOLED lifecycle mode.
+
+## PipelineRouter
+
+`PipelineRouter` examines an event and selects a provider:
+
+```java
+PipelineRouter<TradingEvent, TradingContext> router = event ->
+    switch (event.type()) {
+        case TRADE -> tradePipelineProvider;
+        case QUOTE -> quotePipelineProvider;
+    };
+```
+
+The responsibility chain is intentionally explicit:
+
+```text
+PipelineRouter routes.
+PipelineProvider supplies.
+Pipeline executes.
+```
+
+## Observability
+
+`PipelineObserver` is the one core observability seam:
+
+```java
+pipeline.observer(observer);
+```
+
+Observer failures cannot change Pipeline behavior. Logging, Micrometer, tracing, Prometheus, and low-latency telemetry belong in adapters outside `pipeline-core`.
+
+The Java `pipeline-core` module has no runtime infrastructure dependencies.
+
+## JSON configuration
+
+The shared canonical shape is:
+
+```json
+{
+  "pipeline": "cleanText",
+  "shortCircuitOnException": true,
+  "preActions": [],
+  "actions": [
+    { "$local": "strip" },
+    { "$local": "normalizeWhitespace" }
+  ],
+  "postActions": []
+}
+```
+
+JSON uses the same camelCase vocabulary across languages. Source APIs follow each language’s native convention, such as `addPreAction()` in Java and `add_pre_action()` in Python.
+
+The current Java loader continues to accept selected preview aliases during migration. Loaders resolve configuration into ordinary Actions and the canonical Pipeline runner.
+
+## Remote Actions
+
+`pipeline-remote` turns an HTTP operation into an ordinary Action:
+
+```java
+HttpStep.RemoteSpec<Context> spec = new HttpStep.RemoteSpec<>();
+spec.endpoint = "https://example.com/endpoint";
+spec.timeoutMillis = 800;
+spec.retries = 1;
+spec.toJson = Context::toJson;
+spec.fromJson = Context::withResponse;
+
+Pipeline<Context> pipeline = new Pipeline<Context>("remoteDemo")
+    .addAction(HttpStep.jsonPost(spec));
+```
+
+Transport behavior remains outside the core runner.
+
+## LLM prompt-to-code
+
+The LLM capability remains first-class.
+
+A source Pipeline may contain a `$prompt` specification:
+
+```text
+$prompt source specification
+        ↓
+LLM/code-generation phase
+        ↓
+language-native generated Action and tests
+        ↓
+compiled Pipeline definition referencing $local
+        ↓
+the ordinary Pipeline runner
+```
 
 Run prompt compilation:
 
@@ -223,196 +333,84 @@ Run prompt compilation:
 python3 tools/prompt_codegen.py --pipelines-dir pipelines
 ```
 
-Runtime behavior:
-- If a source pipeline file has **no** `$prompt`, loaders run it directly.
-- If a source pipeline file **has** `$prompt`, loaders automatically load the compiled JSON from `pipelines/generated/<lang>/...`.
-- If compiled JSON is missing, loaders throw a clear “run prompt codegen” error.
+The runtime does not implicitly invoke an LLM merely because source configuration contains `$prompt`. An explicitly authored runtime LLM Action is also valid and still appears to the runner as an ordinary local or remote Action.
 
-Registering generated actions (per port):
-- Java: `com.pipeline.generated.PromptGeneratedActions.register(registry)`
-- Python: `pipeline_services.generated.register_generated_actions(registry)`
-- TypeScript: `register_generated_actions(registry)` from `pipeline_services/generated`
-- Rust: `pipeline_services::generated::register_generated_actions(&mut registry)`
-- Go: `generated.RegisterGeneratedActions(registry)`
-- C++: `pipeline_services::generated::registerGeneratedActions(registry)`
-- Mojo: `registry = pipeline_services.generated.register_generated_actions(registry)`
-- C#: `PipelineServices.Generated.PromptGeneratedActions.Register(registry)`
+Generated code follows the naming and formatting conventions of each target language.
 
-## Semantics (portable)
-- Explicit short-circuit: inside a `StepAction<C>`, call `control.shortCircuit()`.
-- `shortCircuitOnException=true`: an action exception records an error and short-circuits MAIN actions.
-- `shortCircuitOnException=false`: an action exception records an error and continues.
-- Pre/post actions always run fully (not stopped by short-circuit) by default.
-- No checked exceptions in `StepAction<C>`; exceptions are captured in `PipelineResult<C>`.
-- Optional: attach errors to your context via `Pipeline.onError((ctx, err) -> /*return updated ctx*/)`; default is no-op.
+## Java modules
 
-## JSON config (portable shape)
-Canonical JSON form (across ports):
-
-```json
-{
-  "pipeline": "json_clean_text",
-  "type": "unary",
-  "shortCircuitOnException": true,
-  "actions": [
-    { "$local": "com.pipeline.examples.adapters.TextStripStep" },
-    { "$local": "com.pipeline.examples.adapters.TextNormalizeStep" }
-  ]
-}
+```text
+pipeline-core        Canonical Pipeline, Action, result, provider, router, and observer
+pipeline-config      JSON loader and Action resolution
+pipeline-remote      HTTP Action adapters
+pipeline-prompt      Prompt-to-code helpers and generated Action support
+pipeline-api         Legacy higher-level typed/jump facade
+pipeline-disruptor   Experimental queueing wrapper
+pipeline-examples    Examples and benchmark harnesses
 ```
 
-Notes:
-- `"steps"` is accepted as a legacy alias for `"actions"`.
-- Java JSON loader also accepts `"preActions"`/`"postActions"` (preferred) with legacy aliases `"pre"`/`"post"`.
-- Root-level `"remoteDefaults"` can be used to avoid repeating remote configuration across many `"$remote"` actions.
+`RuntimePipeline<T>` remains temporarily available as a deprecated interactive helper. It delegates execution to the canonical runner.
 
-Java-only: JSON singleton mode + action lifecycles:
-- Set `"singletonMode": true` to treat the loaded pipeline definition as reusable across many runs.
-- Per action, set `"lifecycle": "shared" | "pooled" | "perRun"`.
-  - `"pooled"` borrows an instance per invocation and calls `ResettableAction.reset()` before returning it to the pool.
-  - `"pool": { "max": 128 }` controls the maximum pool size.
+The higher-level `com.pipeline.api.Pipeline<I, C>` remains a legacy extension for typed chains and arbitrary jumps. Those concepts are outside the vNext core contract.
 
-Example (pooled `$local` action):
+## Ports
 
-```json
-{
-  "pipeline": "singleton_mode_pooled",
-  "type": "unary",
-  "singletonMode": true,
-  "actions": [
-    {
-      "label": "normalize_whitespace",
-      "$local": "com.pipeline.examples.adapters.PooledScratchNormalizeAction",
-      "lifecycle": "pooled",
-      "pool": { "max": 64 }
-    }
-  ]
-}
+- Java: reference vNext implementation (`src/Java/`)
+- Python: in-repo reference port (`src/Python/`), Phase 3 migration pending
+- TypeScript: in-repo reference port (`src/typescript/`), Phase 3 migration pending
+- Rust: in-repo reference port (`src/Rust/`), Phase 3 migration pending
+- Go: in-repo reference port (`src/Go/`), Phase 3 migration pending
+- C#: in-repo reference port (`src/CSharp/`), Phase 3 migration pending
+- C++: in-repo reference port (`src/Cpp/`), Phase 3 migration pending
+- Mojo: strategic and experimental port (`src/Mojo/`), Phase 3 migration pending
+
+The ports share semantics and conceptual vocabulary, while preserving native casing and formatting. See the [API Naming Matrix](docs/vnext/API_NAMING_MATRIX.md).
+
+## Running the port tests
+
+```bash
+# Java
+./mvnw -q test
+
+# Python
+PYTHONPATH=src/Python python -m unittest discover -s src/Python/tests -p "test_*.py"
+
+# TypeScript
+cd src/typescript && npm ci && npm test
+
+# Rust
+cd src/Rust && cargo test
+
+# Go
+cd src/Go && go test ./...
+
+# C#
+dotnet test src/CSharp/pipeline_services_tests/PipelineServices.Tests.csproj
+
+# C++
+cmake -S src/Cpp -B src/Cpp/build
+cmake --build src/Cpp/build -j
+ctest --test-dir src/Cpp/build --output-on-failure
 ```
 
-And the action implements `ResettableAction`:
+## Experimental and historical areas
 
-```java
-import com.pipeline.core.ResettableAction;
-import java.util.function.UnaryOperator;
+- `src/Java/pipeline-api-pr/`: incubating Java API work, outside the supported release build.
+- `statemachine/`: separate state-machine experiment, not part of the core Pipeline contract.
+- `archive/`: historical snapshots and work-in-progress material.
+- `pipeline-disruptor`: experimental queueing wrapper, not part of the core semantics.
 
-public final class PooledScratchNormalizeAction implements UnaryOperator<String>, ResettableAction {
-  @Override public String apply(String input) { /* uses internal scratch buffers */ }
-  @Override public void reset() { /* clears internal state */ }
-}
+## Design principle
+
+Pipeline Services can remain broad in capability while being narrow in its mental model:
+
+```text
+One context.
+One Pipeline concept.
+One runner per language.
+One shortCircuit() operation.
+PipelineRouter routes.
+PipelineProvider supplies.
+Pipeline executes.
+LLM-generated code becomes ordinary Actions.
 ```
-
-Programmatic pipelines: prefer `PipelineProvider` when you need singleton/pooled/per-run behavior:
-
-Modes:
-- `shared`: one pipeline instance reused across runs (actions must be safe to share concurrently)
-- `pooled`: pipeline instances reused but never shared concurrently
-- `perRun`: a new pipeline instance is created per run
-
-```java
-import com.pipeline.core.Pipeline;
-import com.pipeline.core.PipelineProvider;
-
-PipelineProvider<String> provider = PipelineProvider.pooled(
-    () -> new Pipeline<String>("programmatic_pooled", true)
-        .addAction("normalize", new PooledScratchNormalizeAction()),
-    64
-);
-
-String out = provider.run("  hello   world  ").context();
-```
-
-If you want to reuse the same *pipeline plan* while ensuring stateful actions are never shared concurrently, enable pooled local actions.
-Any action that implements `ResettableAction` is pooled under a stable key (`pipelineName + phase + index + label`) and `reset()` is called after each invocation:
-
-```java
-import com.pipeline.core.ActionPoolCache;
-import com.pipeline.core.Pipeline;
-import com.pipeline.core.PipelineProvider;
-
-ActionPoolCache actionPoolCache = new ActionPoolCache(64);
-
-PipelineProvider<String> provider = PipelineProvider.pooled(
-    () -> new Pipeline<String>("programmatic_pooled_actions", true)
-        .addAction("normalize", new PooledScratchNormalizeAction()),
-    64
-).withPooledLocalActions(actionPoolCache);
-
-String out = provider.run("  hello   world  ").context();
-```
-
-If you prefer method references, you can decorate an action with an explicit reset hook:
-
-```java
-import com.pipeline.core.Actions;
-import com.pipeline.core.Pipeline;
-
-Pipeline<String> pipeline = new Pipeline<String>("ref_style", true)
-    .addAction("normalize",
-        Actions.resettable(new PooledScratchNormalizeAction(), PooledScratchNormalizeAction::reset));
-```
-
-Java loader (`pipeline-config`) is intentionally minimal and currently targets unary **String** pipelines:
-
-```java
-import com.pipeline.config.PipelineJsonLoader;
-
-try (var in = getClass().getResourceAsStream("/pipelines/json_clean_text.json")) {
-  var pipeline = PipelineJsonLoader.loadUnary(in);
-  System.out.println(pipeline.run("  Hello   World  ").context());
-}
-```
-
-### Placeholders (Identity)
-
-For iterative development you can use an explicit placeholder action:
-
-- JSON: `{ "$local": "identity" }` (built-in, no reflection)
-- Programmatic: `pipeline.addAction("todo_normalize");` (adds an identity action with that label)
-
-## Remote action (HTTP)
-Use `pipeline-remote` to turn an HTTP call into a `StepAction<C>`:
-
-```java
-import com.pipeline.core.Pipeline;
-import com.pipeline.remote.http.HttpStep;
-
-record Ctx(String q, String body) {}
-
-var spec = new HttpStep.RemoteSpec<Ctx>();
-spec.endpoint = "https://httpbin.org/post";
-spec.timeoutMillis = 800;
-spec.retries = 1;
-spec.toJson = ctx -> "{\"q\":\"" + ctx.q() + "\"}";
-spec.fromJson = (ctx, body) -> new Ctx(ctx.q(), body);
-
-var pipeline = new Pipeline<Ctx>("remote_demo", true).addAction(HttpStep.jsonPost(spec));
-Ctx out = pipeline.run(new Ctx("hello", null)).context();
-```
-
-If you have many remote actions, use `HttpStep.RemoteDefaults` so you don’t repeat base URL, timeouts, retries, headers, and client wiring.
-
-## Runtime / imperative sessions
-`RuntimePipeline<T>` is an imperative, single-threaded helper for REPL/tools:
-
-```java
-import com.pipeline.core.RuntimePipeline;
-import com.pipeline.examples.steps.TextSteps;
-
-var runtimePipeline = new RuntimePipeline<>("adhoc_text", /*shortCircuitOnException=*/false, "  Hello   World  ");
-runtimePipeline.addAction(TextSteps::strip);
-runtimePipeline.addAction(TextSteps::normalizeWhitespace);
-System.out.println(runtimePipeline.value());
-```
-
-## Advanced: labels + jumps + inline JSON (`pipeline-api`)
-`pipeline-api` provides a higher-level facade for polling/workflows (labels + `Jumps.now/after`) and JSON that can target `@this` / beans.
-See `README-JUMPS.md` and `README-API-QUICKSTART.md`.
-
-## Examples
-Examples live in `pipeline-examples` and show:
-- Core `Pipeline<C>` (pre/actions/post, short-circuit, continue-on-error)
-- JSON loader (`PipelineJsonLoader`)
-- HTTP remote step (`HttpStep`)
-- Jump engine + metrics (`pipeline-api`)
-- Runtime sessions (`RuntimePipeline<T>`)
