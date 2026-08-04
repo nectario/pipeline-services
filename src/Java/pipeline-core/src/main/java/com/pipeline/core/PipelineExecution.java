@@ -4,16 +4,21 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 
-/** Execution-scoped control available to actions declared anywhere. */
+/** Execution-scoped control available to Actions declared anywhere. */
 public final class PipelineExecution {
   private static final ThreadLocal<Deque<ExecutionState<?>>> ACTIVE_EXECUTIONS =
       ThreadLocal.withInitial(ArrayDeque::new);
 
   private PipelineExecution() {}
 
-  /** Marks the innermost active Pipeline run as short-circuited. */
+  /** Marks the innermost actively executing Pipeline Action as short-circuited. */
   public static void shortCircuit() {
-    currentState().requestShortCircuit();
+    ExecutionState<?> executionState = currentState();
+    if (!executionState.isActionExecuting()) {
+      throw new IllegalStateException(
+          "shortCircuit() can only be called while a Pipeline Action is executing");
+    }
+    executionState.requestShortCircuit();
   }
 
   static Scope open(ExecutionState<?> executionState) {
