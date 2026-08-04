@@ -8,7 +8,7 @@
   <version>0.1.0</version>
   <packaging>pom</packaging>
   <name>Pipeline Services</name>
-  <description>Locality-aware software architecture framework for typed, observable pipelines of actions.</description>
+  <description>Polyglot application-architecture framework for simple, robust pipelines of actions.</description>
   <url>https://github.com/nectario/pipeline-services</url>
 
   <licenses>
@@ -50,21 +50,13 @@
     <skipTests>false</skipTests>
     <maven.test.skip>${skipTests}</maven.test.skip>
 
-    <!-- deps -->
     <junit.version>5.10.2</junit.version>
-    <micrometer.version>1.12.6</micrometer.version>
     <jackson.version>2.17.1</jackson.version>
     <disruptor.version>3.4.4</disruptor.version>
-    <slf4j.version>2.0.12</slf4j.version>
   </properties>
 
   <dependencyManagement>
     <dependencies>
-      <dependency>
-        <groupId>io.micrometer</groupId>
-        <artifactId>micrometer-core</artifactId>
-        <version>${micrometer.version}</version>
-      </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
@@ -80,17 +72,6 @@
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-        <version>${slf4j.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-simple</artifactId>
-        <version>${slf4j.version}</version>
-        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
