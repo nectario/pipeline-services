@@ -13,6 +13,7 @@ final class ExecutionState<C> {
 
   private C context;
   private boolean shortCircuited;
+  private boolean actionExecuting;
   private StepPhase phase = StepPhase.MAIN;
   private int actionIndex;
   private String actionName = "?";
@@ -55,6 +56,24 @@ final class ExecutionState<C> {
     this.phase = Objects.requireNonNull(phase, "phase");
     this.actionIndex = actionIndex;
     this.actionName = Objects.requireNonNull(actionName, "actionName");
+  }
+
+  void beginActionExecution() {
+    if (actionExecuting) {
+      throw new IllegalStateException("A Pipeline Action is already executing for this run");
+    }
+    actionExecuting = true;
+  }
+
+  void endActionExecution() {
+    if (!actionExecuting) {
+      throw new IllegalStateException("No Pipeline Action is executing for this run");
+    }
+    actionExecuting = false;
+  }
+
+  boolean isActionExecuting() {
+    return actionExecuting;
   }
 
   C recordError(C currentContext, Exception exception) {
