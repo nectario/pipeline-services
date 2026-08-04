@@ -68,6 +68,62 @@ final class PipelineTest {
   }
 
   @Test
+  void errorHandlerCanReplaceAnImmutableContext() {
+    Pipeline<ImmutableContext> pipeline = new Pipeline<ImmutableContext>("immutable_error", false)
+        .onError((context, error) -> new ImmutableContext(
+            context.value(),
+            error.exception().getMessage()))
+        .addAction(context -> {
+          throw new Exception("boom");
+        })
+        .addAction(context -> new ImmutableContext(
+            context.value() + "A",
+            context.error()))
+        .addPostAction(context -> new ImmutableContext(
+            context.value() + "P",
+            context.error()));
+
+    PipelineResult<ImmutableContext> result = pipeline.runDetailed(
+        new ImmutableContext("X", null));
+
+    assertEquals(new ImmutableContext("XAP", "boom"), result.context());
+    assertFalse(result.shortCircuited());
+    assertEquals(1, result.errors().size());
+  }
+
+  @Test
+  void nullActionResultIsCapturedAndPostActionsStillRun() {
+    Pipeline<String> pipeline = new Pipeline<String>("null_result", true)
+        .addAction(value -> null)
+        .addAction(value -> value + "M")
+        .addPostAction(value -> value + "P");
+
+    PipelineResult<String> result = pipeline.runDetailed("X");
+
+    assertEquals("XP", result.context());
+    assertTrue(result.shortCircuited());
+    assertEquals(1, result.errors().size());
+    assertTrue(result.errors().getFirst().exception().getMessage().contains("Action returned null"));
+  }
+
+  @Test
+  void postActionExceptionDoesNotSkipRemainingPostActions() {
+    Pipeline<String> pipeline = new Pipeline<String>("post_exception", true)
+        .addAction(value -> value + "A")
+        .addPostAction(value -> {
+          throw new Exception("post boom");
+        })
+        .addPostAction(value -> value + "P");
+
+    PipelineResult<String> result = pipeline.runDetailed("X");
+
+    assertEquals("XAP", result.context());
+    assertTrue(result.shortCircuited());
+    assertEquals(1, result.errors().size());
+    assertEquals("post boom", result.errors().getFirst().exception().getMessage());
+  }
+
+  @Test
   void detachedShortCircuitPreservesReturnedContextAndRunsPostActions() {
     Pipeline<String> pipeline = new Pipeline<String>("detached", true)
         .addAction(PipelineTest::appendAndShortCircuit)
@@ -159,6 +215,8 @@ final class PipelineTest {
     shortCircuit();
     return value + "A";
   }
+
+  private record ImmutableContext(String value, String error) {}
 
   private static final class SubclassPipeline extends Pipeline<String> {
     private SubclassPipeline() {
