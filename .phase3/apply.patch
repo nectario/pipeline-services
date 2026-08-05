@@ -1,17 +1,17 @@
 diff --git a/src/Mojo/pipeline_services/core/pipeline.mojo b/src/Mojo/pipeline_services/core/pipeline.mojo
+index 0ef3d41..a219c73 100644
 --- a/src/Mojo/pipeline_services/core/pipeline.mojo
 +++ b/src/Mojo/pipeline_services/core/pipeline.mojo
-@@ -181,11 +181,11 @@ struct Pipeline(Movable):
-     var post_actions: List[RegisteredAction]
-     var frozen: Bool
- 
-     def __init__(
+@@ -184,7 +184,7 @@ struct Pipeline(Movable):
          out self,
          pipeline_name: String,
          short_circuit_on_exception: Bool = True,
 -    ):
 +    ) raises:
-@@ -198,29 +198,29 @@ struct Pipeline(Movable):
+         if pipeline_name == "":
+             raise "pipeline_name must not be blank"
+         self.pipeline_name = pipeline_name
+@@ -195,28 +195,28 @@ struct Pipeline(Movable):
          self.post_actions = List[RegisteredAction]()
          self.frozen = False
  
@@ -46,8 +46,8 @@ diff --git a/src/Mojo/pipeline_services/core/pipeline.mojo b/src/Mojo/pipeline_s
 +    def add_post_action_named(mut self, name: String, action: Action) raises:
          self._ensure_mutable()
          self.post_actions.append(RegisteredAction(name, action))
-@@ -323,7 +323,7 @@ struct Pipeline(Movable):
-             if stop_on_short_circuit and state.short_circuited:
+ 
+@@ -342,7 +342,7 @@ struct Pipeline(Movable):
                  break
              action_index += 1
  
@@ -55,3 +55,4 @@ diff --git a/src/Mojo/pipeline_services/core/pipeline.mojo b/src/Mojo/pipeline_s
 +    def _ensure_mutable(self) raises:
          if self.frozen:
              raise "Pipeline '" + self.pipeline_name + "' is frozen"
+ 
