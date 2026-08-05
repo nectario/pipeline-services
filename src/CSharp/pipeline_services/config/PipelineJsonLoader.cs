@@ -169,17 +169,17 @@ public sealed class PipelineJsonLoader
         Pipeline<string> pipeline,
         PipelineRegistry<string> registry)
     {
-        if (registry.HasUnary(localRef))
+        if (registry.TryGetLegacyAction(localRef, out StepAction<string>? legacyAction) &&
+            legacyAction is not null)
         {
-            Func<string, string> unaryAction = registry.GetUnary(localRef);
-            AddUnary(unaryAction, displayName, sectionName, pipeline);
+            AddLegacyAction(legacyAction, displayName, sectionName, pipeline);
             return;
         }
 
         if (registry.HasAction(localRef))
         {
-            StepAction<string> action = registry.GetAction(localRef);
-            AddStepAction(action, displayName, sectionName, pipeline);
+            PipelineServices.Core.Action<string> action = registry.GetAction(localRef);
+            AddAction(action, displayName, sectionName, pipeline);
             return;
         }
 
@@ -193,29 +193,41 @@ public sealed class PipelineJsonLoader
         throw new InvalidOperationException("Unknown $local reference: " + localRef);
     }
 
-    private static void AddUnary(Func<string, string> unaryAction, string displayName, string sectionName, Pipeline<string> pipeline)
+    private static void AddAction(
+        PipelineServices.Core.Action<string> action,
+        string displayName,
+        string sectionName,
+        Pipeline<string> pipeline)
     {
-        if (string.Equals(sectionName, "pre", StringComparison.Ordinal))
-        {
-            pipeline.AddPreAction(displayName, unaryAction);
-        }
-        else if (string.Equals(sectionName, "post", StringComparison.Ordinal))
-        {
-            pipeline.AddPostAction(displayName, unaryAction);
-        }
-        else
-        {
-            pipeline.AddAction(displayName, unaryAction);
-        }
-    }
-
-    private static void AddStepAction(StepAction<string> action, string displayName, string sectionName, Pipeline<string> pipeline)
-    {
-        if (string.Equals(sectionName, "pre", StringComparison.Ordinal))
+        if (string.Equals(sectionName, "pre", StringComparison.Ordinal) ||
+            string.Equals(sectionName, "preActions", StringComparison.Ordinal))
         {
             pipeline.AddPreAction(displayName, action);
         }
-        else if (string.Equals(sectionName, "post", StringComparison.Ordinal))
+        else if (string.Equals(sectionName, "post", StringComparison.Ordinal) ||
+                 string.Equals(sectionName, "postActions", StringComparison.Ordinal))
+        {
+            pipeline.AddPostAction(displayName, action);
+        }
+        else
+        {
+            pipeline.AddAction(displayName, action);
+        }
+    }
+
+    private static void AddLegacyAction(
+        StepAction<string> action,
+        string displayName,
+        string sectionName,
+        Pipeline<string> pipeline)
+    {
+        if (string.Equals(sectionName, "pre", StringComparison.Ordinal) ||
+            string.Equals(sectionName, "preActions", StringComparison.Ordinal))
+        {
+            pipeline.AddPreAction(displayName, action);
+        }
+        else if (string.Equals(sectionName, "post", StringComparison.Ordinal) ||
+                 string.Equals(sectionName, "postActions", StringComparison.Ordinal))
         {
             pipeline.AddPostAction(displayName, action);
         }
@@ -279,11 +291,12 @@ public sealed class PipelineJsonLoader
             throw new InvalidOperationException("$remote must be a string or object");
         }
 
-        StepAction<string> action = string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
-            ? HttpStep.JsonGet(remoteSpec)
-            : HttpStep.JsonPost(remoteSpec);
+        PipelineServices.Core.Action<string> action =
+            string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
+                ? HttpStep.JsonGet(remoteSpec)
+                : HttpStep.JsonPost(remoteSpec);
 
-        AddStepAction(action, displayName, sectionName, pipeline);
+        AddAction(action, displayName, sectionName, pipeline);
     }
 
     private static string ParseRemoteEndpointOrPath(JsonElement remoteElement)

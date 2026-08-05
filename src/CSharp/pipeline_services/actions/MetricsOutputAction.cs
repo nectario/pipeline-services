@@ -10,24 +10,24 @@ public sealed class MetricsOutputAction<ContextType> : StepAction<ContextType>
 {
     private readonly string name;
     private readonly Func<long> nanoClock;
-    private readonly Action<IDictionary<string, object>> sink;
+    private readonly System.Action<IDictionary<string, object>> sink;
 
     public MetricsOutputAction()
         : this("Metrics", NanoTime.GetNowNanos, DefaultSink)
     {
     }
 
-    public MetricsOutputAction(Action<IDictionary<string, object>> sink)
+    public MetricsOutputAction(System.Action<IDictionary<string, object>> sink)
         : this("Metrics", NanoTime.GetNowNanos, sink)
     {
     }
 
-    public MetricsOutputAction(string name, Action<IDictionary<string, object>> sink)
+    public MetricsOutputAction(string name, System.Action<IDictionary<string, object>> sink)
         : this(name, NanoTime.GetNowNanos, sink)
     {
     }
 
-    public MetricsOutputAction(string name, Func<long> nanoClock, Action<IDictionary<string, object>> sink)
+    public MetricsOutputAction(string name, Func<long> nanoClock, System.Action<IDictionary<string, object>> sink)
     {
         this.name = name ?? throw new ArgumentNullException(nameof(name));
         this.nanoClock = nanoClock ?? throw new ArgumentNullException(nameof(nanoClock));

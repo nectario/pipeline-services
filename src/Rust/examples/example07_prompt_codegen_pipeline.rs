@@ -33,5 +33,5 @@ fn main() {
     )
     .expect("loader failed");
   let result = pipeline.run("  john   SMITH ".to_string());
-  println!("output={}", result.context);
+  println!("output={}", result);
 }

@@ -11,14 +11,16 @@ namespace PipelineServices.Remote;
 
 public static class HttpStep
 {
-    public static StepAction<ContextType> JsonPost<ContextType>(RemoteSpec<ContextType> remoteSpec)
+    public static PipelineServices.Core.Action<ContextType> JsonPost<ContextType>(RemoteSpec<ContextType> remoteSpec)
     {
-        return new HttpJsonAction<ContextType>(remoteSpec, "POST");
+        ValidateRemoteSpec(remoteSpec);
+        return contextValue => Invoke(remoteSpec, "POST", contextValue);
     }
 
-    public static StepAction<ContextType> JsonGet<ContextType>(RemoteSpec<ContextType> remoteSpec)
+    public static PipelineServices.Core.Action<ContextType> JsonGet<ContextType>(RemoteSpec<ContextType> remoteSpec)
     {
-        return new HttpJsonAction<ContextType>(remoteSpec, "GET");
+        ValidateRemoteSpec(remoteSpec);
+        return contextValue => Invoke(remoteSpec, "GET", contextValue);
     }
 
     public static Func<InputType, OutputType> JsonPostTyped<InputType, OutputType>(RemoteSpecTyped<InputType, OutputType> remoteSpec)
@@ -340,7 +342,7 @@ public static class HttpStep
             return remoteSpec;
         }
 
-        public StepAction<ContextType> Action<ContextType>(
+        public PipelineServices.Core.Action<ContextType> Action<ContextType>(
             string endpointOrPath,
             Func<ContextType, string> toJson,
             Func<ContextType, string, ContextType> fromJson)

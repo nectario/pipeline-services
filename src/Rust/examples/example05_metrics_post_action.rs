@@ -8,5 +8,5 @@ fn main() {
   pipeline.add_post_action_control(print_metrics);
 
   let result = pipeline.run("  Hello   Metrics  ".to_string());
-  println!("{}", result.context);
+  println!("{}", result);
 }
