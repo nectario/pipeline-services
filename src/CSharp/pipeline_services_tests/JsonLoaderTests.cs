@@ -29,8 +29,7 @@ public sealed class JsonLoaderTests
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
 
-        PipelineResult<string> result = pipeline.Run("  Hello   JSON  ");
-        Assert.Equal("Hello JSON", result.Context);
+        Assert.Equal("Hello JSON", pipeline.Run("  Hello   JSON  "));
     }
 
     [Fact]
@@ -46,13 +45,13 @@ public sealed class JsonLoaderTests
   ""pipeline"": ""t"",
   ""type"": ""unary"",
   ""shortCircuitOnException"": true,
-  ""pre"": [
+  ""preActions"": [
     { ""$local"": ""prefix"" }
   ],
   ""actions"": [
     { ""$local"": ""strip"" }
   ],
-  ""post"": [
+  ""postActions"": [
     { ""$local"": ""suffix"" }
   ]
 }
@@ -61,8 +60,7 @@ public sealed class JsonLoaderTests
         PipelineJsonLoader loader = new PipelineJsonLoader();
         Pipeline<string> pipeline = loader.LoadString(jsonText, registry);
 
-        PipelineResult<string> result = pipeline.Run("  Hi  ");
-        Assert.Equal("PRE:  Hi:POST", result.Context);
+        Assert.Equal("PRE:  Hi:POST", pipeline.Run("  Hi  "));
     }
 
     private static string Strip(string value)
