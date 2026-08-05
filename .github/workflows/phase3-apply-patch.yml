@@ -1,0 +1,34 @@
+name: phase3-apply-patch
+
+on:
+  pull_request:
+    paths:
+      - .phase3/apply.patch
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Apply and commit Phase 3 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f .phase3/apply.patch ]]; then
+            echo "No patch file present; nothing to apply."
+            exit 0
+          fi
+          git apply --check .phase3/apply.patch
+          git apply .phase3/apply.patch
+          rm .phase3/apply.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor(polyglot): apply Phase 3 integration fixes"
+          git push origin HEAD:${{ github.head_ref }}
