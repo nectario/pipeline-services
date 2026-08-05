@@ -144,6 +144,38 @@ test("nested and concurrent async runs keep ambient state isolated", async () =>
   assert.equal(continued, "goABP");
 });
 
+
+test("async descendants share control only until the Action promise settles", async () => {
+  const duringAction = new Pipeline<string>("async-descendant")
+    .addAction(async (value) => {
+      await Promise.resolve().then(() => shortCircuit());
+      return value + "A";
+    })
+    .addAction((value) => value + "B")
+    .addPostAction((value) => value + "P");
+  assert.equal(await duringAction.run("X"), "XAP");
+
+  let lateAttempt!: Promise<Error>;
+  const afterAction = new Pipeline<string>("expired-descendant")
+    .addAction((value) => {
+      lateAttempt = new Promise<Error>((resolve) => {
+        setImmediate(() => {
+          try {
+            shortCircuit();
+            resolve(new Error("shortCircuit unexpectedly succeeded"));
+          } catch (error) {
+            resolve(error as Error);
+          }
+        });
+      });
+      return value + "A";
+    })
+    .addAction((value) => value + "B");
+
+  assert.equal(await afterAction.run("X"), "XAB");
+  assert.match((await lateAttempt).message, /Action is executing/);
+});
+
 test("plan freezing and compatibility control use the same runner", async () => {
   const pipeline = new Pipeline<string>("frozen")
     .addAction((value) => value + "A");

@@ -16,7 +16,7 @@ int main() {
 
   const auto frozen_pipeline = runtime_pipeline.freeze();
   const auto result = frozen_pipeline.run("  Hello   Frozen  ");
-  std::cout << "frozenValue=" << result.context << std::endl;
+  std::cout << "frozenValue=" << result << std::endl;
   return 0;
 }
 

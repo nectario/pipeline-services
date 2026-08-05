@@ -1,189 +1,218 @@
 #pragma once
 
-#include <algorithm>
-#include <condition_variable>
+#include <atomic>
 #include <cstddef>
 #include <functional>
-#include <mutex>
-#include <optional>
+#include <memory>
 #include <stdexcept>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "pipeline_services/core/pipeline.hpp"
 
-namespace pipeline_services::core {
+namespace pipeline_services {
 
-inline std::size_t defaultPoolMax() {
-  const unsigned int processorCountRaw = std::thread::hardware_concurrency();
-  const std::size_t processorCount = processorCountRaw == 0 ? static_cast<std::size_t>(1) : static_cast<std::size_t>(processorCountRaw);
-  const std::size_t computed = processorCount * static_cast<std::size_t>(8);
-  return std::min(static_cast<std::size_t>(256), std::max(static_cast<std::size_t>(1), computed));
+enum class PipelineProviderMode {
+  NEW_INSTANCE_PER_EVENT,
+  SINGLETON,
+  POOLED,
+
+  // Preview compatibility aliases.
+  PER_RUN = NEW_INSTANCE_PER_EVENT,
+  SHARED = SINGLETON,
+};
+
+inline std::size_t defaultInstanceCount() {
+  const unsigned int processorCount = std::thread::hardware_concurrency();
+  return processorCount == 0 ? 1 : static_cast<std::size_t>(processorCount);
 }
 
-template <typename ItemType>
-class ActionPool {
-public:
-  ActionPool(std::size_t maxSize, std::function<ItemType()> factory)
-    : maxSize_(maxSize),
-      factory_(std::move(factory)),
-      createdCount_(0),
-      available_(),
-      mutex_(),
-      condition_() {
-    if (maxSize_ < 1) {
-      throw std::invalid_argument("maxSize must be >= 1");
-    }
-    if (!factory_) {
-      throw std::invalid_argument("factory is required");
-    }
-  }
-
-  std::size_t max() const {
-    return maxSize_;
-  }
-
-  ItemType borrow() {
-    while (true) {
-      bool shouldCreate = false;
-
-      {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (!available_.empty()) {
-          ItemType instance = std::move(available_.back());
-          available_.pop_back();
-          return instance;
-        }
-
-        if (createdCount_ < maxSize_) {
-          createdCount_ += 1;
-          shouldCreate = true;
-        } else {
-          while (available_.empty()) {
-            condition_.wait(lock);
-          }
-          ItemType instance = std::move(available_.back());
-          available_.pop_back();
-          return instance;
-        }
-      }
-
-      if (shouldCreate) {
-        try {
-          return factory_();
-        } catch (...) {
-          {
-            std::lock_guard<std::mutex> lock(mutex_);
-            if (createdCount_ > 0) {
-              createdCount_ -= 1;
-            }
-          }
-          throw;
-        }
-      }
-    }
-  }
-
-  void release(ItemType instance) {
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      available_.push_back(std::move(instance));
-    }
-    condition_.notify_one();
-  }
-
-private:
-  std::size_t maxSize_;
-  std::function<ItemType()> factory_;
-  std::size_t createdCount_;
-  std::vector<ItemType> available_;
-  mutable std::mutex mutex_;
-  std::condition_variable condition_;
-};
+inline std::size_t defaultPoolMax() {
+  return defaultInstanceCount();
+}
 
 template <typename ContextType>
 class PipelineProvider {
-public:
-  enum class Mode {
-    SHARED,
-    POOLED,
-    PER_RUN,
-  };
+ public:
+  using PipelineType = Pipeline<ContextType>;
+  using PipelinePtr = std::shared_ptr<PipelineType>;
+  using PipelineFactory = std::function<PipelinePtr()>;
 
-  static PipelineProvider shared(Pipeline<ContextType> pipeline) {
-    PipelineProvider provider(Mode::SHARED);
-    provider.sharedPipeline_ = std::move(pipeline);
-    return provider;
+  template <typename FactoryType>
+  static PipelineProvider newInstancePerEvent(FactoryType factory) {
+    return PipelineProvider(
+        PipelineProviderMode::NEW_INSTANCE_PER_EVENT,
+        normalizeFactory(std::move(factory)),
+        nullptr,
+        {});
   }
 
-  static PipelineProvider shared(std::function<Pipeline<ContextType>()> factory) {
-    if (!factory) {
-      throw std::invalid_argument("factory is required");
+  static PipelineProvider singleton(PipelinePtr pipeline) {
+    if (pipeline == nullptr) {
+      throw std::invalid_argument("pipeline must not be null");
     }
-    return shared(factory());
+    pipeline->freeze();
+    return PipelineProvider(
+        PipelineProviderMode::SINGLETON,
+        {},
+        std::move(pipeline),
+        {});
   }
 
-  static PipelineProvider pooled(std::function<Pipeline<ContextType>()> factory, std::size_t poolMax = defaultPoolMax()) {
-    if (!factory) {
-      throw std::invalid_argument("factory is required");
+  static PipelineProvider singleton(PipelineType pipeline) {
+    return singleton(
+        std::make_shared<PipelineType>(std::move(pipeline)));
+  }
+
+  template <typename FactoryType>
+  static PipelineProvider pooled(
+      FactoryType factory,
+      std::size_t instanceCount = defaultInstanceCount()) {
+    if (instanceCount < 1) {
+      throw std::invalid_argument("instanceCount must be >= 1");
     }
-
-    PipelineProvider provider(Mode::POOLED);
-    provider.pipelinePool_ = std::make_unique<ActionPool<Pipeline<ContextType>>>(poolMax, std::move(factory));
-    return provider;
-  }
-
-  static PipelineProvider perRun(std::function<Pipeline<ContextType>()> factory) {
-    if (!factory) {
-      throw std::invalid_argument("factory is required");
+    PipelineFactory normalizedFactory = normalizeFactory(std::move(factory));
+    std::vector<PipelinePtr> pipelines;
+    pipelines.reserve(instanceCount);
+    for (std::size_t index = 0; index < instanceCount; ++index) {
+      PipelinePtr pipeline = normalizedFactory();
+      if (pipeline == nullptr) {
+        throw std::logic_error("factory returned null Pipeline");
+      }
+      pipeline->freeze();
+      pipelines.push_back(std::move(pipeline));
     }
-    PipelineProvider provider(Mode::PER_RUN);
-    provider.pipelineFactory_ = std::move(factory);
-    return provider;
+    return PipelineProvider(
+        PipelineProviderMode::POOLED,
+        std::move(normalizedFactory),
+        nullptr,
+        std::move(pipelines));
   }
 
-  Mode mode() const {
+  // Preview compatibility factories.
+  static PipelineProvider shared(PipelinePtr pipeline) {
+    return singleton(std::move(pipeline));
+  }
+
+  static PipelineProvider shared(PipelineType pipeline) {
+    return singleton(std::move(pipeline));
+  }
+
+  template <typename FactoryType>
+  static PipelineProvider shared(FactoryType factory) {
+    PipelineFactory normalizedFactory = normalizeFactory(std::move(factory));
+    return singleton(normalizedFactory());
+  }
+
+  template <typename FactoryType>
+  static PipelineProvider perRun(FactoryType factory) {
+    return newInstancePerEvent(std::move(factory));
+  }
+
+  PipelineProviderMode mode() const noexcept {
     return mode_;
   }
 
-  PipelineResult<ContextType> run(ContextType inputValue) const {
-    if (mode_ == Mode::SHARED) {
-      if (!sharedPipeline_.has_value()) {
-        throw std::runtime_error("sharedPipeline is not set");
-      }
-      return sharedPipeline_.value().run(std::move(inputValue));
+  std::size_t instanceCount() const noexcept {
+    switch (mode_) {
+      case PipelineProviderMode::NEW_INSTANCE_PER_EVENT:
+        return 0;
+      case PipelineProviderMode::SINGLETON:
+        return 1;
+      case PipelineProviderMode::POOLED:
+        return pooledPipelines_.size();
+      default:
+        return 0;
     }
-
-    if (mode_ == Mode::POOLED) {
-      if (!pipelinePool_) {
-        throw std::runtime_error("pipelinePool is not set");
-      }
-
-      Pipeline<ContextType> borrowedPipeline = pipelinePool_->borrow();
-      PipelineResult<ContextType> result = borrowedPipeline.run(std::move(inputValue));
-      pipelinePool_->release(std::move(borrowedPipeline));
-      return result;
-    }
-
-    if (!pipelineFactory_) {
-      throw std::runtime_error("pipelineFactory is not set");
-    }
-    Pipeline<ContextType> pipeline = pipelineFactory_();
-    return pipeline.run(std::move(inputValue));
   }
 
-private:
-  explicit PipelineProvider(Mode mode)
-    : mode_(mode),
-      sharedPipeline_(),
-      pipelinePool_(nullptr),
-      pipelineFactory_() {}
+  PipelinePtr getPipeline() const {
+    switch (mode_) {
+      case PipelineProviderMode::NEW_INSTANCE_PER_EVENT: {
+        if (!factory_) {
+          throw std::logic_error("factory is not configured");
+        }
+        PipelinePtr pipeline = factory_();
+        if (pipeline == nullptr) {
+          throw std::logic_error("factory returned null Pipeline");
+        }
+        pipeline->freeze();
+        return pipeline;
+      }
+      case PipelineProviderMode::SINGLETON:
+        if (singletonPipeline_ == nullptr) {
+          throw std::logic_error("singleton Pipeline is not configured");
+        }
+        return singletonPipeline_;
+      case PipelineProviderMode::POOLED: {
+        if (pooledPipelines_.empty()) {
+          throw std::logic_error("pooled Pipelines are empty");
+        }
+        const std::size_t selection =
+            nextSelection_->fetch_add(1, std::memory_order_relaxed);
+        return pooledPipelines_[selection % pooledPipelines_.size()];
+      }
+      default:
+        throw std::logic_error("unsupported PipelineProvider mode");
+    }
+  }
 
-  Mode mode_;
-  std::optional<Pipeline<ContextType>> sharedPipeline_;
-  std::unique_ptr<ActionPool<Pipeline<ContextType>>> pipelinePool_;
-  std::function<Pipeline<ContextType>()> pipelineFactory_;
+  ContextType run(ContextType context) const {
+    return getPipeline()->run(std::move(context));
+  }
+
+  PipelineResult<ContextType> runDetailed(ContextType context) const {
+    return getPipeline()->runDetailed(std::move(context));
+  }
+
+ private:
+  PipelineProvider(
+      PipelineProviderMode mode,
+      PipelineFactory factory,
+      PipelinePtr singletonPipeline,
+      std::vector<PipelinePtr> pooledPipelines)
+      : mode_(mode),
+        factory_(std::move(factory)),
+        singletonPipeline_(std::move(singletonPipeline)),
+        pooledPipelines_(std::move(pooledPipelines)),
+        nextSelection_(std::make_shared<std::atomic_size_t>(0)) {}
+
+  template <typename FactoryType>
+  static PipelineFactory normalizeFactory(FactoryType factory) {
+    using StoredFactory = std::decay_t<FactoryType>;
+    using Result = std::invoke_result_t<StoredFactory&>;
+    if constexpr (std::is_same_v<Result, PipelinePtr>) {
+      return [stored = StoredFactory(std::move(factory))]() mutable {
+        return std::invoke(stored);
+      };
+    } else if constexpr (std::is_same_v<Result, PipelineType>) {
+      return [stored = StoredFactory(std::move(factory))]() mutable {
+        return std::make_shared<PipelineType>(std::invoke(stored));
+      };
+    } else {
+      static_assert(
+          std::is_same_v<Result, PipelinePtr> ||
+              std::is_same_v<Result, PipelineType>,
+          "Pipeline factory must return Pipeline<C> or shared_ptr<Pipeline<C>>");
+    }
+  }
+
+  PipelineProviderMode mode_;
+  PipelineFactory factory_;
+  PipelinePtr singletonPipeline_;
+  std::vector<PipelinePtr> pooledPipelines_;
+  std::shared_ptr<std::atomic_size_t> nextSelection_;
 };
 
-}  // namespace pipeline_services::core
+namespace core {
+using ::pipeline_services::PipelineProviderMode;
+using ::pipeline_services::defaultInstanceCount;
+using ::pipeline_services::defaultPoolMax;
+
+template <typename ContextType>
+using PipelineProvider = ::pipeline_services::PipelineProvider<ContextType>;
+}  // namespace core
+
+}  // namespace pipeline_services

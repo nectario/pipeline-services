@@ -3,13 +3,13 @@ package core
 import "fmt"
 
 type PipelineRegistry[ContextType any] struct {
-	actions      map[string]Action[ContextType]
+	actions      map[string]any
 	unaryActions map[string]func(ContextType) ContextType
 }
 
 func NewPipelineRegistry[ContextType any]() *PipelineRegistry[ContextType] {
 	return &PipelineRegistry[ContextType]{
-		actions:      map[string]Action[ContextType]{},
+		actions:      map[string]any{},
 		unaryActions: map[string]func(ContextType) ContextType{},
 	}
 }
@@ -25,15 +25,23 @@ func (registry *PipelineRegistry[ContextType]) RegisterUnary(
 }
 
 func (registry *PipelineRegistry[ContextType]) RegisterAction(name string, action any) {
-	registry.actions[name] = normalizeAction[ContextType](action)
+	if action == nil {
+		panic("action must not be nil")
+	}
+	// Validate eagerly while retaining the original callable shape for the
+	// Pipeline's one normalization path.
+	_ = normalizeAction[ContextType](action)
+	registry.actions[name] = action
 }
 
 func (registry *PipelineRegistry[ContextType]) HasUnary(name string) bool {
-	return registry.unaryActions[name] != nil
+	_, found := registry.unaryActions[name]
+	return found
 }
 
 func (registry *PipelineRegistry[ContextType]) HasAction(name string) bool {
-	return registry.actions[name] != nil
+	_, found := registry.actions[name]
+	return found
 }
 
 func (registry *PipelineRegistry[ContextType]) GetUnary(
@@ -48,7 +56,7 @@ func (registry *PipelineRegistry[ContextType]) GetUnary(
 
 func (registry *PipelineRegistry[ContextType]) GetAction(
 	name string,
-) (Action[ContextType], error) {
+) (any, error) {
 	action, found := registry.actions[name]
 	if !found {
 		return nil, fmt.Errorf("unknown Action: %s", name)

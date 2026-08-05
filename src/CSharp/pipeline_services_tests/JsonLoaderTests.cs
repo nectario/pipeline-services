@@ -63,6 +63,46 @@ public sealed class JsonLoaderTests
         Assert.Equal("PRE:  Hi:POST", pipeline.Run("  Hi  "));
     }
 
+
+    [Fact]
+    public void CanonicalSectionsTakePrecedenceOverLegacyAliases()
+    {
+        PipelineRegistry<string> registry = new PipelineRegistry<string>();
+        registry.RegisterUnary("canonical", value => value + "C");
+        registry.RegisterUnary("legacy", value => value + "L");
+
+        string jsonText = @"
+{
+  ""pipeline"": ""t"",
+  ""preActions"": [ { ""$local"": ""canonical"" } ],
+  ""pre"": [ { ""$local"": ""legacy"" } ],
+  ""actions"": [ { ""$local"": ""canonical"" } ],
+  ""steps"": [ { ""$local"": ""legacy"" } ],
+  ""postActions"": [ { ""$local"": ""canonical"" } ],
+  ""post"": [ { ""$local"": ""legacy"" } ]
+}
+";
+
+        Pipeline<string> pipeline = new PipelineJsonLoader().LoadString(jsonText, registry);
+
+        Assert.Equal("XCCC", pipeline.Run("X"));
+    }
+
+    [Theory]
+    [InlineData("preActions")]
+    [InlineData("actions")]
+    [InlineData("postActions")]
+    public void DetectsPromptActionsInCanonicalSections(string sectionName)
+    {
+        PipelineRegistry<string> registry = new PipelineRegistry<string>();
+        string jsonText = "{\"pipeline\":\"t\",\"" + sectionName + "\":[{\"$prompt\":\"generate\"}]}";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => new PipelineJsonLoader().LoadString(jsonText, registry));
+
+        Assert.Contains("$prompt", exception.Message, StringComparison.Ordinal);
+    }
+
     private static string Strip(string value)
     {
         return value.Trim();

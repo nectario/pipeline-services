@@ -120,6 +120,22 @@ std::string identity_action(std::string value) {
   return value;
 }
 
+std::string prefix_action(std::string value) {
+  return "PRE:" + value;
+}
+
+std::string suffix_action(std::string value) {
+  return value + ":POST";
+}
+
+std::string legacy_prefix_action(std::string value) {
+  return "LEGACY:" + value;
+}
+
+std::string legacy_suffix_action(std::string value) {
+  return value + ":LEGACY";
+}
+
 void test_short_circuit_stops_main_only() {
   auto calls = std::make_shared<std::vector<std::string>>();
 
@@ -130,7 +146,7 @@ void test_short_circuit_stops_main_only() {
   pipeline.addAction(AppendAction{calls, "a3", "a3|"});
   pipeline.addPostAction(AppendAction{calls, "post", "post|"});
 
-  const auto result = pipeline.run("");
+  const auto result = pipeline.runDetailed("");
   require_true(result.shortCircuited, "expected shortCircuited=true");
   require_equal(
     *calls,
@@ -147,7 +163,7 @@ void test_short_circuit_on_exception_stops_main() {
   pipeline.addAction(AppendAction{calls, "later", "|later"});
   pipeline.addPostAction(AppendAction{calls, "post", "|post"});
 
-  const auto result = pipeline.run("start");
+  const auto result = pipeline.runDetailed("start");
   require_true(result.shortCircuited, "expected shortCircuited=true");
   require_equal(result.errors.size(), static_cast<std::size_t>(1), "expected one error");
   require_equal(*calls, std::vector<std::string>{"fail", "post"}, "unexpected call order");
@@ -160,7 +176,7 @@ void test_continue_on_exception_runs_remaining_actions() {
   pipeline.addAction(FailingAction{calls, "fail"});
   pipeline.addAction(AppendAction{calls, "later", "|later"});
 
-  const auto result = pipeline.run("start");
+  const auto result = pipeline.runDetailed("start");
   require_true(!result.shortCircuited, "expected shortCircuited=false");
   require_equal(result.errors.size(), static_cast<std::size_t>(1), "expected one error");
   require_equal(result.context, std::string("start|later"), "unexpected output");
@@ -184,7 +200,65 @@ void test_json_loader_actions_alias() {
   pipeline_services::config::PipelineJsonLoader loader;
   auto pipeline = loader.loadStr(json_text, registry);
   const auto result = pipeline.run("ok");
-  require_equal(result.context, std::string("ok"), "unexpected output");
+  require_equal(result, std::string("ok"), "unexpected output");
+}
+
+void test_json_loader_canonical_sections_and_precedence() {
+  pipeline_services::core::PipelineRegistry<std::string> registry;
+  registry.registerUnary("identity", identity_action);
+  registry.registerUnary("prefix", prefix_action);
+  registry.registerUnary("suffix", suffix_action);
+  registry.registerUnary("legacy_prefix", legacy_prefix_action);
+  registry.registerUnary("legacy_suffix", legacy_suffix_action);
+
+  const std::string json_text = R"json(
+{
+  "pipeline": "canonical",
+  "type": "unary",
+  "preActions": [
+    {"$local": "prefix"}
+  ],
+  "pre": [
+    {"$local": "legacy_prefix"}
+  ],
+  "actions": [
+    {"$local": "identity"}
+  ],
+  "postActions": [
+    {"$local": "suffix"}
+  ],
+  "post": [
+    {"$local": "legacy_suffix"}
+  ]
+}
+)json";
+
+  pipeline_services::config::PipelineJsonLoader loader;
+  auto pipeline = loader.loadStr(json_text, registry);
+  require_equal(
+      pipeline.run("Hi"),
+      std::string("PRE:Hi:POST"),
+      "canonical preActions/postActions must take precedence over aliases");
+}
+
+void test_json_loader_detects_prompt_in_canonical_sections() {
+  pipeline_services::core::PipelineRegistry<std::string> registry;
+  pipeline_services::config::PipelineJsonLoader loader;
+
+  for (const std::string section_name : {"preActions", "actions", "postActions"}) {
+    const std::string json_text =
+        std::string("{\"pipeline\":\"prompted\",\"") +
+        section_name +
+        "\":[{\"$prompt\":\"normalize this value\"}]}";
+
+    bool detected = false;
+    try {
+      (void)loader.loadStr(json_text, registry);
+    } catch (const std::runtime_error& error) {
+      detected = std::string(error.what()).find("prompt codegen") != std::string::npos;
+    }
+    require_true(detected, "expected $prompt detection in " + section_name);
+  }
 }
 
 void test_remote_http_step_get() {
@@ -221,7 +295,7 @@ void test_json_loader_remote_get() {
   pipeline_services::config::PipelineJsonLoader loader;
   const auto pipeline = loader.loadStr(json_text, registry);
   const auto result = pipeline.run("ignored");
-  require_equal(result.context, std::string(remote_fixture_body), "unexpected remote output");
+  require_equal(result, std::string(remote_fixture_body), "unexpected remote output");
 }
 
 }  // namespace
@@ -232,6 +306,8 @@ int main() {
     test_short_circuit_on_exception_stops_main();
     test_continue_on_exception_runs_remaining_actions();
     test_json_loader_actions_alias();
+    test_json_loader_canonical_sections_and_precedence();
+    test_json_loader_detects_prompt_in_canonical_sections();
     test_remote_http_step_get();
     test_json_loader_remote_get();
   } catch (const std::exception& error) {

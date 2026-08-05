@@ -6,7 +6,7 @@
 int main() {
   pipeline_services::core::Pipeline<std::string> pipeline("example00_import", true);
   const auto result = pipeline.run("ok");
-  std::cout << result.context << std::endl;
+  std::cout << result << std::endl;
   return 0;
 }
 

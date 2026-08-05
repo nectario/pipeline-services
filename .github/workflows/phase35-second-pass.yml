@@ -1,0 +1,33 @@
+name: phase35-second-pass
+
+on:
+  push:
+    branches:
+      - agent/vnext-phase-3-5-stabilization
+    paths:
+      - .phase35b/READY
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/vnext-phase-3-5-stabilization
+      - name: Apply canonical prompt-precedence fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .phase35b/apply.patch
+          git apply .phase35b/apply.patch
+          rm -rf .phase35b
+          rm .github/workflows/phase35-second-pass.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(config): honor canonical section precedence during prompt discovery"
+          git push origin HEAD:agent/vnext-phase-3-5-stabilization

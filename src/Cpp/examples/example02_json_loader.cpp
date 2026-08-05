@@ -25,7 +25,7 @@ int main() {
   pipeline_services::config::PipelineJsonLoader loader;
   auto pipeline = loader.loadStr(json_text, registry);
   const auto result = pipeline.run("  Hello   JSON  ");
-  std::cout << result.context << std::endl;
+  std::cout << result << std::endl;
   return 0;
 }
 

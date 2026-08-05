@@ -1,63 +1,50 @@
 # Pipeline Services — C++ port
 
-This directory is a contract-aligned C++ reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract and is not a separate package publication surface for `v0.1.0`.
-
-This C++ port follows the shared semantics in [../../docs/PORTABILITY_CONTRACT.md](../../docs/PORTABILITY_CONTRACT.md) and intentionally uses Java-style `camelCase` naming for the public API (`addAction`, `shortCircuit`, ...), so the ports stay easy to compare.
+This directory contains the contract-aligned C++20 reference port. It uses the same vNext runtime model as Java while following the project’s PascalCase/camelCase convention.
 
 ## Execution API
-- `Pipeline::run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)
-- `Pipeline::execute(input)` is a backwards-compatible alias for `run`
-
-If you need explicit lifecycle control (shared vs pooled vs per-run), use `PipelineProvider`:
 
 ```cpp
-#include <iostream>
-#include <string>
+pipeline_services::Pipeline<std::string> pipeline("cleanText");
+pipeline.addAction(strip);
 
-#include "pipeline_services/core/pipeline.hpp"
-#include "pipeline_services/core/pipeline_provider.hpp"
-#include "pipeline_services/examples/text_steps.hpp"
-
-pipeline_services::core::Pipeline<std::string> buildProgrammaticPooledPipeline() {
-  pipeline_services::core::Pipeline<std::string> pipeline("programmatic_pooled", true);
-  pipeline.addAction("strip", pipeline_services::examples::strip);
-  return pipeline;
-}
-
-auto provider = pipeline_services::core::PipelineProvider<std::string>::pooled(
-  buildProgrammaticPooledPipeline,
-  64
-);
-
-auto result = provider.run("  hello   world  ");
-std::cout << result.context << std::endl;
+std::string output = pipeline.run("  hello  ");
+auto detailed = pipeline.runDetailed("  hello  ");
 ```
+
+The port now provides:
+
+- ordinary `Context -> Context` Actions;
+- one immutable Pipeline plan and one runner;
+- execution-scoped `pipeline_services::shortCircuit()`;
+- `run()` returning the final context;
+- `runDetailed()` returning diagnostics;
+- post-action guarantees, nested-run isolation, and thread-local concurrent-run isolation;
+- eager `NEW_INSTANCE_PER_EVENT`, `SINGLETON`, and round-robin `POOLED` providers;
+- a separate `PipelineRouter`;
+- canonical JSON, remote, and generated Actions using the same runner.
+
+Preview `pipeline_services::core` aliases and control-aware Actions remain only as compatibility adapters.
+
+## Provider example
+
+```cpp
+auto provider = pipeline_services::PipelineProvider<std::string>::pooled(
+    buildPipeline,
+    8);
+
+std::string output = provider.run("  hello  ");
+```
+
+POOLED is a fixed reusable instance set. It does not borrow, release, block, schedule work, or promise exclusive ownership.
 
 ## Build and test
+
 ```bash
 cd src/Cpp
 cmake -S . -B build
 cmake --build build -j
-ctest --test-dir build
+ctest --test-dir build --output-on-failure
 ```
 
-## Run examples
-```bash
-cd src/Cpp
-cmake -S . -B build
-cmake --build build -j
-./build/example01_text_clean
-./build/example02_json_loader
-./build/example03_runtime_pipeline
-./build/example05_metrics_post_action
-./build/benchmark01_pipeline_run
-```
-
-Remote example (requires a local HTTP server):
-
-```bash
-cd src/Cpp
-python3 -m http.server 8765 --bind 127.0.0.1 -d examples/fixtures
-./build/example04_json_loader_remote_get
-```
-
+Both the integration suite and `vnext_pipeline_test.cpp` are compiled and registered with CTest.

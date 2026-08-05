@@ -260,28 +260,17 @@ ContextType invoke(const RemoteSpec<ContextType>& spec, const std::string& metho
 }
 
 template <typename ContextType>
-struct HttpStepAction {
-  RemoteSpec<ContextType> spec;
-  std::string method;
-
-  ContextType operator()(ContextType ctx, pipeline_services::core::ActionControl<ContextType>& control) const {
-    (void)control;
-    return invoke<ContextType>(spec, method, ctx);
-  }
-};
-
-template <typename ContextType>
-pipeline_services::core::StepAction<ContextType> jsonPost(RemoteSpec<ContextType> spec) {
-  HttpStepAction<ContextType> action{.spec = std::move(spec), .method = "POST"};
-  pipeline_services::core::StepAction<ContextType> stepAction = std::move(action);
-  return stepAction;
+pipeline_services::Action<ContextType> jsonPost(RemoteSpec<ContextType> spec) {
+  return [spec = std::move(spec)](ContextType context) mutable {
+    return invoke<ContextType>(spec, "POST", context);
+  };
 }
 
 template <typename ContextType>
-pipeline_services::core::StepAction<ContextType> jsonGet(RemoteSpec<ContextType> spec) {
-  HttpStepAction<ContextType> action{.spec = std::move(spec), .method = "GET"};
-  pipeline_services::core::StepAction<ContextType> stepAction = std::move(action);
-  return stepAction;
+pipeline_services::Action<ContextType> jsonGet(RemoteSpec<ContextType> spec) {
+  return [spec = std::move(spec)](ContextType context) mutable {
+    return invoke<ContextType>(spec, "GET", context);
+  };
 }
 
 }  // namespace pipeline_services::remote

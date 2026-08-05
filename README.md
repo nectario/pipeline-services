@@ -14,12 +14,13 @@ It is designed to be robust, local-first, portable, and above all simple.
 
 `v0.1.0` remains an initial public preview.
 
-The simplicity reset is organized in four phases:
+The simplicity reset is organized in four phases plus one stabilization gate:
 
 - **Phase 1 complete:** shared vNext contract, naming matrix, provider/router contract, and conformance scenarios.
-- **Phase 2 complete in Java:** the Java reference kernel now implements the vNext model.
-- **Phase 3 pending:** migrate Python, TypeScript, Rust, Go, C#, C++, and Mojo to the same semantics with native language formatting.
-- **Phase 4 pending:** consolidate configuration, remote, LLM, observability, and other extensions around the final kernel.
+- **Phase 2 complete:** the Java reference kernel implements the vNext model.
+- **Phase 3 complete:** Python, TypeScript, Rust, Go, C#, C++, and Mojo implement the shared semantics with native language formatting.
+- **Phase 3.5 complete:** polyglot parity, canonical configuration, C++ test wiring, Go race safety, asynchronous control semantics, and the aggregate CI gate are stabilized.
+- **Phase 4 pending:** consolidate configuration, remote, LLM, observability, and other extensions around the stabilized kernel.
 
 Key documents:
 
@@ -30,6 +31,7 @@ Key documents:
 - [Java Reference Implementation](docs/vnext/JAVA_REFERENCE_IMPLEMENTATION.md)
 - [Java Migration Guide](docs/vnext/JAVA_MIGRATION.md)
 - [Java Benchmark Smoke](docs/vnext/JAVA_BENCHMARK.md)
+- [Phase 3.5 Stabilization](docs/vnext/PHASE_3_5_STABILIZATION.md)
 - [Project Status](docs/PROJECT_STATUS.md)
 
 ## The core idea

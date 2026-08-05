@@ -41,16 +41,9 @@ public sealed class PipelineJsonLoader
 
         HttpStep.RemoteDefaults remoteDefaults = ParseRemoteDefaults(root);
 
-        AddSectionFromRoot(root, "pre", pipeline, registry, remoteDefaults);
-        if (root.TryGetProperty("actions", out JsonElement actionsElement))
-        {
-            AddSection(actionsElement, "actions", pipeline, registry, remoteDefaults);
-        }
-        else if (root.TryGetProperty("steps", out JsonElement stepsElement))
-        {
-            AddSection(stepsElement, "steps", pipeline, registry, remoteDefaults);
-        }
-        AddSectionFromRoot(root, "post", pipeline, registry, remoteDefaults);
+        AddSectionFromRoot(root, "preActions", "pre", pipeline, registry, remoteDefaults);
+        AddSectionFromRoot(root, "actions", "steps", pipeline, registry, remoteDefaults);
+        AddSectionFromRoot(root, "postActions", "post", pipeline, registry, remoteDefaults);
 
         return pipeline;
     }
@@ -86,16 +79,21 @@ public sealed class PipelineJsonLoader
 
     private static void AddSectionFromRoot(
         JsonElement root,
-        string sectionName,
+        string canonicalSectionName,
+        string legacySectionName,
         Pipeline<string> pipeline,
         PipelineRegistry<string> registry,
         HttpStep.RemoteDefaults remoteDefaults)
     {
-        if (!root.TryGetProperty(sectionName, out JsonElement sectionElement))
+        if (root.TryGetProperty(canonicalSectionName, out JsonElement canonicalSection))
         {
+            AddSection(canonicalSection, canonicalSectionName, pipeline, registry, remoteDefaults);
             return;
         }
-        AddSection(sectionElement, sectionName, pipeline, registry, remoteDefaults);
+        if (root.TryGetProperty(legacySectionName, out JsonElement legacySection))
+        {
+            AddSection(legacySection, legacySectionName, pipeline, registry, remoteDefaults);
+        }
     }
 
     private static void AddSection(
@@ -317,7 +315,12 @@ public sealed class PipelineJsonLoader
 
     private static bool SpecContainsPromptSteps(JsonElement root)
     {
-        string[] sections = new[] { "pre", "actions", "steps", "post" };
+        string[] sections = new[]
+        {
+            "preActions", "pre",
+            "actions", "steps",
+            "postActions", "post"
+        };
         foreach (string sectionName in sections)
         {
             if (!root.TryGetProperty(sectionName, out JsonElement sectionElement))

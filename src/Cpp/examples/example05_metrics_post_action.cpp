@@ -12,7 +12,7 @@ int main() {
   pipeline.addPostAction(pipeline_services::core::printMetrics<std::string>);
 
   const auto result = pipeline.run("  Hello   Metrics  ");
-  std::cout << result.context << std::endl;
+  std::cout << result << std::endl;
   return 0;
 }
 

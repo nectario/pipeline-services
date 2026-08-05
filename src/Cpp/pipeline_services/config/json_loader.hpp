@@ -118,7 +118,8 @@ inline remote::RemoteSpec<std::string> parse_remote_spec(
 }
 
 inline bool specContainsPromptSteps(const nlohmann::json& spec_value) {
-  for (const std::string section_name : {"pre", "actions", "steps", "post"}) {
+  for (const std::string section_name : {
+         "preActions", "pre", "actions", "steps", "postActions", "post"}) {
     if (!spec_value.contains(section_name)) {
       continue;
     }
@@ -165,26 +166,26 @@ inline void add_local(
   core::Pipeline<std::string>& pipeline,
   const core::PipelineRegistry<std::string>& registry
 ) {
-  if (registry.hasUnary(local_ref)) {
-    auto unary_action = registry.getUnary(local_ref);
-    if (section_name == "pre") {
-      pipeline.addPreAction(display_name, unary_action);
-    } else if (section_name == "post") {
-      pipeline.addPostAction(display_name, unary_action);
+  if (registry.hasAction(local_ref)) {
+    auto action = registry.getAction(local_ref);
+    if (section_name == "preActions" || section_name == "pre") {
+      pipeline.addPreAction(display_name, action);
+    } else if (section_name == "postActions" || section_name == "post") {
+      pipeline.addPostAction(display_name, action);
     } else {
-      pipeline.addAction(display_name, unary_action);
+      pipeline.addAction(display_name, action);
     }
     return;
   }
 
-  if (registry.hasAction(local_ref)) {
-    auto step_action = registry.getAction(local_ref);
-    if (section_name == "pre") {
-      pipeline.addPreAction(display_name, step_action);
-    } else if (section_name == "post") {
-      pipeline.addPostAction(display_name, step_action);
+  if (registry.hasLegacyAction(local_ref)) {
+    auto action = registry.getLegacyAction(local_ref);
+    if (section_name == "preActions" || section_name == "pre") {
+      pipeline.addPreAction(display_name, action);
+    } else if (section_name == "postActions" || section_name == "post") {
+      pipeline.addPostAction(display_name, action);
     } else {
-      pipeline.addAction(display_name, step_action);
+      pipeline.addAction(display_name, action);
     }
     return;
   }
@@ -207,9 +208,9 @@ inline void add_remote(
 ) {
   const std::string normalized_method = toUpperAscii(method);
   const auto remote_action = (normalized_method == "GET") ? remote::jsonGet(spec) : remote::jsonPost(spec);
-  if (section_name == "pre") {
+  if (section_name == "preActions" || section_name == "pre") {
     pipeline.addPreAction(display_name, remote_action);
-  } else if (section_name == "post") {
+  } else if (section_name == "postActions" || section_name == "post") {
     pipeline.addPostAction(display_name, remote_action);
   } else {
     pipeline.addAction(display_name, remote_action);
@@ -281,6 +282,21 @@ inline void add_section(
   }
 }
 
+inline void add_section_with_alias(
+  const nlohmann::json& spec_value,
+  const std::string& canonical_name,
+  const std::string& legacy_name,
+  core::Pipeline<std::string>& pipeline,
+  const core::PipelineRegistry<std::string>& registry,
+  const remote::RemoteDefaults& remote_defaults
+) {
+  if (spec_value.contains(canonical_name)) {
+    add_section(spec_value, canonical_name, pipeline, registry, remote_defaults);
+  } else {
+    add_section(spec_value, legacy_name, pipeline, registry, remote_defaults);
+  }
+}
+
 }  // namespace detail
 
 class PipelineJsonLoader {
@@ -337,13 +353,12 @@ inline core::Pipeline<std::string> PipelineJsonLoader::load_str(
     remote_defaults = detail::parse_remote_defaults(spec_value.at("remoteDefaults"), remote_defaults);
   }
 
-  detail::add_section(spec_value, "pre", pipeline, registry, remote_defaults);
-  if (spec_value.contains("actions")) {
-    detail::add_section(spec_value, "actions", pipeline, registry, remote_defaults);
-  } else {
-    detail::add_section(spec_value, "steps", pipeline, registry, remote_defaults);
-  }
-  detail::add_section(spec_value, "post", pipeline, registry, remote_defaults);
+  detail::add_section_with_alias(
+    spec_value, "preActions", "pre", pipeline, registry, remote_defaults);
+  detail::add_section_with_alias(
+    spec_value, "actions", "steps", pipeline, registry, remote_defaults);
+  detail::add_section_with_alias(
+    spec_value, "postActions", "post", pipeline, registry, remote_defaults);
 
   return pipeline;
 }

@@ -7,11 +7,11 @@ import (
 	"pipeline-services-go/pipeline_services/examples"
 )
 
-func truncateAt280(value string) string {
+func truncateAt280(value string, execution core.PipelineExecution) string {
 	if len(value) <= 280 {
 		return value
 	}
-	core.ShortCircuit()
+	execution.ShortCircuit()
 	return value[:280]
 }
 

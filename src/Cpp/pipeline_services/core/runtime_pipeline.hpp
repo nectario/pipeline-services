@@ -2,52 +2,63 @@
 
 #include <cstddef>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "pipeline_services/core/pipeline.hpp"
 
-namespace pipeline_services::core {
+namespace pipeline_services {
 
+/**
+ * Deprecated immediate-execution helper retained for preview compatibility.
+ * Every applied Action is executed through the canonical Pipeline runner.
+ */
 template <typename ContextType>
 class RuntimePipeline {
-public:
-  RuntimePipeline(std::string name, bool shortCircuitOnException, ContextType initial)
-    : name_(std::move(name)),
-      shortCircuitOnException_(shortCircuitOnException),
-      ended_(false),
-      current_(std::move(initial)),
-      preActions_(),
-      actions_(),
-      postActions_(),
-      preIndex_(0),
-      actionIndex_(0),
-      postIndex_(0),
-      control_(name_, defaultOnError<ContextType>) {}
+ private:
+  struct RecordedAction {
+    std::string name;
+    Action<ContextType> action;
+  };
 
-  const ContextType& value() const {
-    return current_;
+ public:
+  RuntimePipeline(
+      std::string pipelineName,
+      bool shortCircuitOnException,
+      ContextType initialContext)
+      : pipelineName_(std::move(pipelineName)),
+        shortCircuitOnException_(shortCircuitOnException),
+        currentContext_(std::move(initialContext)) {}
+
+  const ContextType& value() const noexcept {
+    return currentContext_;
   }
 
-  void reset(ContextType value) {
-    current_ = std::move(value);
+  void reset(ContextType context) {
+    currentContext_ = std::move(context);
     ended_ = false;
-    control_.reset();
   }
 
   template <typename CallableType>
   const ContextType& addPreAction(CallableType callable) {
+    return addAndApply(
+        preActions_, StepPhase::PRE, std::move(callable));
+  }
+
+  template <typename CallableType>
+  const ContextType& addAction(CallableType callable) {
     if (ended_) {
-      return current_;
+      return currentContext_;
     }
-    RegisteredAction registeredAction{
-      .name = "",
-      .action = toStepAction<ContextType>(std::move(callable)),
-    };
-    preActions_.push_back(registeredAction);
-    const std::size_t indexValue = preIndex_;
-    preIndex_ += 1;
-    return applyAction(registeredAction, StepPhase::PRE, indexValue);
+    return addAndApply(
+        actions_, StepPhase::MAIN, std::move(callable));
+  }
+
+  template <typename CallableType>
+  const ContextType& addPostAction(CallableType callable) {
+    return addAndApply(
+        postActions_, StepPhase::POST, std::move(callable));
   }
 
   Pipeline<ContextType> freeze() const {
@@ -55,95 +66,87 @@ public:
   }
 
   Pipeline<ContextType> toImmutable() const {
-    Pipeline<ContextType> pipeline(name_, shortCircuitOnException_);
-    pipeline.onError(defaultOnError<ContextType>);
-    for (const auto& registeredAction : preActions_) {
-      pipeline.addPreAction(registeredAction.name, registeredAction.action);
+    Pipeline<ContextType> pipeline(
+        pipelineName_, shortCircuitOnException_);
+    for (const auto& action : preActions_) {
+      pipeline.addPreAction(action.name, action.action);
     }
-    for (const auto& registeredAction : actions_) {
-      pipeline.addAction(registeredAction.name, registeredAction.action);
+    for (const auto& action : actions_) {
+      pipeline.addAction(action.name, action.action);
     }
-    for (const auto& registeredAction : postActions_) {
-      pipeline.addPostAction(registeredAction.name, registeredAction.action);
+    for (const auto& action : postActions_) {
+      pipeline.addPostAction(action.name, action.action);
     }
+    pipeline.freeze();
     return pipeline;
   }
 
+ private:
   template <typename CallableType>
-  const ContextType& addAction(CallableType callable) {
-    if (ended_) {
-      return current_;
+  static Action<ContextType> normalize(CallableType callable) {
+    using StoredCallable = std::decay_t<CallableType>;
+    if constexpr (std::is_invocable_r_v<
+                      ContextType, StoredCallable&, ContextType>) {
+      return [stored = StoredCallable(std::move(callable))](
+                 ContextType context) mutable {
+        return std::invoke(stored, std::move(context));
+      };
+    } else if constexpr (std::is_invocable_r_v<
+                             ContextType,
+                             StoredCallable&,
+                             ContextType,
+                             ActionControl<ContextType>&>) {
+      return [stored = StoredCallable(std::move(callable))](
+                 ContextType context) mutable {
+        ActionControl<ContextType> control;
+        return std::invoke(stored, std::move(context), control);
+      };
+    } else {
+      static_assert(
+          std::is_invocable_v<StoredCallable&, ContextType>,
+          "Action must be callable as Context(Context) or "
+          "Context(Context, ActionControl<Context>&)");
     }
-    RegisteredAction registeredAction{
-      .name = "",
-      .action = toStepAction<ContextType>(std::move(callable)),
-    };
-    actions_.push_back(registeredAction);
-    const std::size_t indexValue = actionIndex_;
-    actionIndex_ += 1;
-    return applyAction(registeredAction, StepPhase::MAIN, indexValue);
   }
 
   template <typename CallableType>
-  const ContextType& addPostAction(CallableType callable) {
-    if (ended_) {
-      return current_;
+  const ContextType& addAndApply(
+      std::vector<RecordedAction>& destination,
+      StepPhase phase,
+      CallableType callable) {
+    Action<ContextType> action = normalize(std::move(callable));
+    destination.push_back(RecordedAction{"", action});
+
+    Pipeline<ContextType> oneAction(
+        pipelineName_ + ":runtime", shortCircuitOnException_);
+    if (phase == StepPhase::PRE) {
+      oneAction.addPreAction(action);
+    } else if (phase == StepPhase::POST) {
+      oneAction.addPostAction(action);
+    } else {
+      oneAction.addAction(action);
     }
-    RegisteredAction registeredAction{
-      .name = "",
-      .action = toStepAction<ContextType>(std::move(callable)),
-    };
-    postActions_.push_back(registeredAction);
-    const std::size_t indexValue = postIndex_;
-    postIndex_ += 1;
-    return applyAction(registeredAction, StepPhase::POST, indexValue);
-  }
-
-private:
-  struct RegisteredAction {
-    std::string name;
-    StepAction<ContextType> action;
-  };
-
-  const ContextType& applyAction(
-    const RegisteredAction& registeredAction,
-    StepPhase phase,
-    std::size_t index
-  ) {
-    const std::string stepName = formatStepName(phase, index, registeredAction.name);
-    control_.beginStep(phase, index, stepName);
-    const ContextType ctxBeforeStep = current_;
-    try {
-      current_ = registeredAction.action(std::move(current_), control_);
-    } catch (...) {
-      current_ = control_.recordError(ctxBeforeStep, std::current_exception());
-      if (shortCircuitOnException_) {
-        control_.shortCircuit();
-        ended_ = true;
-      }
-    }
-
-    if (control_.isShortCircuited()) {
+    PipelineResult<ContextType> result =
+        oneAction.runDetailed(currentContext_);
+    currentContext_ = std::move(result.context);
+    if (phase == StepPhase::MAIN && result.shortCircuited) {
       ended_ = true;
     }
-
-    return current_;
+    return currentContext_;
   }
 
-  std::string name_;
+  std::string pipelineName_;
   bool shortCircuitOnException_;
-  bool ended_;
-  ContextType current_;
-
-  std::vector<RegisteredAction> preActions_;
-  std::vector<RegisteredAction> actions_;
-  std::vector<RegisteredAction> postActions_;
-
-  std::size_t preIndex_;
-  std::size_t actionIndex_;
-  std::size_t postIndex_;
-
-  ActionControl<ContextType> control_;
+  ContextType currentContext_;
+  bool ended_ = false;
+  std::vector<RecordedAction> preActions_;
+  std::vector<RecordedAction> actions_;
+  std::vector<RecordedAction> postActions_;
 };
 
-}  // namespace pipeline_services::core
+namespace core {
+template <typename ContextType>
+using RuntimePipeline = ::pipeline_services::RuntimePipeline<ContextType>;
+}  // namespace core
+
+}  // namespace pipeline_services

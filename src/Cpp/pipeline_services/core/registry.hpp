@@ -1,54 +1,81 @@
 #pragma once
 
-#include <functional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "pipeline_services/core/pipeline.hpp"
 
-namespace pipeline_services::core {
+namespace pipeline_services {
 
 template <typename ContextType>
 class PipelineRegistry {
-public:
-  PipelineRegistry() = default;
-
-  void registerUnary(const std::string& name, UnaryOperator<ContextType> action) {
-    unaryActions_[name] = std::move(action);
+ public:
+  void registerUnary(
+      const std::string& name,
+      UnaryOperator<ContextType> action) {
+    registerAction(name, std::move(action));
   }
 
-  void registerAction(const std::string& name, StepAction<ContextType> action) {
-    stepActions_[name] = std::move(action);
+  void registerAction(
+      const std::string& name,
+      Action<ContextType> action) {
+    if (!action) {
+      throw std::invalid_argument("action must not be empty");
+    }
+    actions_[name] = std::move(action);
+  }
+
+  void registerLegacyAction(
+      const std::string& name,
+      StepAction<ContextType> action) {
+    if (!action) {
+      throw std::invalid_argument("action must not be empty");
+    }
+    legacyActions_[name] = std::move(action);
   }
 
   bool hasUnary(const std::string& name) const {
-    return unaryActions_.contains(name);
+    return actions_.contains(name);
   }
 
   bool hasAction(const std::string& name) const {
-    return stepActions_.contains(name);
+    return actions_.contains(name);
+  }
+
+  bool hasLegacyAction(const std::string& name) const {
+    return legacyActions_.contains(name);
   }
 
   UnaryOperator<ContextType> getUnary(const std::string& name) const {
-    const auto iter = unaryActions_.find(name);
-    if (iter == unaryActions_.end()) {
-      throw std::runtime_error("Unknown unary action: " + name);
-    }
-    return iter->second;
+    return getAction(name);
   }
 
-  StepAction<ContextType> getAction(const std::string& name) const {
-    const auto iter = stepActions_.find(name);
-    if (iter == stepActions_.end()) {
-      throw std::runtime_error("Unknown step action: " + name);
+  Action<ContextType> getAction(const std::string& name) const {
+    const auto found = actions_.find(name);
+    if (found == actions_.end()) {
+      throw std::runtime_error("Unknown Action: " + name);
     }
-    return iter->second;
+    return found->second;
   }
 
-private:
-  std::unordered_map<std::string, UnaryOperator<ContextType>> unaryActions_;
-  std::unordered_map<std::string, StepAction<ContextType>> stepActions_;
+  StepAction<ContextType> getLegacyAction(const std::string& name) const {
+    const auto found = legacyActions_.find(name);
+    if (found == legacyActions_.end()) {
+      throw std::runtime_error("Unknown legacy Action: " + name);
+    }
+    return found->second;
+  }
+
+ private:
+  std::unordered_map<std::string, Action<ContextType>> actions_;
+  std::unordered_map<std::string, StepAction<ContextType>> legacyActions_;
 };
 
-}  // namespace pipeline_services::core
+namespace core {
+template <typename ContextType>
+using PipelineRegistry = ::pipeline_services::PipelineRegistry<ContextType>;
+}  // namespace core
 
+}  // namespace pipeline_services
