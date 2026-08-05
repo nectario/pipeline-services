@@ -5,7 +5,7 @@ on:
     branches:
       - agent/vnext-phase-3-5-stabilization
     paths:
-      - .phase35/apply.patch
+      - .phase35/apply.patch.gz.b64
 
 permissions:
   contents: write
@@ -22,9 +22,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git apply --check .phase35/apply.patch
-          git apply .phase35/apply.patch
-          rm .phase35/apply.patch
+          base64 -d .phase35/apply.patch.gz.b64 | gzip -dc > /tmp/phase35.patch
+          git apply --check /tmp/phase35.patch
+          git apply /tmp/phase35.patch
+          rm .phase35/apply.patch.gz.b64
           rm .github/workflows/phase35-apply.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
