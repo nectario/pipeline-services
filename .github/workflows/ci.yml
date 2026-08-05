@@ -18,6 +18,8 @@ jobs:
           python-version: "3.12"
       - name: Validate repo metadata
         run: python tools/check_metadata.py
+      - name: Validate vNext conformance coverage
+        run: python tools/check_conformance_coverage.py
 
   java:
     runs-on: ubuntu-latest
@@ -89,6 +91,8 @@ jobs:
         with:
           go-version-file: src/Go/go.mod
       - run: go test ./...
+      - name: Run Go race detector
+        run: go test -race ./...
 
   dotnet:
     runs-on: ubuntu-latest
@@ -134,3 +138,30 @@ jobs:
           pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example02_json_loader.mojo
           pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example03_runtime_pipeline.mojo
           pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example05_metrics_post_action.mojo
+
+  phase35-gate:
+    name: phase35-gate
+    if: ${{ always() }}
+    needs:
+      - repo-hygiene
+      - java
+      - python
+      - typescript
+      - rust
+      - go
+      - dotnet
+      - cpp
+      - mojo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every supported port and repository check to pass
+        run: |
+          test "${{ needs.repo-hygiene.result }}" = "success"
+          test "${{ needs.java.result }}" = "success"
+          test "${{ needs.python.result }}" = "success"
+          test "${{ needs.typescript.result }}" = "success"
+          test "${{ needs.rust.result }}" = "success"
+          test "${{ needs.go.result }}" = "success"
+          test "${{ needs.dotnet.result }}" = "success"
+          test "${{ needs.cpp.result }}" = "success"
+          test "${{ needs.mojo.result }}" = "success"
