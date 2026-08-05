@@ -8,6 +8,5 @@ import (
 
 func main() {
 	pipeline := core.NewPipeline[string]("example00_import", true)
-	result := pipeline.Run("ok")
-	fmt.Println(result.Context)
+	fmt.Println(pipeline.Run("ok"))
 }
