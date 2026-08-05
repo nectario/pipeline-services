@@ -18,12 +18,12 @@ func NewRuntimePipeline[ContextType any](
 	initial ContextType,
 ) *RuntimePipeline[ContextType] {
 	return &RuntimePipeline[ContextType]{
-		name: name,
+		name:                    name,
 		shortCircuitOnException: shortCircuitOnException,
-		current: initial,
-		preActions: make([]registeredAction[ContextType], 0),
-		actions: make([]registeredAction[ContextType], 0),
-		postActions: make([]registeredAction[ContextType], 0),
+		current:                 initial,
+		preActions:              make([]registeredAction[ContextType], 0),
+		actions:                 make([]registeredAction[ContextType], 0),
+		postActions:             make([]registeredAction[ContextType], 0),
 	}
 }
 
@@ -58,13 +58,13 @@ func (runtimePipeline *RuntimePipeline[ContextType]) AddPostAction(action any) (
 func (runtimePipeline *RuntimePipeline[ContextType]) Freeze() *Pipeline[ContextType] {
 	pipeline := NewPipeline[ContextType](runtimePipeline.name, runtimePipeline.shortCircuitOnException)
 	for _, registered := range runtimePipeline.preActions {
-		pipeline.AddPreActionNamed(registered.name, registered.action)
+		pipeline.AddPreActionNamed(registered.name, registered.invoke)
 	}
 	for _, registered := range runtimePipeline.actions {
-		pipeline.AddActionNamed(registered.name, registered.action)
+		pipeline.AddActionNamed(registered.name, registered.invoke)
 	}
 	for _, registered := range runtimePipeline.postActions {
-		pipeline.AddPostActionNamed(registered.name, registered.action)
+		pipeline.AddPostActionNamed(registered.name, registered.invoke)
 	}
 	return pipeline.Freeze()
 }
@@ -82,8 +82,8 @@ func (runtimePipeline *RuntimePipeline[ContextType]) addAndExecute(
 	}
 
 	registered := registeredAction[ContextType]{
-		name: "",
-		action: normalizeAction[ContextType](action),
+		name:   "",
+		invoke: normalizeAction[ContextType](action),
 	}
 	switch phase {
 	case StepPhasePre:
@@ -100,11 +100,11 @@ func (runtimePipeline *RuntimePipeline[ContextType]) addAndExecute(
 	)
 	switch phase {
 	case StepPhasePre:
-		temporary.AddPreAction(registered.action)
+		temporary.AddPreAction(registered.invoke)
 	case StepPhasePost:
-		temporary.AddPostAction(registered.action)
+		temporary.AddPostAction(registered.invoke)
 	default:
-		temporary.AddAction(registered.action)
+		temporary.AddAction(registered.invoke)
 	}
 
 	result := temporary.RunDetailed(runtimePipeline.current)

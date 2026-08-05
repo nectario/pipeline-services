@@ -16,8 +16,8 @@ import (
 
 const remoteFixtureBody = "Hello from remote fixture\n"
 
-func appendAndStop(value string) string {
-	core.ShortCircuit()
+func appendAndStop(value string, execution core.PipelineExecution) string {
+	execution.ShortCircuit()
 	return value + "S"
 }
 
@@ -58,9 +58,10 @@ func (observer *recordingObserver) OnActionStarted(
 	core.ShortCircuit()
 }
 func (observer *recordingObserver) OnActionCompleted(string, core.StepPhase, int, string, int64) {}
-func (observer *recordingObserver) OnActionFailed(string, core.StepPhase, int, string, error, int64) {}
+func (observer *recordingObserver) OnActionFailed(string, core.StepPhase, int, string, error, int64) {
+}
 func (observer *recordingObserver) OnShortCircuited(string, core.StepPhase, int, string) {}
-func (observer *recordingObserver) OnPipelineCompleted(string, bool, int, int64) {}
+func (observer *recordingObserver) OnPipelineCompleted(string, bool, int, int64)         {}
 
 func TestRunReturnsContextAndDetailedUsesSameRunner(testingObject *testing.T) {
 	pipeline := core.NewPipeline[string]("simple", true)
@@ -193,11 +194,11 @@ func TestNestedAndConcurrentRunsIsolateControlState(testingObject *testing.T) {
 	started := make(chan struct{}, 2)
 	release := make(chan struct{})
 	shared := core.NewPipeline[string]("shared", true)
-	shared.AddAction(func(value string) string {
+	shared.AddAction(func(value string, execution core.PipelineExecution) string {
 		started <- struct{}{}
 		<-release
 		if value == "stop" {
-			core.ShortCircuit()
+			execution.ShortCircuit()
 		}
 		return value + "A"
 	})
@@ -256,6 +257,50 @@ func TestFreezeLegacyAdapterAndObserverIsolation(testingObject *testing.T) {
 	observed.AddAction(func(value string) string { return value + "B" })
 	if output := observed.Run("X"); output != "XAB" {
 		testingObject.Fatalf("observer changed semantics: %q", output)
+	}
+}
+
+func TestExecutionHandleExpiresWhenActionReturns(testingObject *testing.T) {
+	var captured core.PipelineExecution
+	pipeline := core.NewPipeline[string]("scope", true)
+	pipeline.AddAction(func(value string, execution core.PipelineExecution) string {
+		captured = execution
+		return value + "A"
+	})
+	if output := pipeline.Run("X"); output != "XA" {
+		testingObject.Fatalf("unexpected output: %q", output)
+	}
+
+	defer func() {
+		if recover() == nil {
+			testingObject.Fatal("expected expired execution handle to fail")
+		}
+	}()
+	captured.ShortCircuit()
+}
+
+func TestConcurrentAssemblyAndFreezeAreRaceFree(testingObject *testing.T) {
+	for iteration := 0; iteration < 100; iteration++ {
+		pipeline := core.NewPipeline[int]("assembly", true)
+		start := make(chan struct{})
+		var waitGroup sync.WaitGroup
+		waitGroup.Add(2)
+
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			defer func() { _ = recover() }()
+			pipeline.AddAction(func(value int) int { return value + 1 })
+		}()
+		go func() {
+			defer waitGroup.Done()
+			<-start
+			pipeline.Freeze()
+		}()
+
+		close(start)
+		waitGroup.Wait()
+		_ = pipeline.Run(0)
 	}
 }
 

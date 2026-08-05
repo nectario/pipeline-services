@@ -21,6 +21,6 @@ int main() {
   pipeline.addAction(pipeline_services::examples::append_marker);
 
   const auto result = pipeline.run("  Hello   Remote  ");
-  std::cout << "output=" << result.context << std::endl;
+  std::cout << "output=" << result << std::endl;
   return 0;
 }

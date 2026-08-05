@@ -215,6 +215,14 @@ function currentState<ContextType>(): ExecutionState<ContextType> {
   return stack[stack.length - 1] as ExecutionState<ContextType>;
 }
 
+/**
+ * Marks the current run as short-circuited.
+ *
+ * For asynchronous Actions, AsyncLocalStorage descendants share the active
+ * execution until the Action's returned Promise settles. Descendants that run
+ * after settlement retain no control authority because actionExecuting is
+ * already false.
+ */
 export function shortCircuit(): void {
   const stack = executionStorage.getStore();
   if (stack == null || stack.length === 0) {

@@ -1,45 +1,74 @@
 # Pipeline Services — Go port
 
-This directory is a contract-aligned Go reference port of Pipeline Services. It lives in-repo to validate the shared behavior contract, and its current module path is optimized for in-repo evaluation rather than standalone external module publication.
-
-This Go port mirrors the Java reference semantics (`pre → main → post`, `shortCircuitOnException`, `onError`, JSON loader, remote HTTP adapter) while using idiomatic exported Go identifiers.
+This directory contains the contract-aligned Go reference port of Pipeline Services. It follows the vNext semantics while keeping the public API idiomatic for Go.
 
 ## Execution API
-- `Pipeline.Run(input)` returns `PipelineResult[T]` (final context + short-circuit flag + errors + timings)
-- `Pipeline.Execute(input)` is a backwards-compatible alias for `Run`
-
-If you need explicit lifecycle control (shared vs pooled vs per-run), use `PipelineProvider`:
 
 ```go
-package main
-
-import (
-  "fmt"
-
-  "pipeline-services-go/pipeline_services/core"
-  "pipeline-services-go/pipeline_services/examples"
-)
-
-func buildProgrammaticPooledPipeline() *core.Pipeline[string] {
-  pipeline := core.NewPipeline[string]("programmatic_pooled", true)
-  pipeline.AddActionNamed("strip", examples.Strip)
-  return pipeline
-}
-
-func main() {
-  provider := core.NewPooledPipelineProvider[string](buildProgrammaticPooledPipeline, 64)
-  result := provider.Run("  hello   world  ")
-  fmt.Println(result.Context)
-}
+output := pipeline.Run(input)
+result := pipeline.RunDetailed(input)
 ```
 
+- `Run` returns the final context through the canonical runner.
+- `RunDetailed` uses the same runner and returns errors, action timings, and short-circuit state.
+- A Pipeline freezes on first execution or explicit `Freeze()`.
+
+## Explicit Go short-circuit control
+
+Go intentionally uses a small explicit execution handle for Actions that need to short-circuit:
+
+```go
+func validateOrder(
+    context OrderContext,
+    execution core.PipelineExecution,
+) OrderContext {
+    if !context.Valid {
+        execution.ShortCircuit()
+        return context.Reject("invalid order")
+    }
+    return context
+}
+
+pipeline.AddAction(validateOrder)
+```
+
+This is the one deliberate syntax deviation from the ambient `shortCircuit()` spelling used by several other ports. Go does not expose supported goroutine-local storage, so parsing goroutine IDs or relying on process-global execution state would be fragile and unnecessarily expensive. The semantics remain identical:
+
+- the operation is valid only while the current Action is executing;
+- the Action returns its updated context normally;
+- remaining main Actions are skipped;
+- all postActions still run;
+- nested and overlapping executions remain isolated.
+
+The package-level `core.ShortCircuit()` function is retained only as a migration guard and fails with an instruction to use `PipelineExecution`.
+
+## PipelineProvider
+
+```go
+provider := core.Pooled(buildPipeline, 8)
+output := provider.Run(input)
+```
+
+Provider modes are:
+
+```text
+NEW_INSTANCE_PER_EVENT
+SINGLETON
+POOLED
+```
+
+POOLED eagerly constructs a fixed set of Pipelines and selects round robin. It is not a thread pool and does not use borrow/release or exclusive ownership.
+
 ## Build and test
+
 ```bash
 cd src/Go
 go test ./...
+go test -race ./...
 ```
 
 ## Run examples
+
 ```bash
 cd src/Go
 go run ./examples/example01_text_clean
@@ -47,12 +76,4 @@ go run ./examples/example02_json_loader
 go run ./examples/example03_runtime_pipeline
 go run ./examples/example05_metrics_post_action
 go run ./examples/benchmark01_pipeline_run
-```
-
-Remote example (requires a local HTTP server):
-
-```bash
-cd src/Go
-python3 -m http.server 8765 --bind 127.0.0.1 -d examples/fixtures
-go run ./examples/example04_json_loader_remote_get
 ```

@@ -30,3 +30,7 @@ pixi run mojo run -I ../src/Mojo ../src/Mojo/tests/vnext_pipeline_test.mojo
 The conformance executable covers normal and detailed execution, phase-specific short-circuiting, exception policies, post-action guarantees, nested execution, observer isolation, provider modes, routing, canonical JSON, remote Actions, generated Actions, and RuntimePipeline delegation.
 
 The former nightly-era implementation is no longer the active Mojo API. Its public concepts were migrated to the stable toolchain rather than preserved through obsolete syntax.
+
+## Experimental concurrency boundary
+
+Mojo remains the strategic experimental port because the language and standard library are still evolving rapidly. The current `pooled` provider is eager and round robin, but its selector is not advertised as safe for overlapping multithreaded selection. Phase 3.5 therefore validates semantic parity in the pinned Mojo toolchain without promising the same concurrency guarantees as the mature ports. The exact tested Mojo version remains pinned in `pipeline_services/pixi.toml`.

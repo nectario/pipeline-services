@@ -17,6 +17,11 @@ canonical_terms:
     - SINGLETON
     - POOLED
   control_operation: shortCircuit
+  control_bindings:
+    ambient_function: [java, python, typescript, csharp, cpp, rust, mojo]
+    explicit_execution_handle: [go]
+  asynchronous_control_lifetime:
+    typescript: "AsyncLocalStorage descendants retain authority until the Action Promise settles"
 
 requirements:
   all_ports:

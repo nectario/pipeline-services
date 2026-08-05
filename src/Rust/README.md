@@ -1,51 +1,31 @@
 # Pipeline Services — Rust port
 
-This directory is a contract-aligned Rust reference port of Pipeline Services. It is kept in-repo to validate the shared behavior contract and is not a separate public crates.io release surface for `v0.1.0`.
-
-It follows the shared semantics in [../../docs/PORTABILITY_CONTRACT.md](../../docs/PORTABILITY_CONTRACT.md).
+This directory contains the contract-aligned Rust reference port. It remains an in-repository preview rather than a published crates.io package.
 
 ## Execution API
-- `Pipeline::run(input)` returns `PipelineResult<T>` (final context + short-circuit flag + errors + timings)
-- `Pipeline::execute(input)` is a backwards-compatible alias for `run`
-
-If you need explicit lifecycle control (shared vs pooled vs per-run), use `PipelineProvider`:
 
 ```rust
-use pipeline_services::examples::text_steps::strip;
-use pipeline_services::{Pipeline, PipelineProvider};
-
-fn build_programmatic_pooled_pipeline() -> Pipeline<String> {
-  let mut pipeline = Pipeline::new("programmatic_pooled", true);
-  pipeline.add_action(strip);
-  pipeline
-}
-
-fn main() {
-  let provider = PipelineProvider::pooled(build_programmatic_pooled_pipeline, 64);
-  let result = provider.run("  hello   world  ".to_string());
-  println!("{}", result.context);
-}
+let output = pipeline.run(input);
+let result = pipeline.run_detailed(input);
 ```
 
+Both methods use one runner. Provider modes are `NewInstancePerEvent`, `Singleton`, and eager round-robin `Pooled`.
+
+## Rust-specific constraints
+
+The current reference implementation requires `ContextType: Clone + 'static`. Cloning preserves the last successful context when an Action panics before returning and permits the error handler to receive a stable recovery value.
+
+Action failures are captured with `catch_unwind`. This means:
+
+- ordinary Rust panics inside Actions become Pipeline errors when the payload is representable;
+- builds configured with `panic = "abort"` cannot provide this recovery behavior;
+- process-level aborts remain outside the post-action guarantee.
+
+These are documented implementation constraints, not changes to the shared observable Pipeline semantics.
+
 ## Build and test
+
 ```bash
 cd src/Rust
 cargo test
-```
-
-## Run examples
-```bash
-cd src/Rust
-cargo run --example example01_text_clean
-cargo run --example example02_json_loader
-cargo run --example example03_runtime_pipeline
-cargo run --example example05_metrics_post_action
-```
-
-Remote example (requires a local HTTP server):
-
-```bash
-cd src/Rust
-python3 -m http.server 8765 --bind 127.0.0.1 -d examples/fixtures
-cargo run --example example04_json_loader_remote_get
 ```

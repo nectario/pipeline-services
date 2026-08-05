@@ -32,7 +32,7 @@ int main() {
   const auto start_timepoint = std::chrono::steady_clock::now();
   std::size_t iteration_index = 0;
   while (iteration_index < iterations) {
-    const auto result = pipeline.run(input_value);
+    const auto result = pipeline.runDetailed(input_value);
     total_pipeline_nanos += result.totalNanos;
 
     for (const auto& timing : result.actionTimings) {

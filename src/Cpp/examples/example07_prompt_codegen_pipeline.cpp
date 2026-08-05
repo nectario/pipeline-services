@@ -34,6 +34,6 @@ int main() {
   pipeline_services::config::PipelineJsonLoader loader;
   auto pipeline = loader.load_file(pipelineFile, registry);
   const auto result = pipeline.run("  john   SMITH ");
-  std::cout << "output=" << result.context << std::endl;
+  std::cout << "output=" << result << std::endl;
   return 0;
 }

@@ -2,9 +2,7 @@
 
 ## 1. Status and scope
 
-This document defines the target observable behavior for the vNext Pipeline Services implementations.
-
-It is a design contract, not a statement that every current `v0.1.0` port already behaves this way. Later phases will migrate the Java reference implementation and then the remaining ports to this contract.
+This document defines the observable behavior for the vNext Pipeline Services implementations. Phase 3 established the polyglot kernels, and Phase 3.5 records the small language-specific control bindings required to preserve those semantics robustly.
 
 The contract separates:
 
@@ -175,13 +173,21 @@ A process-level failure that prevents any further code execution is outside this
 
 ### 6.1 Public operation
 
-The only normal explicit control operation is:
+The only normal explicit control concept is short circuit.
+
+Most ports expose an ambient function:
 
 ```text
 shortCircuit()
 ```
 
-Its native spelling is defined in the naming matrix.
+Go exposes the same operation through the current Action's explicit execution handle:
+
+```go
+execution.ShortCircuit()
+```
+
+This is a native binding difference, not a semantic difference. Go does not provide supported goroutine-local storage, so the explicit handle avoids runtime-stack parsing, process-global control state, and unnecessary hot-path overhead. Native spelling is defined in the naming matrix.
 
 ### 6.2 Active-run requirement
 
@@ -229,15 +235,27 @@ When called from a `postAction`:
 
 ### 6.6 Actions declared anywhere
 
-An Action may call the execution-scoped short-circuit function regardless of where the Action is declared.
+An Action may request short circuit regardless of where the Action is declared.
 
-Subclass convenience methods and Pipeline instance convenience methods must delegate to the same run-local operation.
+Ambient-function ports bind the call to the innermost active run. Go passes a run-local `PipelineExecution` handle to control-aware Actions. Subclass convenience methods and Pipeline instance convenience methods must delegate to the same run-local operation where those conveniences are offered.
 
 ### 6.7 Nested runs
 
-When Pipeline A invokes Pipeline B, `shortCircuit()` targets the innermost active run.
+When Pipeline A invokes Pipeline B, short circuit targets the innermost active run.
 
-After Pipeline B completes, a subsequent call from Pipeline A’s Action targets Pipeline A.
+After Pipeline B completes, a subsequent request from Pipeline A’s Action targets Pipeline A.
+
+### 6.8 Asynchronous Action descendants
+
+Ports with asynchronous Actions must define the lifetime of execution-control authority.
+
+The TypeScript reference port uses this rule:
+
+- descendants created within an Action share its `AsyncLocalStorage` execution while the Promise returned by the Action remains unsettled;
+- they may request short circuit during that interval;
+- after that Promise settles, inherited descendants no longer have control authority and the operation fails clearly.
+
+Other asynchronous ports may use a stricter ownership rule when their runtime exposes one, provided detached work cannot silently control a later or unrelated run.
 
 ## 7. Exception semantics
 

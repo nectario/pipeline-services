@@ -20,7 +20,7 @@ Shared JSON and generated intermediate definitions always use the canonical lang
 | Pre-actions collection | `preActions` | `pre_actions` | `preActions` | `PreActions` | `preActions` | `PreActions` | `pre_actions` | `pre_actions` |
 | Actions collection | `actions` | `actions` | `actions` | `Actions` | `actions` | `Actions` | `actions` | `actions` |
 | Post-actions collection | `postActions` | `post_actions` | `postActions` | `PostActions` | `postActions` | `PostActions` | `post_actions` | `post_actions` |
-| Short circuit | `shortCircuit()` | `short_circuit()` | `shortCircuit()` | `ShortCircuit()` | `shortCircuit()` | `ShortCircuit()` | `short_circuit()` | `short_circuit()` |
+| Short circuit | `shortCircuit()` | `short_circuit()` | `shortCircuit()` | `ShortCircuit()` | `shortCircuit()` | `execution.ShortCircuit()` | `short_circuit()` | `short_circuit()` |
 | Short circuit on exception | `shortCircuitOnException` | `short_circuit_on_exception` | `shortCircuitOnException` | `ShortCircuitOnException` | `shortCircuitOnException` | `ShortCircuitOnException` | `short_circuit_on_exception` | `short_circuit_on_exception` |
 | Run | `run()` | `run()` | `run()` | `Run()` | `run()` | `Run()` | `run()` | `run()` |
 | Detailed run | `runDetailed()` | `run_detailed()` | `runDetailed()` | `RunDetailed()` | `runDetailed()` | `RunDetailed()` | `run_detailed()` | `run_detailed()` |
@@ -123,6 +123,8 @@ C++ has several established naming traditions. The Pipeline Services C++ port ke
 - Unexported names: camelCase
 - No inheritance requirement; composition is primary
 - Avoid Java-style builder ceremony unless it provides clear Go value
+- Actions that need control accept a `PipelineExecution` parameter and call `execution.ShortCircuit()`
+- The explicit handle is the documented Go adaptation because Go has no supported goroutine-local storage for a safe ambient function
 
 ### Rust
 

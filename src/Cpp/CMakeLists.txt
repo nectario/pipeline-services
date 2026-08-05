@@ -66,3 +66,7 @@ add_executable(pipeline_services_tests tests/pipeline_test.cpp)
 target_link_libraries(pipeline_services_tests PRIVATE pipeline_services_cpp)
 add_test(NAME pipeline_services_tests COMMAND pipeline_services_tests)
 
+
+add_executable(pipeline_services_vnext_tests tests/vnext_pipeline_test.cpp)
+target_link_libraries(pipeline_services_vnext_tests PRIVATE pipeline_services_cpp)
+add_test(NAME pipeline_services_vnext_tests COMMAND pipeline_services_vnext_tests)
