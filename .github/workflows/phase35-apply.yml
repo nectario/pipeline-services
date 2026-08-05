@@ -1,9 +1,7 @@
 name: phase35-apply
 
 on:
-  push:
-    branches:
-      - agent/vnext-phase-3-5-stabilization
+  pull_request:
     paths:
       - .github/workflows/phase35-apply.yml
 
