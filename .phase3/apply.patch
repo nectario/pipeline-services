@@ -1,0 +1,57 @@
+diff --git a/src/Mojo/pipeline_services/core/pipeline.mojo b/src/Mojo/pipeline_services/core/pipeline.mojo
+--- a/src/Mojo/pipeline_services/core/pipeline.mojo
++++ b/src/Mojo/pipeline_services/core/pipeline.mojo
+@@ -181,11 +181,11 @@ struct Pipeline(Movable):
+     var post_actions: List[RegisteredAction]
+     var frozen: Bool
+ 
+     def __init__(
+         out self,
+         pipeline_name: String,
+         short_circuit_on_exception: Bool = True,
+-    ):
++    ) raises:
+@@ -198,29 +198,29 @@ struct Pipeline(Movable):
+         self.post_actions = List[RegisteredAction]()
+         self.frozen = False
+ 
+-    def on_error(mut self, handler: OnErrorFn):
++    def on_error(mut self, handler: OnErrorFn) raises:
+         self._ensure_mutable()
+         self.error_handler = handler
+ 
+-    def add_pre_action(mut self, action: Action):
++    def add_pre_action(mut self, action: Action) raises:
+         self.add_pre_action_named("", action)
+ 
+-    def add_pre_action_named(mut self, name: String, action: Action):
++    def add_pre_action_named(mut self, name: String, action: Action) raises:
+         self._ensure_mutable()
+         self.pre_actions.append(RegisteredAction(name, action))
+ 
+-    def add_action(mut self, action: Action):
++    def add_action(mut self, action: Action) raises:
+         self.add_action_named("", action)
+ 
+-    def add_action_named(mut self, name: String, action: Action):
++    def add_action_named(mut self, name: String, action: Action) raises:
+         self._ensure_mutable()
+         self.actions.append(RegisteredAction(name, action))
+ 
+-    def add_post_action(mut self, action: Action):
++    def add_post_action(mut self, action: Action) raises:
+         self.add_post_action_named("", action)
+ 
+-    def add_post_action_named(mut self, name: String, action: Action):
++    def add_post_action_named(mut self, name: String, action: Action) raises:
+         self._ensure_mutable()
+         self.post_actions.append(RegisteredAction(name, action))
+@@ -323,7 +323,7 @@ struct Pipeline(Movable):
+             if stop_on_short_circuit and state.short_circuited:
+                 break
+             action_index += 1
+ 
+-    def _ensure_mutable(self):
++    def _ensure_mutable(self) raises:
+         if self.frozen:
+             raise "Pipeline '" + self.pipeline_name + "' is frozen"
