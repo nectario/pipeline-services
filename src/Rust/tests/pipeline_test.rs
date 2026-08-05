@@ -262,17 +262,22 @@ fn provider_modes_are_eager_fixed_and_round_robin() {
     vec!["1", "2", "3", "1", "2"]
   );
 
-  let singleton = PipelineProvider::singleton(Pipeline::new("singleton", true));
+  let singleton: PipelineProvider<String> =
+    PipelineProvider::singleton(Pipeline::<String>::new("singleton", true));
   assert!(Arc::ptr_eq(&singleton.get_pipeline(), &singleton.get_pipeline()));
 
-  let per_event = PipelineProvider::new_instance_per_event(|| Pipeline::new("event", true));
+  let per_event = PipelineProvider::new_instance_per_event(|| Pipeline::<String>::new("event", true));
   assert!(!Arc::ptr_eq(&per_event.get_pipeline(), &per_event.get_pipeline()));
 }
 
 #[test]
 fn router_selects_provider_without_changing_lifecycle() {
-  let trade = Arc::new(PipelineProvider::singleton(Pipeline::new("trade", true)));
-  let quote = Arc::new(PipelineProvider::singleton(Pipeline::new("quote", true)));
+  let trade: Arc<PipelineProvider<String>> = Arc::new(PipelineProvider::singleton(
+    Pipeline::<String>::new("trade", true),
+  ));
+  let quote: Arc<PipelineProvider<String>> = Arc::new(PipelineProvider::singleton(
+    Pipeline::<String>::new("quote", true),
+  ));
   let trade_route = trade.clone();
   let quote_route = quote.clone();
   let router = PipelineRouter::new(move |event: &String| {
