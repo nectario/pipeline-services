@@ -51,46 +51,27 @@ impl<ContextType> PipelineResult<ContextType> {
 
 pub trait PipelineObserver: Send + Sync + 'static {
   fn on_pipeline_started(&self, _pipeline_name: &str) {}
-
-  fn on_action_started(
-    &self,
-    _pipeline_name: &str,
-    _phase: &str,
-    _action_index: usize,
-    _action_name: &str,
-  ) {
-  }
-
+  fn on_action_started(&self, _pipeline_name: &str, _phase: &str, _index: usize, _name: &str) {}
   fn on_action_completed(
     &self,
     _pipeline_name: &str,
     _phase: &str,
-    _action_index: usize,
-    _action_name: &str,
+    _index: usize,
+    _name: &str,
     _elapsed_nanos: u128,
   ) {
   }
-
   fn on_action_failed(
     &self,
     _pipeline_name: &str,
     _phase: &str,
-    _action_index: usize,
-    _action_name: &str,
+    _index: usize,
+    _name: &str,
     _message: &str,
     _elapsed_nanos: u128,
   ) {
   }
-
-  fn on_short_circuited(
-    &self,
-    _pipeline_name: &str,
-    _phase: &str,
-    _action_index: usize,
-    _action_name: &str,
-  ) {
-  }
-
+  fn on_short_circuited(&self, _pipeline_name: &str, _phase: &str, _index: usize, _name: &str) {}
   fn on_pipeline_completed(
     &self,
     _pipeline_name: &str,
@@ -130,10 +111,7 @@ impl Drop for ExecutionScope {
     EXECUTION_STACK.with(|stack| {
       let mut stack = stack.borrow_mut();
       let current = stack.pop().expect("Pipeline execution scope stack is empty");
-      assert!(
-        Arc::ptr_eq(&current, &self.signal),
-        "Pipeline execution scopes were closed out of order"
-      );
+      assert!(Arc::ptr_eq(&current, &self.signal), "Pipeline execution scopes closed out of order");
     });
   }
 }
@@ -145,10 +123,10 @@ pub fn short_circuit() {
       .last()
       .cloned()
       .unwrap_or_else(|| panic!("short_circuit() can only be called during an active Pipeline run"));
-
-    if !signal.action_executing.load(Ordering::Acquire) {
-      panic!("short_circuit() can only be called while a Pipeline Action is executing");
-    }
+    assert!(
+      signal.action_executing.load(Ordering::Acquire),
+      "short_circuit() can only be called while a Pipeline Action is executing"
+    );
     signal.short_circuited.store(true, Ordering::Release);
   });
 }
@@ -201,12 +179,7 @@ impl<ContextType> ActionControl<ContextType> {
     }
   }
 
-  pub fn begin_step(
-    &mut self,
-    phase: impl Into<String>,
-    index: usize,
-    action_name: impl Into<String>,
-  ) {
+  pub fn begin_step(&mut self, phase: impl Into<String>, index: usize, action_name: impl Into<String>) {
     self.phase = phase.into();
     self.index = index;
     self.action_name = action_name.into();
@@ -236,34 +209,31 @@ impl<ContextType> ActionControl<ContextType> {
   }
 
   pub fn record_error(&mut self, context: ContextType, message: impl Into<String>) -> ContextType {
-    let message = message.into();
-    let pipeline_error = make_pipeline_error(
+    let error = make_pipeline_error(
       &self.pipeline_name,
       &self.phase,
       self.index,
       &self.action_name,
-      message,
+      message.into(),
     );
-    self.errors.push(pipeline_error.clone());
-
+    self.errors.push(error.clone());
     let was_executing = self.signal.action_executing.swap(false, Ordering::AcqRel);
-    let output = (self.on_error)(context, pipeline_error);
+    let output = (self.on_error)(context, error);
     self.signal.action_executing.store(was_executing, Ordering::Release);
     output
   }
 
   pub fn record_timing(&mut self, elapsed_nanos: u128, success: bool) {
-    if !self.collect_timings {
-      return;
+    if self.collect_timings {
+      self.timings.push(ActionTiming {
+        phase: self.phase.clone(),
+        action_index: self.index,
+        index: self.index,
+        action_name: self.action_name.clone(),
+        elapsed_nanos,
+        success,
+      });
     }
-    self.timings.push(ActionTiming {
-      phase: self.phase.clone(),
-      action_index: self.index,
-      index: self.index,
-      action_name: self.action_name.clone(),
-      elapsed_nanos,
-      success,
-    });
   }
 
   pub fn run_elapsed_nanos(&self) -> u128 {
@@ -300,7 +270,10 @@ struct PipelinePlan<ContextType> {
   post_actions: Vec<RegisteredAction<ContextType>>,
 }
 
-pub struct Pipeline<ContextType> {
+pub struct Pipeline<ContextType>
+where
+  ContextType: Clone + 'static,
+{
   pub name: String,
   pub short_circuit_on_exception: bool,
   on_error: OnErrorFn<ContextType>,
@@ -313,7 +286,7 @@ pub struct Pipeline<ContextType> {
 
 impl<ContextType> Pipeline<ContextType>
 where
-  ContextType: 'static,
+  ContextType: Clone + 'static,
 {
   pub fn new(name: impl Into<String>, short_circuit_on_exception: bool) -> Self {
     let name = name.into();
@@ -355,11 +328,7 @@ where
     self.add_pre_action_named("", action)
   }
 
-  pub fn add_pre_action_named<ActionFn>(
-    &mut self,
-    name: impl Into<String>,
-    action: ActionFn,
-  ) -> &mut Self
+  pub fn add_pre_action_named<ActionFn>(&mut self, name: impl Into<String>, action: ActionFn) -> &mut Self
   where
     ActionFn: Fn(ContextType) -> ContextType + Send + Sync + 'static,
   {
@@ -371,6 +340,7 @@ where
     self
   }
 
+  #[allow(deprecated)]
   #[deprecated(note = "Use a one-argument Action and short_circuit().")]
   pub fn add_pre_action_control<ActionFn>(&mut self, action: ActionFn) -> &mut Self
   where
@@ -415,6 +385,7 @@ where
     self
   }
 
+  #[allow(deprecated)]
   #[deprecated(note = "Use a one-argument Action and short_circuit().")]
   pub fn add_action_control<ActionFn>(&mut self, action: ActionFn) -> &mut Self
   where
@@ -447,11 +418,7 @@ where
     self.add_post_action_named("", action)
   }
 
-  pub fn add_post_action_named<ActionFn>(
-    &mut self,
-    name: impl Into<String>,
-    action: ActionFn,
-  ) -> &mut Self
+  pub fn add_post_action_named<ActionFn>(&mut self, name: impl Into<String>, action: ActionFn) -> &mut Self
   where
     ActionFn: Fn(ContextType) -> ContextType + Send + Sync + 'static,
   {
@@ -463,6 +430,7 @@ where
     self
   }
 
+  #[allow(deprecated)]
   #[deprecated(note = "Use a one-argument Action and short_circuit().")]
   pub fn add_post_action_control<ActionFn>(&mut self, action: ActionFn) -> &mut Self
   where
@@ -520,36 +488,6 @@ where
       .unwrap_or(self.actions.len())
   }
 
-  fn plan(&self) -> Arc<PipelinePlan<ContextType>> {
-    self
-      .frozen_plan
-      .get_or_init(|| {
-        Arc::new(PipelinePlan {
-          pipeline_name: self.name.clone(),
-          short_circuit_on_exception: self.short_circuit_on_exception,
-          on_error: self.on_error.clone(),
-          observer: self.observer.clone(),
-          pre_actions: self.pre_actions.clone(),
-          actions: self.actions.clone(),
-          post_actions: self.post_actions.clone(),
-        })
-      })
-      .clone()
-  }
-
-  fn ensure_mutable(&self) {
-    assert!(
-      self.frozen_plan.get().is_none(),
-      "Pipeline '{}' is frozen",
-      self.name
-    );
-  }
-}
-
-impl<ContextType> Pipeline<ContextType>
-where
-  ContextType: Clone + 'static,
-{
   pub fn run(&self, input_value: ContextType) -> ContextType {
     PipelineRunner::execute(self.plan(), input_value, false).context
   }
@@ -570,6 +508,27 @@ where
   #[deprecated(note = "Use run() or run_detailed().")]
   pub fn execute(&self, input_value: ContextType) -> PipelineResult<ContextType> {
     self.run_detailed(input_value)
+  }
+
+  fn plan(&self) -> Arc<PipelinePlan<ContextType>> {
+    self
+      .frozen_plan
+      .get_or_init(|| {
+        Arc::new(PipelinePlan {
+          pipeline_name: self.name.clone(),
+          short_circuit_on_exception: self.short_circuit_on_exception,
+          on_error: self.on_error.clone(),
+          observer: self.observer.clone(),
+          pre_actions: self.pre_actions.clone(),
+          actions: self.actions.clone(),
+          post_actions: self.post_actions.clone(),
+        })
+      })
+      .clone()
+  }
+
+  fn ensure_mutable(&self) {
+    assert!(self.frozen_plan.get().is_none(), "Pipeline '{}' is frozen", self.name);
   }
 }
 
@@ -598,11 +557,10 @@ impl PipelineRunner {
     );
     control.begin_run();
     notify(|| plan.observer.on_pipeline_started(&plan.pipeline_name));
-
     let _scope = ExecutionScope::open(signal);
+
     let mut context = input_value;
     let mut pending_failure: Option<Box<dyn Any + Send>> = None;
-
     context = execute_actions(
       &plan,
       context,
@@ -612,7 +570,6 @@ impl PipelineRunner {
       &mut control,
       &mut pending_failure,
     );
-
     if pending_failure.is_none() && !control.is_short_circuited() {
       context = execute_actions(
         &plan,
@@ -624,7 +581,6 @@ impl PipelineRunner {
         &mut pending_failure,
       );
     }
-
     context = execute_actions(
       &plan,
       context,
@@ -643,11 +599,9 @@ impl PipelineRunner {
         control.run_elapsed_nanos(),
       )
     });
-
     if let Some(payload) = pending_failure {
       resume_unwind(payload);
     }
-
     ExecutionState { context, control }
   }
 }
@@ -673,17 +627,9 @@ where
     let action_name = format_action_name(phase, action_index, &registered_action.name);
     control.begin_step(phase, action_index, action_name.clone());
     let was_short_circuited = control.is_short_circuited();
+    notify(|| plan.observer.on_action_started(&plan.pipeline_name, phase, action_index, &action_name));
 
-    notify(|| {
-      plan.observer.on_action_started(
-        &plan.pipeline_name,
-        phase,
-        action_index,
-        &action_name,
-      )
-    });
-
-    let action_started = Instant::now();
+    let started = Instant::now();
     let context_before_action = context.clone();
     control.signal.action_executing.store(true, Ordering::Release);
     let action_result = catch_unwind(AssertUnwindSafe(|| match &registered_action.kind {
@@ -695,9 +641,7 @@ where
     let mut succeeded = true;
     let mut failure_message = String::new();
     match action_result {
-      Ok(output_context) => {
-        context = output_context;
-      }
+      Ok(output_context) => context = output_context,
       Err(action_payload) => {
         succeeded = false;
         failure_message = safe_panic_to_string(&action_payload);
@@ -710,9 +654,8 @@ where
         );
         control.errors.push(pipeline_error.clone());
 
-        let handler_input = context_before_action.clone();
         let handler_result = catch_unwind(AssertUnwindSafe(|| {
-          (plan.on_error)(handler_input, pipeline_error)
+          (plan.on_error)(context_before_action.clone(), pipeline_error)
         }));
         match handler_result {
           Ok(updated_context) => context = updated_context,
@@ -724,14 +667,13 @@ where
             }
           }
         }
-
         if plan.short_circuit_on_exception {
           control.short_circuit();
         }
       }
     }
 
-    let elapsed_nanos = action_started.elapsed().as_nanos();
+    let elapsed_nanos = started.elapsed().as_nanos();
     control.record_timing(elapsed_nanos, succeeded);
     if succeeded {
       notify(|| {
@@ -755,18 +697,9 @@ where
         )
       });
     }
-
     if !was_short_circuited && control.is_short_circuited() {
-      notify(|| {
-        plan.observer.on_short_circuited(
-          &plan.pipeline_name,
-          phase,
-          action_index,
-          &action_name,
-        )
-      });
+      notify(|| plan.observer.on_short_circuited(&plan.pipeline_name, phase, action_index, &action_name));
     }
-
     if pending_failure.is_some() && phase != "postActions" {
       break;
     }
