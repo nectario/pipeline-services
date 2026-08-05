@@ -1,0 +1,184 @@
+diff --git a/src/CSharp/pipeline_services/actions/MetricsOutputAction.cs b/src/CSharp/pipeline_services/actions/MetricsOutputAction.cs
+index 4970391..4e2b534 100644
+--- a/src/CSharp/pipeline_services/actions/MetricsOutputAction.cs
++++ b/src/CSharp/pipeline_services/actions/MetricsOutputAction.cs
+@@ -10,24 +10,24 @@ public sealed class MetricsOutputAction<ContextType> : StepAction<ContextType>
+ {
+     private readonly string name;
+     private readonly Func<long> nanoClock;
+-    private readonly Action<IDictionary<string, object>> sink;
++    private readonly System.Action<IDictionary<string, object>> sink;
+ 
+     public MetricsOutputAction()
+         : this("Metrics", NanoTime.GetNowNanos, DefaultSink)
+     {
+     }
+ 
+-    public MetricsOutputAction(Action<IDictionary<string, object>> sink)
++    public MetricsOutputAction(System.Action<IDictionary<string, object>> sink)
+         : this("Metrics", NanoTime.GetNowNanos, sink)
+     {
+     }
+ 
+-    public MetricsOutputAction(string name, Action<IDictionary<string, object>> sink)
++    public MetricsOutputAction(string name, System.Action<IDictionary<string, object>> sink)
+         : this(name, NanoTime.GetNowNanos, sink)
+     {
+     }
+ 
+-    public MetricsOutputAction(string name, Func<long> nanoClock, Action<IDictionary<string, object>> sink)
++    public MetricsOutputAction(string name, Func<long> nanoClock, System.Action<IDictionary<string, object>> sink)
+     {
+         this.name = name ?? throw new ArgumentNullException(nameof(name));
+         this.nanoClock = nanoClock ?? throw new ArgumentNullException(nameof(nanoClock));
+diff --git a/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs b/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs
+index ff13d28..6cf0542 100644
+--- a/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs
++++ b/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs
+@@ -169,17 +169,17 @@ public sealed class PipelineJsonLoader
+         Pipeline<string> pipeline,
+         PipelineRegistry<string> registry)
+     {
+-        if (registry.HasUnary(localRef))
++        if (registry.TryGetLegacyAction(localRef, out StepAction<string>? legacyAction) &&
++            legacyAction is not null)
+         {
+-            Func<string, string> unaryAction = registry.GetUnary(localRef);
+-            AddUnary(unaryAction, displayName, sectionName, pipeline);
++            AddLegacyAction(legacyAction, displayName, sectionName, pipeline);
+             return;
+         }
+ 
+         if (registry.HasAction(localRef))
+         {
+-            StepAction<string> action = registry.GetAction(localRef);
+-            AddStepAction(action, displayName, sectionName, pipeline);
++            PipelineServices.Core.Action<string> action = registry.GetAction(localRef);
++            AddAction(action, displayName, sectionName, pipeline);
+             return;
+         }
+ 
+@@ -193,29 +193,41 @@ public sealed class PipelineJsonLoader
+         throw new InvalidOperationException("Unknown $local reference: " + localRef);
+     }
+ 
+-    private static void AddUnary(Func<string, string> unaryAction, string displayName, string sectionName, Pipeline<string> pipeline)
++    private static void AddAction(
++        PipelineServices.Core.Action<string> action,
++        string displayName,
++        string sectionName,
++        Pipeline<string> pipeline)
+     {
+-        if (string.Equals(sectionName, "pre", StringComparison.Ordinal))
++        if (string.Equals(sectionName, "pre", StringComparison.Ordinal) ||
++            string.Equals(sectionName, "preActions", StringComparison.Ordinal))
+         {
+-            pipeline.AddPreAction(displayName, unaryAction);
++            pipeline.AddPreAction(displayName, action);
+         }
+-        else if (string.Equals(sectionName, "post", StringComparison.Ordinal))
++        else if (string.Equals(sectionName, "post", StringComparison.Ordinal) ||
++                 string.Equals(sectionName, "postActions", StringComparison.Ordinal))
+         {
+-            pipeline.AddPostAction(displayName, unaryAction);
++            pipeline.AddPostAction(displayName, action);
+         }
+         else
+         {
+-            pipeline.AddAction(displayName, unaryAction);
++            pipeline.AddAction(displayName, action);
+         }
+     }
+ 
+-    private static void AddStepAction(StepAction<string> action, string displayName, string sectionName, Pipeline<string> pipeline)
++    private static void AddLegacyAction(
++        StepAction<string> action,
++        string displayName,
++        string sectionName,
++        Pipeline<string> pipeline)
+     {
+-        if (string.Equals(sectionName, "pre", StringComparison.Ordinal))
++        if (string.Equals(sectionName, "pre", StringComparison.Ordinal) ||
++            string.Equals(sectionName, "preActions", StringComparison.Ordinal))
+         {
+             pipeline.AddPreAction(displayName, action);
+         }
+-        else if (string.Equals(sectionName, "post", StringComparison.Ordinal))
++        else if (string.Equals(sectionName, "post", StringComparison.Ordinal) ||
++                 string.Equals(sectionName, "postActions", StringComparison.Ordinal))
+         {
+             pipeline.AddPostAction(displayName, action);
+         }
+@@ -279,11 +291,12 @@ public sealed class PipelineJsonLoader
+             throw new InvalidOperationException("$remote must be a string or object");
+         }
+ 
+-        StepAction<string> action = string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
+-            ? HttpStep.JsonGet(remoteSpec)
+-            : HttpStep.JsonPost(remoteSpec);
++        PipelineServices.Core.Action<string> action =
++            string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase)
++                ? HttpStep.JsonGet(remoteSpec)
++                : HttpStep.JsonPost(remoteSpec);
+ 
+-        AddStepAction(action, displayName, sectionName, pipeline);
++        AddAction(action, displayName, sectionName, pipeline);
+     }
+ 
+     private static string ParseRemoteEndpointOrPath(JsonElement remoteElement)
+diff --git a/src/CSharp/pipeline_services/remote/HttpStep.cs b/src/CSharp/pipeline_services/remote/HttpStep.cs
+index de11c11..0e67966 100644
+--- a/src/CSharp/pipeline_services/remote/HttpStep.cs
++++ b/src/CSharp/pipeline_services/remote/HttpStep.cs
+@@ -11,14 +11,16 @@ namespace PipelineServices.Remote;
+ 
+ public static class HttpStep
+ {
+-    public static StepAction<ContextType> JsonPost<ContextType>(RemoteSpec<ContextType> remoteSpec)
++    public static PipelineServices.Core.Action<ContextType> JsonPost<ContextType>(RemoteSpec<ContextType> remoteSpec)
+     {
+-        return new HttpJsonAction<ContextType>(remoteSpec, "POST");
++        ValidateRemoteSpec(remoteSpec);
++        return contextValue => Invoke(remoteSpec, "POST", contextValue);
+     }
+ 
+-    public static StepAction<ContextType> JsonGet<ContextType>(RemoteSpec<ContextType> remoteSpec)
++    public static PipelineServices.Core.Action<ContextType> JsonGet<ContextType>(RemoteSpec<ContextType> remoteSpec)
+     {
+-        return new HttpJsonAction<ContextType>(remoteSpec, "GET");
++        ValidateRemoteSpec(remoteSpec);
++        return contextValue => Invoke(remoteSpec, "GET", contextValue);
+     }
+ 
+     public static Func<InputType, OutputType> JsonPostTyped<InputType, OutputType>(RemoteSpecTyped<InputType, OutputType> remoteSpec)
+@@ -340,7 +342,7 @@ public static class HttpStep
+             return remoteSpec;
+         }
+ 
+-        public StepAction<ContextType> Action<ContextType>(
++        public PipelineServices.Core.Action<ContextType> Action<ContextType>(
+             string endpointOrPath,
+             Func<ContextType, string> toJson,
+             Func<ContextType, string, ContextType> fromJson)
+diff --git a/src/Rust/examples/example05_metrics_post_action.rs b/src/Rust/examples/example05_metrics_post_action.rs
+index 57ed6fb..a5a42a2 100644
+--- a/src/Rust/examples/example05_metrics_post_action.rs
++++ b/src/Rust/examples/example05_metrics_post_action.rs
+@@ -8,5 +8,5 @@ fn main() {
+   pipeline.add_post_action_control(print_metrics);
+ 
+   let result = pipeline.run("  Hello   Metrics  ".to_string());
+-  println!("{}", result.context);
++  println!("{}", result);
+ }
+diff --git a/src/Rust/examples/example07_prompt_codegen_pipeline.rs b/src/Rust/examples/example07_prompt_codegen_pipeline.rs
+index 4ea50aa..4cfe5bc 100644
+--- a/src/Rust/examples/example07_prompt_codegen_pipeline.rs
++++ b/src/Rust/examples/example07_prompt_codegen_pipeline.rs
+@@ -33,5 +33,5 @@ fn main() {
+     )
+     .expect("loader failed");
+   let result = pipeline.run("  john   SMITH ".to_string());
+-  println!("output={}", result.context);
++  println!("output={}", result);
+ }
