@@ -11,7 +11,7 @@ fn main() {
   "pipeline": "example02_json_loader",
   "type": "unary",
   "shortCircuitOnException": true,
-  "steps": [
+  "actions": [
     {"$local": "strip"},
     {"$local": "normalize_whitespace"}
   ]
@@ -20,6 +20,5 @@ fn main() {
 
   let loader = PipelineJsonLoader::new();
   let pipeline = loader.load_str(json_text, &registry).expect("loader failed");
-  let result = pipeline.run("  Hello   JSON  ".to_string());
-  println!("{}", result.context);
+  println!("{}", pipeline.run("  Hello   JSON  ".to_string()));
 }
