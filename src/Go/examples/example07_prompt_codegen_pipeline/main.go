@@ -46,6 +46,5 @@ func main() {
 		panic(loadError)
 	}
 
-	result := pipeline.Run("  john   SMITH ")
-	fmt.Println("output=" + result.Context)
+	fmt.Println("output=" + pipeline.Run("  john   SMITH "))
 }
