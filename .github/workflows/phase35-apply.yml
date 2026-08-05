@@ -18,12 +18,33 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: agent/vnext-phase-3-5-stabilization
-      - name: Apply and commit Phase 3.5 stabilization
+      - name: Reconstruct, verify, apply, and commit Phase 3.5
         shell: bash
         run: |
           set -euo pipefail
-          cat .phase35/plain.part.* > /tmp/phase35.patch
-          printf '%s  %s\n' '721e79203e45b3617ac884acb1f166528c0807d0189198d4554105f79d3796dc' /tmp/phase35.patch | sha256sum -c -
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import gzip
+          import hashlib
+
+          encoded_lines = []
+          for part_path in sorted(Path('.phase35').glob('patch.part.*')):
+              for line in part_path.read_text(encoding='utf-8').splitlines():
+                  normalized = line.strip()
+                  if normalized and not normalized.startswith('#'):
+                      encoded_lines.append(normalized)
+
+          compressed = base64.b64decode(''.join(encoded_lines), validate=True)
+          patch_bytes = gzip.decompress(compressed)
+          actual_digest = hashlib.sha256(patch_bytes).hexdigest()
+          expected_digest = '721e79203e45b3617ac884acb1f166528c0807d0189198d4554105f79d3796dc'
+          if actual_digest != expected_digest:
+              raise SystemExit(
+                  f'Phase 3.5 patch checksum mismatch: {actual_digest} != {expected_digest}'
+              )
+          Path('/tmp/phase35.patch').write_bytes(patch_bytes)
+          PY
           git apply --check /tmp/phase35.patch
           git apply /tmp/phase35.patch
           rm -rf .phase35
