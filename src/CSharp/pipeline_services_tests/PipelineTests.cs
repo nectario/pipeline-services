@@ -16,10 +16,10 @@ public sealed class PipelineTests
         pipeline.AddAction(ThrowBoom);
         pipeline.AddAction(AppendB);
 
-        PipelineResult<string> result = pipeline.Run("X");
+        PipelineResult<string> result = pipeline.RunDetailed("X");
         Assert.Equal("XA", result.Context);
         Assert.True(result.ShortCircuited);
-        Assert.Equal(1, result.Errors.Count);
+        Assert.Single(result.Errors);
         Assert.Equal("boom", result.Errors[0].Exception.Message);
     }
 
@@ -31,10 +31,10 @@ public sealed class PipelineTests
         pipeline.AddAction(ThrowBoom);
         pipeline.AddAction(AppendB);
 
-        PipelineResult<string> result = pipeline.Run("X");
+        PipelineResult<string> result = pipeline.RunDetailed("X");
         Assert.Equal("XAB", result.Context);
         Assert.False(result.ShortCircuited);
-        Assert.Equal(1, result.Errors.Count);
+        Assert.Single(result.Errors);
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public sealed class PipelineTests
         pipeline.AddAction(ShortCircuitAndEnd);
         pipeline.AddAction(AppendB);
 
-        PipelineResult<string> result = pipeline.Run("X");
+        PipelineResult<string> result = pipeline.RunDetailed("X");
         Assert.Equal("END", result.Context);
         Assert.True(result.ShortCircuited);
         Assert.Empty(result.Errors);
@@ -59,7 +59,7 @@ public sealed class PipelineTests
         pipeline.AddAction(AppendM);
         pipeline.AddPostAction(PostAppendX);
 
-        PipelineResult<string> result = pipeline.Run("START");
+        PipelineResult<string> result = pipeline.RunDetailed("START");
         Assert.Equal("P1P2X", result.Context);
         Assert.True(result.ShortCircuited);
         Assert.Empty(result.Errors);
@@ -73,10 +73,10 @@ public sealed class PipelineTests
         pipeline.AddPostAction(PostThrowBoom);
         pipeline.AddPostAction(PostAppendX);
 
-        PipelineResult<string> result = pipeline.Run("X");
+        PipelineResult<string> result = pipeline.RunDetailed("X");
         Assert.Equal("XAX", result.Context);
         Assert.True(result.ShortCircuited);
-        Assert.Equal(1, result.Errors.Count);
+        Assert.Single(result.Errors);
     }
 
     [Fact]
@@ -87,10 +87,10 @@ public sealed class PipelineTests
         pipeline.AddAction(ThrowBoom);
         pipeline.AddAction(AppendB);
 
-        PipelineResult<string> result = pipeline.Run("X");
+        PipelineResult<string> result = pipeline.RunDetailed("X");
         Assert.Equal("X[error]B", result.Context);
         Assert.False(result.ShortCircuited);
-        Assert.Equal(1, result.Errors.Count);
+        Assert.Single(result.Errors);
     }
 
     private static string AppendA(string value)
