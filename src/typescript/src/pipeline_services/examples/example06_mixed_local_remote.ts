@@ -1,24 +1,39 @@
-import { Pipeline, RemoteSpec } from "../../index.js";
-import { append_marker, normalize_whitespace, strip, to_lower } from "./text_steps.js";
+import {
+  Pipeline,
+  RemoteSpec,
+  http_step,
+} from "../../index.js";
+import {
+  append_marker,
+  normalize_whitespace,
+  strip,
+  to_lower,
+} from "./text_steps.js";
 
 async function main(): Promise<void> {
-  const fixture_endpoint = "http://127.0.0.1:8765/echo";
+  const remoteSpec = new RemoteSpec(
+    "http://127.0.0.1:8765/echo",
+  );
+  remoteSpec.method = "POST";
+  remoteSpec.timeout_millis = 1000;
+  remoteSpec.retries = 0;
 
-  const remote_spec = new RemoteSpec(fixture_endpoint);
-  remote_spec.method = "POST";
-  remote_spec.timeout_millis = 1000;
-  remote_spec.retries = 0;
+  const pipeline = new Pipeline<string>(
+    "example06_mixed_local_remote",
+    true,
+  )
+    .addAction(strip)
+    .addAction(normalize_whitespace)
+    .addAction(
+      (context) => http_step(remoteSpec, context),
+      "remote_echo",
+    )
+    .addAction(to_lower)
+    .addAction(append_marker);
 
-  const pipeline = new Pipeline("example06_mixed_local_remote", true);
-  pipeline.add_action(strip);
-  pipeline.add_action(normalize_whitespace);
-  pipeline.add_action_named("remote_echo", remote_spec);
-  pipeline.add_action(to_lower);
-  pipeline.add_action(append_marker);
-
-  const result = await pipeline.run("  Hello   Remote  ");
+  const output = await pipeline.run("  Hello   Remote  ");
   // eslint-disable-next-line no-console
-  console.log("output=" + String(result.context));
+  console.log("output=" + output);
 }
 
 void main();
