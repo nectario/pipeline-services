@@ -5,67 +5,63 @@ namespace PipelineServices.Core;
 
 public sealed class PipelineRegistry<ContextType>
 {
-    private readonly Dictionary<string, Func<ContextType, ContextType>> unaryActions;
-    private readonly Dictionary<string, StepAction<ContextType>> actions;
-
-    public PipelineRegistry()
-    {
-        unaryActions = new Dictionary<string, Func<ContextType, ContextType>>(StringComparer.Ordinal);
-        actions = new Dictionary<string, StepAction<ContextType>>(StringComparer.Ordinal);
-    }
+    private readonly Dictionary<string, Action<ContextType>> actions =
+        new(StringComparer.Ordinal);
 
     public void RegisterUnary(string name, Func<ContextType, ContextType> action)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException("name must not be blank", nameof(name));
-        }
-        unaryActions[name] = action ?? throw new ArgumentNullException(nameof(action));
+        ValidateName(name);
+        ArgumentNullException.ThrowIfNull(action);
+        actions[name] = context => action(context);
     }
 
-    public void RegisterAction(string name, StepAction<ContextType> action)
+    public void RegisterAction(string name, Action<ContextType> action)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException("name must not be blank", nameof(name));
-        }
+        ValidateName(name);
         actions[name] = action ?? throw new ArgumentNullException(nameof(action));
     }
 
-    public bool HasUnary(string name)
+    [Obsolete("Register a one-argument Action instead.")]
+    public void RegisterAction(string name, StepAction<ContextType> action)
     {
-        return name != null && unaryActions.ContainsKey(name);
+        ValidateName(name);
+        ArgumentNullException.ThrowIfNull(action);
+        actions[name] = context =>
+        {
+            throw new InvalidOperationException(
+                "Legacy StepAction registry entries must be added directly through Pipeline compatibility overloads");
+        };
+        legacyActions[name] = action;
     }
+
+    private readonly Dictionary<string, StepAction<ContextType>> legacyActions =
+        new(StringComparer.Ordinal);
+
+    public bool HasUnary(string name) => HasAction(name);
 
     public bool HasAction(string name)
+        => name is not null && (actions.ContainsKey(name) || legacyActions.ContainsKey(name));
+
+    public Action<ContextType> GetUnary(string name) => GetAction(name);
+
+    public Action<ContextType> GetAction(string name)
     {
-        return name != null && actions.ContainsKey(name);
+        ArgumentNullException.ThrowIfNull(name);
+        if (actions.TryGetValue(name, out Action<ContextType>? action))
+        {
+            return action;
+        }
+        throw new InvalidOperationException("Unknown Action: " + name);
     }
 
-    public Func<ContextType, ContextType> GetUnary(string name)
-    {
-        if (name == null)
-        {
-            throw new ArgumentNullException(nameof(name));
-        }
-        if (!unaryActions.TryGetValue(name, out Func<ContextType, ContextType>? action))
-        {
-            throw new InvalidOperationException("Unknown unary action: " + name);
-        }
-        return action;
-    }
+    internal bool TryGetLegacyAction(string name, out StepAction<ContextType>? action)
+        => legacyActions.TryGetValue(name, out action);
 
-    public StepAction<ContextType> GetAction(string name)
+    private static void ValidateName(string name)
     {
-        if (name == null)
+        if (string.IsNullOrWhiteSpace(name))
         {
-            throw new ArgumentNullException(nameof(name));
+            throw new ArgumentException("name must not be blank", nameof(name));
         }
-        if (!actions.TryGetValue(name, out StepAction<ContextType>? action))
-        {
-            throw new InvalidOperationException("Unknown step action: " + name);
-        }
-        return action;
     }
 }
-

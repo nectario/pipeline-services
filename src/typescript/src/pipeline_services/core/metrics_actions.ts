@@ -1,32 +1,37 @@
 import { ActionControl, now_ns } from "./pipeline.js";
 
-export async function print_metrics(ctx: unknown, control: ActionControl): Promise<unknown> {
+/** Preview compatibility metrics Action. New adapters should implement PipelineObserver. */
+export async function print_metrics<ContextType>(
+  context: ContextType,
+  control: ActionControl<ContextType>,
+): Promise<ContextType> {
   try {
-    const metrics_map: Record<string, unknown> = {};
+    const metricsMap: Record<string, unknown> = {};
+    metricsMap["pipeline"] = control.pipelineName;
+    metricsMap["shortCircuited"] = control.isShortCircuited();
+    metricsMap["errorCount"] = control.errors.length;
 
-    metrics_map["pipeline"] = control.pipeline_name;
-    metrics_map["shortCircuited"] = control.is_short_circuited();
-    metrics_map["errorCount"] = control.errors.length;
+    const nowNanos = now_ns();
+    const startNanos = control.runStartNanos;
+    const pipelineNanos =
+      startNanos > 0n && nowNanos > startNanos
+        ? nowNanos - startNanos
+        : 0n;
+    metricsMap["pipelineLatencyMs"] =
+      Number(pipelineNanos) / 1_000_000.0;
 
-    const now_nanos = now_ns();
-    const start_nanos = control.run_start_ns;
-    let pipeline_nanos = 0n;
-    if (start_nanos > 0n && now_nanos > start_nanos) {
-      pipeline_nanos = now_nanos - start_nanos;
+    const actionLatencyMs: Record<string, number> = {};
+    for (const timing of control.actionTimings) {
+      actionLatencyMs[timing.actionName] =
+        Number(timing.elapsedNanos) / 1_000_000.0;
     }
-    metrics_map["pipelineLatencyMs"] = Number(pipeline_nanos) / 1_000_000.0;
-
-    const action_latency_ms: Record<string, number> = {};
-    for (const timing of control.timings) {
-      action_latency_ms[timing.action_name] = Number(timing.elapsed_nanos) / 1_000_000.0;
-    }
-    metrics_map["actionLatencyMs"] = action_latency_ms;
+    metricsMap["actionLatencyMs"] = actionLatencyMs;
 
     // eslint-disable-next-line no-console
-    console.log(metrics_map);
-  } catch (caught_error) {
+    console.log(metricsMap);
+  } catch (caughtError) {
     // eslint-disable-next-line no-console
-    console.log("metricsError=", String(caught_error));
+    console.log("metricsError=", String(caughtError));
   }
-  return ctx;
+  return context;
 }

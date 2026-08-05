@@ -18,408 +18,280 @@ func NewPipelineJsonLoader() PipelineJsonLoader {
 	return PipelineJsonLoader{}
 }
 
-func (loader PipelineJsonLoader) LoadStr(jsonText string, registry *core.PipelineRegistry[string]) (*core.Pipeline[string], error) {
+func (loader PipelineJsonLoader) LoadStr(
+	jsonText string,
+	registry *core.PipelineRegistry[string],
+) (*core.Pipeline[string], error) {
 	var spec map[string]any
-	unmarshalError := json.Unmarshal([]byte(jsonText), &spec)
-	if unmarshalError != nil {
-		return nil, unmarshalError
+	if err := json.Unmarshal([]byte(jsonText), &spec); err != nil {
+		return nil, err
 	}
-	if specContainsPromptSteps(spec) {
-		return nil, errors.New("pipeline contains $prompt steps; run prompt codegen and load the compiled JSON under pipelines/generated/go/")
+	if specContainsPromptActions(spec) {
+		return nil, errors.New(
+			"Pipeline contains $prompt Actions; run prompt codegen and load the compiled JSON under pipelines/generated/go/",
+		)
 	}
 	return loader.buildFromSpec(spec, registry)
 }
 
-func (loader PipelineJsonLoader) LoadFile(filePath string, registry *core.PipelineRegistry[string]) (*core.Pipeline[string], error) {
-	fileBytes, readError := os.ReadFile(filePath)
-	if readError != nil {
-		return nil, readError
+func (loader PipelineJsonLoader) LoadFile(
+	filePath string,
+	registry *core.PipelineRegistry[string],
+) (*core.Pipeline[string], error) {
+	fileBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
 	}
-
 	jsonText := string(fileBytes)
+
 	var spec map[string]any
-	unmarshalError := json.Unmarshal([]byte(jsonText), &spec)
-	if unmarshalError != nil {
-		return nil, unmarshalError
+	if err := json.Unmarshal(fileBytes, &spec); err != nil {
+		return nil, err
 	}
-
-	pipelineName := "pipeline"
-	if value, found := spec["pipeline"]; found {
-		if nameText, ok := value.(string); ok && nameText != "" {
-			pipelineName = nameText
+	pipelineName := stringValue(spec["pipeline"], filepath.Base(filePath))
+	if specContainsPromptActions(spec) {
+		compiledPath, pathError := resolveCompiledPipelinePath(filePath, pipelineName, "go")
+		if pathError != nil {
+			return nil, pathError
 		}
-	}
-
-	if specContainsPromptSteps(spec) {
-		compiledPath, compiledPathError := resolveCompiledPipelinePath(filePath, pipelineName, "go")
-		if compiledPathError != nil {
-			return nil, compiledPathError
-		}
-		compiledBytes, compiledReadError := os.ReadFile(compiledPath)
-		if compiledReadError != nil {
+		compiledBytes, readError := os.ReadFile(compiledPath)
+		if readError != nil {
 			return nil, fmt.Errorf(
-				"pipeline contains $prompt steps but compiled JSON was not found. Run prompt codegen. Expected compiled pipeline at: %s",
+				"Pipeline contains $prompt Actions but compiled JSON was not found. Run prompt codegen. Expected compiled Pipeline at: %s",
 				compiledPath,
 			)
 		}
 		return loader.LoadStr(string(compiledBytes), registry)
 	}
-
 	return loader.LoadStr(jsonText, registry)
 }
 
-func (loader PipelineJsonLoader) buildFromSpec(spec map[string]any, registry *core.PipelineRegistry[string]) (*core.Pipeline[string], error) {
-	pipelineName := "pipeline"
-	if value, found := spec["pipeline"]; found {
-		if nameText, ok := value.(string); ok {
-			pipelineName = nameText
-		}
+func (loader PipelineJsonLoader) buildFromSpec(
+	spec map[string]any,
+	registry *core.PipelineRegistry[string],
+) (*core.Pipeline[string], error) {
+	if registry == nil {
+		registry = core.NewPipelineRegistry[string]()
 	}
-
-	pipelineType := "unary"
-	if value, found := spec["type"]; found {
-		if typeText, ok := value.(string); ok {
-			pipelineType = typeText
-		}
-	}
+	pipelineName := stringValue(spec["pipeline"], "pipeline")
+	pipelineType := stringValue(spec["type"], "unary")
 	if pipelineType != "unary" {
-		return nil, errors.New("only 'unary' pipelines are supported by this loader")
+		return nil, errors.New("only 'unary' Pipelines are supported by this loader")
 	}
 
 	shortCircuitOnException := true
 	if value, found := spec["shortCircuitOnException"]; found {
-		boolValue, ok := value.(bool)
-		if ok {
-			shortCircuitOnException = boolValue
-		}
+		shortCircuitOnException = boolValue(value, true)
 	} else if value, found := spec["shortCircuit"]; found {
-		boolValue, ok := value.(bool)
-		if ok {
-			shortCircuitOnException = boolValue
-		}
+		shortCircuitOnException = boolValue(value, true)
 	}
-
 	pipeline := core.NewPipeline[string](pipelineName, shortCircuitOnException)
 
 	remoteDefaults := remote.NewRemoteDefaults()
-	if value, found := spec["remoteDefaults"]; found {
-		defaultsMap, ok := value.(map[string]any)
-		if ok {
-			remoteDefaults = parseRemoteDefaults(defaultsMap, remoteDefaults)
+	if rawDefaults, found := spec["remoteDefaults"].(map[string]any); found {
+		remoteDefaults = parseRemoteDefaults(rawDefaults, remoteDefaults)
+	}
+
+	sections := []struct {
+		phase     string
+		canonical string
+		legacy    string
+	}{
+		{phase: "preActions", canonical: "preActions", legacy: "pre"},
+		{phase: "actions", canonical: "actions", legacy: "steps"},
+		{phase: "postActions", canonical: "postActions", legacy: "post"},
+	}
+	for _, section := range sections {
+		nodes, sectionError := actionSection(spec, section.canonical, section.legacy)
+		if sectionError != nil {
+			return nil, sectionError
+		}
+		for _, node := range nodes {
+			if addError := addAction(
+				node,
+				section.phase,
+				pipeline,
+				registry,
+				remoteDefaults,
+			); addError != nil {
+				return nil, addError
+			}
 		}
 	}
-
-	addSectionError := addSection(spec, "pre", pipeline, registry, remoteDefaults)
-	if addSectionError != nil {
-		return nil, addSectionError
-	}
-
-	if spec["actions"] != nil {
-		addSectionError = addSection(spec, "actions", pipeline, registry, remoteDefaults)
-	} else {
-		addSectionError = addSection(spec, "steps", pipeline, registry, remoteDefaults)
-	}
-	if addSectionError != nil {
-		return nil, addSectionError
-	}
-
-	addSectionError = addSection(spec, "post", pipeline, registry, remoteDefaults)
-	if addSectionError != nil {
-		return nil, addSectionError
-	}
-
 	return pipeline, nil
 }
 
-func addSection(
+func actionSection(
 	spec map[string]any,
-	sectionName string,
-	pipeline *core.Pipeline[string],
-	registry *core.PipelineRegistry[string],
-	remoteDefaults remote.RemoteDefaults,
-) error {
-	nodesValue, found := spec[sectionName]
-	if !found || nodesValue == nil {
-		return nil
+	canonicalName string,
+	legacyName string,
+) ([]map[string]any, error) {
+	rawValue, found := spec[canonicalName]
+	if !found || rawValue == nil {
+		rawValue = spec[legacyName]
 	}
-
-	nodesArray, ok := nodesValue.([]any)
+	if rawValue == nil {
+		return nil, nil
+	}
+	rawNodes, ok := rawValue.([]any)
 	if !ok {
-		return fmt.Errorf("section '%s' must be an array", sectionName)
+		return nil, fmt.Errorf("'%s' must be an array", canonicalName)
 	}
-
-	for index := 0; index < len(nodesArray); index++ {
-		nodeValue := nodesArray[index]
-		stepMap, ok := nodeValue.(map[string]any)
+	nodes := make([]map[string]any, 0, len(rawNodes))
+	for _, rawNode := range rawNodes {
+		node, ok := rawNode.(map[string]any)
 		if !ok {
-			return fmt.Errorf("each action must be a JSON object")
+			return nil, errors.New("each Action must be a JSON object")
 		}
-		addStepError := addStep(stepMap, sectionName, pipeline, registry, remoteDefaults)
-		if addStepError != nil {
-			return addStepError
-		}
+		nodes = append(nodes, node)
 	}
-
-	return nil
+	return nodes, nil
 }
 
-func addStep(
+func addAction(
 	node map[string]any,
-	sectionName string,
+	phase string,
 	pipeline *core.Pipeline[string],
 	registry *core.PipelineRegistry[string],
 	remoteDefaults remote.RemoteDefaults,
 ) error {
 	if node["$prompt"] != nil {
 		return errors.New(
-			"runtime does not execute $prompt steps; run prompt codegen to produce a compiled pipeline JSON with $local references",
+			"runtime does not execute $prompt Actions; run prompt codegen to produce compiled Pipeline JSON with $local references",
 		)
 	}
+	displayName := stringValue(node["name"], stringValue(node["label"], ""))
 
-	displayName := ""
-	if value, found := node["name"]; found {
-		if nameText, ok := value.(string); ok {
-			displayName = nameText
-		}
-	} else if value, found := node["label"]; found {
-		if labelText, ok := value.(string); ok {
-			displayName = labelText
-		}
-	}
-
-	if value, found := node["$local"]; found {
-		localRef, ok := value.(string)
+	if rawLocal, found := node["$local"]; found {
+		localRef, ok := rawLocal.(string)
 		if !ok {
 			return errors.New("$local must be a string")
 		}
-		return addLocal(localRef, displayName, sectionName, pipeline, registry)
+		action, resolveError := resolveLocal(localRef, registry)
+		if resolveError != nil {
+			return resolveError
+		}
+		registerAction(pipeline, phase, displayName, action)
+		return nil
 	}
 
-	if value, found := node["$remote"]; found {
-		spec, method, parseError := parseRemoteSpec(value, remoteDefaults)
+	if rawRemote, found := node["$remote"]; found {
+		spec, method, parseError := parseRemoteSpec(rawRemote, remoteDefaults)
 		if parseError != nil {
 			return parseError
 		}
-		return addRemote(spec, method, displayName, sectionName, pipeline)
+		var action core.Action[string]
+		if strings.EqualFold(method, "GET") {
+			action = remote.JsonGet(spec)
+		} else {
+			action = remote.JsonPost(spec)
+		}
+		registerAction(pipeline, phase, displayName, action)
+		return nil
 	}
-
-	return errors.New("unsupported action: expected '$local' or '$remote'")
+	return errors.New("unsupported Action: expected '$local' or '$remote'")
 }
 
-func addLocal(
+func resolveLocal(
 	localRef string,
-	displayName string,
-	sectionName string,
-	pipeline *core.Pipeline[string],
 	registry *core.PipelineRegistry[string],
-) error {
-	if registry.HasUnary(localRef) {
-		unaryAction, getError := registry.GetUnary(localRef)
-		if getError != nil {
-			return getError
-		}
-		if sectionName == "pre" {
-			pipeline.AddPreActionNamed(displayName, unaryAction)
-		} else if sectionName == "post" {
-			pipeline.AddPostActionNamed(displayName, unaryAction)
-		} else {
-			pipeline.AddActionNamed(displayName, unaryAction)
-		}
-		return nil
-	}
-
+) (any, error) {
 	if registry.HasAction(localRef) {
-		stepAction, getError := registry.GetAction(localRef)
-		if getError != nil {
-			return getError
-		}
-		if sectionName == "pre" {
-			pipeline.AddPreActionNamed(displayName, stepAction)
-		} else if sectionName == "post" {
-			pipeline.AddPostActionNamed(displayName, stepAction)
-		} else {
-			pipeline.AddActionNamed(displayName, stepAction)
-		}
-		return nil
+		return registry.GetAction(localRef)
 	}
-
+	if registry.HasUnary(localRef) {
+		return registry.GetUnary(localRef)
+	}
 	if strings.HasPrefix(localRef, "prompt:") {
-		return fmt.Errorf(
-			"prompt-generated action is missing from the registry: %s. Run prompt codegen and register generated actions",
+		return nil, fmt.Errorf(
+			"prompt-generated Action is missing from the registry: %s. Run prompt codegen and register generated Actions",
 			localRef,
 		)
 	}
-
-	return fmt.Errorf("unknown $local reference: %s", localRef)
+	return nil, fmt.Errorf("unknown $local reference: %s", localRef)
 }
 
-func addRemote(
-	spec remote.RemoteSpec[string],
-	method string,
-	displayName string,
-	sectionName string,
+func registerAction(
 	pipeline *core.Pipeline[string],
-) error {
-	methodUpper := strings.ToUpper(method)
-	var action core.StepAction[string]
-	if methodUpper == "GET" {
-		action = remote.JsonGet[string](spec)
-	} else {
-		action = remote.JsonPost[string](spec)
-	}
-
-	if sectionName == "pre" {
+	phase string,
+	displayName string,
+	action any,
+) {
+	switch phase {
+	case "preActions":
 		pipeline.AddPreActionNamed(displayName, action)
-	} else if sectionName == "post" {
+	case "postActions":
 		pipeline.AddPostActionNamed(displayName, action)
-	} else {
+	default:
 		pipeline.AddActionNamed(displayName, action)
 	}
-	return nil
 }
 
-func parseRemoteSpec(remoteNode any, remoteDefaults remote.RemoteDefaults) (remote.RemoteSpec[string], string, error) {
-	if remoteText, ok := remoteNode.(string); ok {
-		spec := remoteDefaults.SpecString(remoteText)
-		return spec, remoteDefaults.Method, nil
+func parseRemoteSpec(
+	remoteNode any,
+	defaults remote.RemoteDefaults,
+) (remote.RemoteSpec[string], string, error) {
+	if endpoint, ok := remoteNode.(string); ok {
+		return defaults.SpecString(endpoint), defaults.Method, nil
 	}
-
 	remoteMap, ok := remoteNode.(map[string]any)
 	if !ok {
-		return remote.RemoteSpec[string]{}, "", errors.New("$remote must be a string or an object")
+		return remote.RemoteSpec[string]{}, "", errors.New("$remote must be a string or object")
 	}
-
-	endpointValue, found := remoteMap["endpoint"]
-	if !found || endpointValue == nil {
-		endpointValue = remoteMap["path"]
-	}
-	endpointText, ok := endpointValue.(string)
-	if !ok || endpointText == "" {
+	endpoint := stringValue(remoteMap["endpoint"], stringValue(remoteMap["path"], ""))
+	if endpoint == "" {
 		return remote.RemoteSpec[string]{}, "", errors.New("missing required $remote field: endpoint|path")
 	}
 
-	spec := remoteDefaults.SpecString(endpointText)
-
-	if timeoutValue, found := remoteMap["timeoutMillis"]; found {
-		timeoutFloat, ok := timeoutValue.(float64)
-		if ok {
-			spec.TimeoutMillis = int(timeoutFloat)
-		}
+	spec := defaults.SpecString(endpoint)
+	if value, found := remoteMap["timeoutMillis"]; found {
+		spec.TimeoutMillis = int(numberValue(value, float64(spec.TimeoutMillis)))
+	} else if value, found := remoteMap["timeout_millis"]; found {
+		spec.TimeoutMillis = int(numberValue(value, float64(spec.TimeoutMillis)))
 	}
-	if timeoutValue, found := remoteMap["timeout_millis"]; found {
-		timeoutFloat, ok := timeoutValue.(float64)
-		if ok {
-			spec.TimeoutMillis = int(timeoutFloat)
-		}
+	if value, found := remoteMap["retries"]; found {
+		spec.Retries = int(numberValue(value, float64(spec.Retries)))
 	}
-
-	if retriesValue, found := remoteMap["retries"]; found {
-		retriesFloat, ok := retriesValue.(float64)
-		if ok {
-			spec.Retries = int(retriesFloat)
-		}
+	if rawHeaders, ok := remoteMap["headers"].(map[string]any); ok {
+		spec.Headers = defaults.MergeHeaders(stringMap(rawHeaders))
 	}
-
-	headersOverride := map[string]string{}
-	if headersValue, found := remoteMap["headers"]; found && headersValue != nil {
-		headersMap, ok := headersValue.(map[string]any)
-		if ok {
-			for key, value := range headersMap {
-				if valueText, ok := value.(string); ok {
-					headersOverride[key] = valueText
-				}
-			}
-		}
-	}
-	if len(headersOverride) > 0 {
-		spec.Headers = remoteDefaults.MergeHeaders(headersOverride)
-	}
-
-	method := remoteDefaults.Method
-	if methodValue, found := remoteMap["method"]; found {
-		if methodText, ok := methodValue.(string); ok && methodText != "" {
-			method = methodText
-		}
-	}
-
+	method := stringValue(remoteMap["method"], defaults.Method)
 	return spec, method, nil
 }
 
-func parseRemoteDefaults(node map[string]any, base remote.RemoteDefaults) remote.RemoteDefaults {
-	defaults := base
-
-	if baseUrlValue, found := node["baseUrl"]; found {
-		if baseUrlText, ok := baseUrlValue.(string); ok {
-			defaults.BaseUrl = baseUrlText
-		}
-	} else if baseUrlValue, found := node["endpointBase"]; found {
-		if baseUrlText, ok := baseUrlValue.(string); ok {
-			defaults.BaseUrl = baseUrlText
-		}
+func parseRemoteDefaults(
+	node map[string]any,
+	defaults remote.RemoteDefaults,
+) remote.RemoteDefaults {
+	defaults.BaseUrl = stringValue(
+		node["baseUrl"],
+		stringValue(node["endpointBase"], defaults.BaseUrl),
+	)
+	if value, found := node["timeoutMillis"]; found {
+		defaults.TimeoutMillis = int(numberValue(value, float64(defaults.TimeoutMillis)))
+	} else if value, found := node["timeout_millis"]; found {
+		defaults.TimeoutMillis = int(numberValue(value, float64(defaults.TimeoutMillis)))
 	}
-
-	if timeoutValue, found := node["timeoutMillis"]; found {
-		timeoutFloat, ok := timeoutValue.(float64)
-		if ok {
-			defaults.TimeoutMillis = int(timeoutFloat)
-		}
-	} else if timeoutValue, found := node["timeout_millis"]; found {
-		timeoutFloat, ok := timeoutValue.(float64)
-		if ok {
-			defaults.TimeoutMillis = int(timeoutFloat)
-		}
+	if value, found := node["retries"]; found {
+		defaults.Retries = int(numberValue(value, float64(defaults.Retries)))
 	}
-
-	if retriesValue, found := node["retries"]; found {
-		retriesFloat, ok := retriesValue.(float64)
-		if ok {
-			defaults.Retries = int(retriesFloat)
-		}
+	defaults.Method = strings.ToUpper(stringValue(node["method"], defaults.Method))
+	if rawHeaders, ok := node["headers"].(map[string]any); ok {
+		defaults.Headers = defaults.MergeHeaders(stringMap(rawHeaders))
 	}
-
-	if methodValue, found := node["method"]; found {
-		if methodText, ok := methodValue.(string); ok && methodText != "" {
-			defaults.Method = strings.ToUpper(methodText)
-		}
-	}
-
-	headersMap := map[string]string{}
-	if headersValue, found := node["headers"]; found && headersValue != nil {
-		rawHeaders, ok := headersValue.(map[string]any)
-		if ok {
-			for key, value := range rawHeaders {
-				if valueText, ok := value.(string); ok {
-					headersMap[key] = valueText
-				}
-			}
-		}
-	}
-	if len(headersMap) > 0 {
-		defaults.Headers = defaults.MergeHeaders(headersMap)
-	}
-
 	return defaults
 }
 
-func specContainsPromptSteps(spec map[string]any) bool {
-	sectionNames := []string{"pre", "actions", "steps", "post"}
-	for sectionIndex := 0; sectionIndex < len(sectionNames); sectionIndex++ {
-		sectionName := sectionNames[sectionIndex]
-		nodesValue := spec[sectionName]
-		if nodesValue == nil {
-			continue
-		}
-		nodesArray, ok := nodesValue.([]any)
+func specContainsPromptActions(spec map[string]any) bool {
+	for _, sectionName := range []string{
+		"preActions", "pre", "actions", "steps", "postActions", "post",
+	} {
+		rawNodes, ok := spec[sectionName].([]any)
 		if !ok {
 			continue
 		}
-		for nodeIndex := 0; nodeIndex < len(nodesArray); nodeIndex++ {
-			nodeValue := nodesArray[nodeIndex]
-			nodeMap, ok := nodeValue.(map[string]any)
-			if !ok {
-				continue
-			}
-			if nodeMap["$prompt"] != nil {
+		for _, rawNode := range rawNodes {
+			if node, ok := rawNode.(map[string]any); ok && node["$prompt"] != nil {
 				return true
 			}
 		}
@@ -427,16 +299,24 @@ func specContainsPromptSteps(spec map[string]any) bool {
 	return false
 }
 
-func resolveCompiledPipelinePath(sourceFilePath string, pipelineName string, languageName string) (string, error) {
-	absoluteSourcePath, absoluteError := filepath.Abs(sourceFilePath)
-	if absoluteError != nil {
-		return "", fmt.Errorf("failed to resolve pipeline path '%s': %w", sourceFilePath, absoluteError)
+func resolveCompiledPipelinePath(
+	sourceFilePath string,
+	pipelineName string,
+	languageName string,
+) (string, error) {
+	absoluteSourcePath, err := filepath.Abs(sourceFilePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve Pipeline path '%s': %w", sourceFilePath, err)
 	}
-
 	currentDir := filepath.Dir(absoluteSourcePath)
 	for {
 		if filepath.Base(currentDir) == "pipelines" {
-			return filepath.Join(currentDir, "generated", languageName, pipelineName+".json"), nil
+			return filepath.Join(
+				currentDir,
+				"generated",
+				languageName,
+				pipelineName+".json",
+			), nil
 		}
 		nextDir := filepath.Dir(currentDir)
 		if nextDir == currentDir {
@@ -444,9 +324,39 @@ func resolveCompiledPipelinePath(sourceFilePath string, pipelineName string, lan
 		}
 		currentDir = nextDir
 	}
-
 	return "", fmt.Errorf(
-		"pipeline contains $prompt steps but the pipelines root directory could not be inferred from path: %s (expected the file to be under a 'pipelines' directory)",
+		"Pipeline contains $prompt Actions but the pipelines root directory could not be inferred from path: %s",
 		absoluteSourcePath,
 	)
+}
+
+func stringValue(value any, fallback string) string {
+	if text, ok := value.(string); ok && text != "" {
+		return text
+	}
+	return fallback
+}
+
+func boolValue(value any, fallback bool) bool {
+	if result, ok := value.(bool); ok {
+		return result
+	}
+	return fallback
+}
+
+func numberValue(value any, fallback float64) float64 {
+	if result, ok := value.(float64); ok {
+		return result
+	}
+	return fallback
+}
+
+func stringMap(values map[string]any) map[string]string {
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		if text, ok := value.(string); ok {
+			result[key] = text
+		}
+	}
+	return result
 }

@@ -1,38 +1,29 @@
 package core
 
-import "time"
-
+// RuntimePipeline is a deprecated immediate-execution helper backed by the canonical Pipeline runner.
 type RuntimePipeline[ContextType any] struct {
 	name                    string
 	shortCircuitOnException bool
-
-	ended   bool
-	current ContextType
-
-	preActions  []registeredAction[ContextType]
-	actions     []registeredAction[ContextType]
-	postActions []registeredAction[ContextType]
-
-	preIndex    int
-	actionIndex int
-	postIndex   int
-
-	control *defaultStepControl[ContextType]
+	ended                   bool
+	current                 ContextType
+	preActions              []registeredAction[ContextType]
+	actions                 []registeredAction[ContextType]
+	postActions             []registeredAction[ContextType]
+	lastResult              *PipelineResult[ContextType]
 }
 
-func NewRuntimePipeline[ContextType any](name string, shortCircuitOnException bool, initial ContextType) *RuntimePipeline[ContextType] {
+func NewRuntimePipeline[ContextType any](
+	name string,
+	shortCircuitOnException bool,
+	initial ContextType,
+) *RuntimePipeline[ContextType] {
 	return &RuntimePipeline[ContextType]{
-		name:                    name,
+		name: name,
 		shortCircuitOnException: shortCircuitOnException,
-		ended:                   false,
-		current:                 initial,
-		preActions:              []registeredAction[ContextType]{},
-		actions:                 []registeredAction[ContextType]{},
-		postActions:             []registeredAction[ContextType]{},
-		preIndex:                0,
-		actionIndex:             0,
-		postIndex:               0,
-		control:                 newDefaultStepControl[ContextType](name, DefaultOnError[ContextType]),
+		current: initial,
+		preActions: make([]registeredAction[ContextType], 0),
+		actions: make([]registeredAction[ContextType], 0),
+		postActions: make([]registeredAction[ContextType], 0),
 	}
 }
 
@@ -43,104 +34,82 @@ func (runtimePipeline *RuntimePipeline[ContextType]) Value() ContextType {
 func (runtimePipeline *RuntimePipeline[ContextType]) Reset(value ContextType) {
 	runtimePipeline.current = value
 	runtimePipeline.ended = false
-	runtimePipeline.control = newDefaultStepControl[ContextType](runtimePipeline.name, DefaultOnError[ContextType])
+	runtimePipeline.lastResult = nil
+}
+
+func (runtimePipeline *RuntimePipeline[ContextType]) ClearRecorded() {
+	runtimePipeline.preActions = nil
+	runtimePipeline.actions = nil
+	runtimePipeline.postActions = nil
 }
 
 func (runtimePipeline *RuntimePipeline[ContextType]) AddPreAction(action any) (ContextType, error) {
-	if runtimePipeline.ended {
-		return runtimePipeline.current, nil
-	}
-
-	normalizedAction, normalizeError := normalizeAction[ContextType](action)
-	if normalizeError != nil {
-		return runtimePipeline.current, normalizeError
-	}
-
-	registered := registeredAction[ContextType]{name: "", action: normalizedAction}
-	runtimePipeline.preActions = append(runtimePipeline.preActions, registered)
-	indexValue := runtimePipeline.preIndex
-	runtimePipeline.preIndex += 1
-	return runtimePipeline.applyAction(registered, StepPhasePre, indexValue)
+	return runtimePipeline.addAndExecute(StepPhasePre, action)
 }
 
 func (runtimePipeline *RuntimePipeline[ContextType]) AddAction(action any) (ContextType, error) {
-	if runtimePipeline.ended {
-		return runtimePipeline.current, nil
-	}
-
-	normalizedAction, normalizeError := normalizeAction[ContextType](action)
-	if normalizeError != nil {
-		return runtimePipeline.current, normalizeError
-	}
-
-	registered := registeredAction[ContextType]{name: "", action: normalizedAction}
-	runtimePipeline.actions = append(runtimePipeline.actions, registered)
-	indexValue := runtimePipeline.actionIndex
-	runtimePipeline.actionIndex += 1
-	return runtimePipeline.applyAction(registered, StepPhaseMain, indexValue)
+	return runtimePipeline.addAndExecute(StepPhaseMain, action)
 }
 
 func (runtimePipeline *RuntimePipeline[ContextType]) AddPostAction(action any) (ContextType, error) {
+	return runtimePipeline.addAndExecute(StepPhasePost, action)
+}
+
+func (runtimePipeline *RuntimePipeline[ContextType]) Freeze() *Pipeline[ContextType] {
+	pipeline := NewPipeline[ContextType](runtimePipeline.name, runtimePipeline.shortCircuitOnException)
+	for _, registered := range runtimePipeline.preActions {
+		pipeline.AddPreActionNamed(registered.name, registered.action)
+	}
+	for _, registered := range runtimePipeline.actions {
+		pipeline.AddActionNamed(registered.name, registered.action)
+	}
+	for _, registered := range runtimePipeline.postActions {
+		pipeline.AddPostActionNamed(registered.name, registered.action)
+	}
+	return pipeline.Freeze()
+}
+
+func (runtimePipeline *RuntimePipeline[ContextType]) LastResult() *PipelineResult[ContextType] {
+	return runtimePipeline.lastResult
+}
+
+func (runtimePipeline *RuntimePipeline[ContextType]) addAndExecute(
+	phase StepPhase,
+	action any,
+) (ContextType, error) {
 	if runtimePipeline.ended {
 		return runtimePipeline.current, nil
 	}
 
-	normalizedAction, normalizeError := normalizeAction[ContextType](action)
-	if normalizeError != nil {
-		return runtimePipeline.current, normalizeError
+	registered := registeredAction[ContextType]{
+		name: "",
+		action: normalizeAction[ContextType](action),
+	}
+	switch phase {
+	case StepPhasePre:
+		runtimePipeline.preActions = append(runtimePipeline.preActions, registered)
+	case StepPhasePost:
+		runtimePipeline.postActions = append(runtimePipeline.postActions, registered)
+	default:
+		runtimePipeline.actions = append(runtimePipeline.actions, registered)
 	}
 
-	registered := registeredAction[ContextType]{name: "", action: normalizedAction}
-	runtimePipeline.postActions = append(runtimePipeline.postActions, registered)
-	indexValue := runtimePipeline.postIndex
-	runtimePipeline.postIndex += 1
-	return runtimePipeline.applyAction(registered, StepPhasePost, indexValue)
-}
-
-func (runtimePipeline *RuntimePipeline[ContextType]) Freeze() *Pipeline[ContextType] {
-	immutable := NewPipeline[ContextType](runtimePipeline.name, runtimePipeline.shortCircuitOnException)
-	for index := 0; index < len(runtimePipeline.preActions); index++ {
-		registered := runtimePipeline.preActions[index]
-		immutable.AddPreActionNamed(registered.name, registered.action)
-	}
-	for index := 0; index < len(runtimePipeline.actions); index++ {
-		registered := runtimePipeline.actions[index]
-		immutable.AddActionNamed(registered.name, registered.action)
-	}
-	for index := 0; index < len(runtimePipeline.postActions); index++ {
-		registered := runtimePipeline.postActions[index]
-		immutable.AddPostActionNamed(registered.name, registered.action)
-	}
-	return immutable
-}
-
-func (runtimePipeline *RuntimePipeline[ContextType]) applyAction(
-	registered registeredAction[ContextType],
-	phase StepPhase,
-	indexValue int,
-) (ContextType, error) {
-	stepName := formatStepName(phase, indexValue, registered.name)
-	runtimePipeline.control.beginStep(phase, indexValue, stepName)
-
-	contextBeforeStep := runtimePipeline.current
-	stepStartTimepoint := time.Now()
-	next, applyError := registered.action.Apply(runtimePipeline.current, runtimePipeline.control)
-	if applyError != nil {
-		runtimePipeline.current = runtimePipeline.control.RecordError(contextBeforeStep, applyError)
-		if runtimePipeline.shortCircuitOnException {
-			runtimePipeline.control.ShortCircuit()
-			runtimePipeline.ended = true
-		}
-	} else {
-		runtimePipeline.current = next
+	temporary := NewPipeline[ContextType](
+		runtimePipeline.name+":runtime",
+		runtimePipeline.shortCircuitOnException,
+	)
+	switch phase {
+	case StepPhasePre:
+		temporary.AddPreAction(registered.action)
+	case StepPhasePost:
+		temporary.AddPostAction(registered.action)
+	default:
+		temporary.AddAction(registered.action)
 	}
 
-	elapsedNanos := time.Since(stepStartTimepoint).Nanoseconds()
-	runtimePipeline.control.recordTiming(elapsedNanos, applyError == nil)
-
-	if runtimePipeline.control.IsShortCircuited() {
-		runtimePipeline.ended = true
-	}
-
-	return runtimePipeline.current, applyError
+	result := temporary.RunDetailed(runtimePipeline.current)
+	runtimePipeline.current = result.Context
+	runtimePipeline.ended = result.ShortCircuited
+	runtimePipeline.lastResult = &result
+	return runtimePipeline.current, nil
 }

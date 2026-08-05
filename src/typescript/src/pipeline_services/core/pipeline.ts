@@ -1,335 +1,869 @@
-import { RemoteSpec, http_step } from "../remote/http_step.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-export interface PipelineError {
-  pipeline: string;
-  phase: string;
-  index: number;
-  action_name: string;
-  message: string;
-}
+export type MaybePromise<ValueType> = ValueType | Promise<ValueType>;
+export type Action<ContextType = unknown> = (
+  context: ContextType,
+) => MaybePromise<ContextType>;
+export type UnaryOperator<ContextType = unknown> = Action<ContextType>;
+export type StepAction<ContextType = unknown> = (
+  context: ContextType,
+  control: ActionControl<ContextType>,
+) => MaybePromise<ContextType>;
+export type OnErrorFn<ContextType = unknown> = (
+  context: ContextType,
+  error: PipelineError,
+) => MaybePromise<ContextType>;
 
-export interface ActionTiming {
-  phase: string;
-  index: number;
-  action_name: string;
-  elapsed_nanos: bigint;
-  success: boolean;
-}
-
-export type UnaryOperator = (ctx: unknown) => unknown | Promise<unknown>;
-export type StepAction = (ctx: unknown, control: ActionControl) => unknown | Promise<unknown>;
-export type OnErrorFn = (ctx: unknown, err: PipelineError) => unknown;
-
-export function default_on_error(ctx: unknown, err: PipelineError): unknown {
-  void err;
-  return ctx;
-}
-
-export class ActionControl {
-  public pipeline_name: string;
-  public on_error: OnErrorFn;
-  public errors: Array<PipelineError>;
-  public timings: Array<ActionTiming>;
-  public short_circuited: boolean;
-
-  public phase: string;
-  public index: number;
-  public action_name: string;
-
-  public run_start_ns: bigint;
-
-  constructor(pipeline_name: string, on_error: OnErrorFn = default_on_error) {
-    this.pipeline_name = pipeline_name;
-    this.on_error = on_error;
-    this.errors = [];
-    this.timings = [];
-    this.short_circuited = false;
-    this.phase = "main";
-    this.index = 0;
-    this.action_name = "?";
-    this.run_start_ns = 0n;
-  }
-
-  begin_step(phase: string, index: number, action_name: string): void {
-    this.phase = phase;
-    this.index = index;
-    this.action_name = action_name;
-  }
-
-  begin_run(run_start_ns: bigint): void {
-    this.run_start_ns = run_start_ns;
-  }
-
-  reset(): void {
-    this.short_circuited = false;
-    this.errors = [];
-    this.timings = [];
-    this.phase = "main";
-    this.index = 0;
-    this.action_name = "?";
-    this.run_start_ns = 0n;
-  }
-
-  short_circuit(): void {
-    this.short_circuited = true;
-  }
-
-  is_short_circuited(): boolean {
-    return this.short_circuited;
-  }
-
-  record_error(ctx: unknown, message: string): unknown {
-    const pipeline_error: PipelineError = {
-      pipeline: this.pipeline_name,
-      phase: this.phase,
-      index: this.index,
-      action_name: this.action_name,
-      message,
-    };
-    this.errors.push(pipeline_error);
-    return this.on_error(ctx, pipeline_error);
-  }
-
-  record_timing(elapsed_nanos: bigint, success: boolean): void {
-    const timing: ActionTiming = {
-      phase: this.phase,
-      index: this.index,
-      action_name: this.action_name,
-      elapsed_nanos,
-      success,
-    };
-    this.timings.push(timing);
-  }
-}
-
-/** @deprecated Renamed to `ActionControl`. */
-export { ActionControl as StepControl };
-
-export class PipelineResult {
-  public context: unknown;
-  public short_circuited: boolean;
-  public errors: Array<PipelineError>;
-  public timings: Array<ActionTiming>;
-  public total_nanos: bigint;
-
+export class PipelineError {
   constructor(
-    context: unknown,
-    short_circuited: boolean,
-    errors: Array<PipelineError>,
-    timings: Array<ActionTiming>,
-    total_nanos: bigint,
-  ) {
-    this.context = context;
-    this.short_circuited = short_circuited;
-    this.errors = [...errors];
-    this.timings = [...timings];
-    this.total_nanos = total_nanos;
+    public readonly pipelineName: string,
+    public readonly phase: string,
+    public readonly actionIndex: number,
+    public readonly actionName: string,
+    public readonly exception: Error,
+  ) {}
+
+  get pipeline(): string {
+    return this.pipelineName;
+  }
+
+  get pipeline_name(): string {
+    return this.pipelineName;
+  }
+
+  get index(): number {
+    return this.actionIndex;
+  }
+
+  get action_index(): number {
+    return this.actionIndex;
+  }
+
+  get action_name(): string {
+    return this.actionName;
+  }
+
+  get message(): string {
+    return this.exception.message;
+  }
+}
+
+export class ActionTiming {
+  constructor(
+    public readonly phase: string,
+    public readonly actionIndex: number,
+    public readonly actionName: string,
+    public readonly elapsedNanos: bigint,
+    public readonly success: boolean,
+  ) {}
+
+  get index(): number {
+    return this.actionIndex;
+  }
+
+  get action_index(): number {
+    return this.actionIndex;
+  }
+
+  get action_name(): string {
+    return this.actionName;
+  }
+
+  get elapsed_nanos(): bigint {
+    return this.elapsedNanos;
+  }
+}
+
+export class PipelineResult<ContextType = unknown> {
+  constructor(
+    public readonly context: ContextType,
+    public readonly shortCircuited: boolean,
+    public readonly errors: ReadonlyArray<PipelineError>,
+    public readonly actionTimings: ReadonlyArray<ActionTiming>,
+    public readonly totalNanos: bigint,
+  ) {}
+
+  get short_circuited(): boolean {
+    return this.shortCircuited;
+  }
+
+  get action_timings(): ReadonlyArray<ActionTiming> {
+    return this.actionTimings;
+  }
+
+  get timings(): ReadonlyArray<ActionTiming> {
+    return this.actionTimings;
+  }
+
+  get total_nanos(): bigint {
+    return this.totalNanos;
+  }
+
+  hasErrors(): boolean {
+    return this.errors.length > 0;
   }
 
   has_errors(): boolean {
-    return this.errors.length > 0;
+    return this.hasErrors();
   }
 }
 
-export interface RegisteredAction {
-  name: string;
-  kind: number; // 0 = unary, 1 = step_action, 2 = remote_http
-  unary: UnaryOperator;
-  step_action: StepAction;
-  remote_spec: RemoteSpec;
-}
-
-export function format_action_name(phase: string, index: number, name: string): string {
-  let prefix = "s";
-  if (phase === "pre") {
-    prefix = "pre";
-  } else if (phase === "post") {
-    prefix = "post";
-  }
-
-  if (name === "") {
-    return `${prefix}${index}`;
-  }
-  return `${prefix}${index}:${name}`;
-}
-
-export function format_step_name(phase: string, index: number, name: string): string {
-  return format_action_name(phase, index, name);
-}
-
-export function safe_error_to_string(value: unknown): string {
-  return String(value);
-}
-
-export function now_ns(): bigint {
-  if (typeof process !== "undefined" && typeof process.hrtime === "function") {
-    const hrtimeValue = process.hrtime as unknown as { bigint?: () => bigint };
-    if (typeof hrtimeValue.bigint === "function") {
-      return hrtimeValue.bigint();
-    }
-  }
-  return BigInt(Date.now()) * 1_000_000n;
-}
-
-export function callable_accepts_two_positional_args(callable_value: unknown): boolean {
-  if (typeof callable_value !== "function") {
-    return false;
-  }
-  return callable_value.length >= 2;
-}
-
-export function noop_unary(ctx: unknown): unknown {
-  return ctx;
-}
-
-export function noop_action(ctx: unknown, control: ActionControl): unknown {
-  void control;
-  return ctx;
-}
-
-export function noop_remote_spec(): RemoteSpec {
-  return new RemoteSpec("");
-}
-
-export function to_registered_action(name: string, action: UnaryOperator | StepAction | RemoteSpec): RegisteredAction {
-  if (action instanceof RemoteSpec) {
-    return {
-      name,
-      kind: 2,
-      unary: noop_unary,
-      step_action: noop_action,
-      remote_spec: action,
-    };
-  }
-
-  if (typeof action !== "function") {
-    throw new TypeError("Action must be callable or a RemoteSpec");
-  }
-
-  if (callable_accepts_two_positional_args(action)) {
-    return {
-      name,
-      kind: 1,
-      unary: noop_unary,
-      step_action: action as StepAction,
-      remote_spec: noop_remote_spec(),
-    };
-  }
-
-  return {
-    name,
-    kind: 0,
-    unary: action as UnaryOperator,
-    step_action: noop_action,
-    remote_spec: noop_remote_spec(),
-  };
-}
-
-export class Pipeline {
-  public name: string;
-  public short_circuit_on_exception: boolean;
-  public on_error: OnErrorFn;
-
-  public pre_actions: Array<RegisteredAction>;
-  public actions: Array<RegisteredAction>;
-  public post_actions: Array<RegisteredAction>;
-
-  constructor(name: string, short_circuit_on_exception: boolean = true) {
-    this.name = name;
-    this.short_circuit_on_exception = short_circuit_on_exception;
-    this.on_error = default_on_error;
-    this.pre_actions = [];
-    this.actions = [];
-    this.post_actions = [];
-  }
-
-  on_error_handler(handler: OnErrorFn): void {
-    this.on_error = handler;
-  }
-
-  add_pre_action(action: UnaryOperator | StepAction | RemoteSpec): void {
-    this.add_pre_action_named("", action);
-  }
-
-  add_pre_action_named(name: string, action: UnaryOperator | StepAction | RemoteSpec): void {
-    this.pre_actions.push(to_registered_action(name, action));
-  }
-
-  add_action(action: UnaryOperator | StepAction | RemoteSpec): void {
-    this.add_action_named("", action);
-  }
-
-  add_action_named(name: string, action: UnaryOperator | StepAction | RemoteSpec): void {
-    this.actions.push(to_registered_action(name, action));
-  }
-
-  add_post_action(action: UnaryOperator | StepAction | RemoteSpec): void {
-    this.add_post_action_named("", action);
-  }
-
-  add_post_action_named(name: string, action: UnaryOperator | StepAction | RemoteSpec): void {
-    this.post_actions.push(to_registered_action(name, action));
-  }
-
-  async run(input_value: unknown): Promise<PipelineResult> {
-    let ctx: unknown = input_value;
-    const control = new ActionControl(this.name, this.on_error);
-    control.begin_run(now_ns());
-
-    ctx = await this.run_phase("pre", ctx, this.pre_actions, control, false);
-    if (!control.is_short_circuited()) {
-      ctx = await this.run_phase("main", ctx, this.actions, control, true);
-    }
-    ctx = await this.run_phase("post", ctx, this.post_actions, control, false);
-
-    const total_nanos = now_ns() - control.run_start_ns;
-    return new PipelineResult(ctx, control.is_short_circuited(), control.errors, control.timings, total_nanos);
-  }
-
-  async execute(input_value: unknown): Promise<PipelineResult> {
-    return this.run(input_value);
-  }
-
-  async run_phase(
+export interface PipelineObserver {
+  onPipelineStarted?(pipelineName: string): MaybePromise<void>;
+  onActionStarted?(
+    pipelineName: string,
     phase: string,
-    start_ctx: unknown,
-    actions: Array<RegisteredAction>,
-    control: ActionControl,
-    stop_on_short_circuit: boolean,
-  ): Promise<unknown> {
-    let ctx: unknown = start_ctx;
-    let step_index = 0;
-    while (step_index < actions.length) {
-      const registered_action = actions[step_index];
-      const action_name = format_action_name(phase, step_index, registered_action.name);
-      control.begin_step(phase, step_index, action_name);
+    actionIndex: number,
+    actionName: string,
+  ): MaybePromise<void>;
+  onActionCompleted?(
+    pipelineName: string,
+    phase: string,
+    actionIndex: number,
+    actionName: string,
+    elapsedNanos: bigint,
+  ): MaybePromise<void>;
+  onActionFailed?(
+    pipelineName: string,
+    phase: string,
+    actionIndex: number,
+    actionName: string,
+    exception: Error,
+    elapsedNanos: bigint,
+  ): MaybePromise<void>;
+  onShortCircuited?(
+    pipelineName: string,
+    phase: string,
+    actionIndex: number,
+    actionName: string,
+  ): MaybePromise<void>;
+  onPipelineCompleted?(
+    pipelineName: string,
+    shortCircuited: boolean,
+    errorCount: number,
+    elapsedNanos: bigint,
+  ): MaybePromise<void>;
+}
 
-      const step_start_ns = now_ns();
-      let step_succeeded = true;
-      try {
-        if (registered_action.kind === 0) {
-          ctx = await registered_action.unary(ctx);
-        } else if (registered_action.kind === 1) {
-          ctx = await registered_action.step_action(ctx, control);
-        } else {
-          ctx = await http_step(registered_action.remote_spec, ctx);
+interface RegisteredAction<ContextType> {
+  readonly name: string | null;
+  readonly action: Action<ContextType>;
+}
+
+interface PipelinePlan<ContextType> {
+  readonly pipelineName: string;
+  readonly shortCircuitOnException: boolean;
+  readonly errorHandler: OnErrorFn<ContextType>;
+  readonly observer: PipelineObserver;
+  readonly preActions: ReadonlyArray<RegisteredAction<ContextType>>;
+  readonly actions: ReadonlyArray<RegisteredAction<ContextType>>;
+  readonly postActions: ReadonlyArray<RegisteredAction<ContextType>>;
+}
+
+interface ExecutionState<ContextType> {
+  readonly plan: PipelinePlan<ContextType>;
+  context: ContextType;
+  readonly collectTimings: boolean;
+  readonly runStartNanos: bigint;
+  readonly errors: Array<PipelineError>;
+  readonly actionTimings: Array<ActionTiming>;
+  shortCircuited: boolean;
+  actionExecuting: boolean;
+  phase: string;
+  actionIndex: number;
+  actionName: string;
+}
+
+const NOOP_OBSERVER: PipelineObserver = {};
+const executionStorage =
+  new AsyncLocalStorage<ReadonlyArray<ExecutionState<unknown>>>();
+
+export class InvalidErrorHandlerError extends Error {
+  constructor(
+    message: string,
+    public readonly actionException: Error,
+    public readonly handlerException: unknown = null,
+  ) {
+    super(message, {
+      cause: handlerException ?? actionException,
+    });
+    this.name = "InvalidErrorHandlerError";
+  }
+}
+
+function toError(value: unknown): Error {
+  if (value instanceof Error) {
+    return value;
+  }
+  return new Error(String(value));
+}
+
+export function nowNs(): bigint {
+  return process.hrtime.bigint();
+}
+
+/** @deprecated Use nowNs(). */
+export function now_ns(): bigint {
+  return nowNs();
+}
+
+function currentState<ContextType>(): ExecutionState<ContextType> {
+  const stack = executionStorage.getStore();
+  if (stack == null || stack.length === 0) {
+    throw new Error("No active Pipeline execution");
+  }
+  return stack[stack.length - 1] as ExecutionState<ContextType>;
+}
+
+export function shortCircuit(): void {
+  const stack = executionStorage.getStore();
+  if (stack == null || stack.length === 0) {
+    throw new Error(
+      "shortCircuit() can only be called during an active Pipeline run",
+    );
+  }
+  const state = stack[stack.length - 1];
+  if (!state.actionExecuting) {
+    throw new Error(
+      "shortCircuit() can only be called while a Pipeline Action is executing",
+    );
+  }
+  state.shortCircuited = true;
+}
+
+/** @deprecated Use shortCircuit(). */
+export function short_circuit(): void {
+  shortCircuit();
+}
+
+export class ActionControl<ContextType = unknown> {
+  shortCircuit(): void {
+    shortCircuit();
+  }
+
+  short_circuit(): void {
+    shortCircuit();
+  }
+
+  isShortCircuited(): boolean {
+    return currentState<ContextType>().shortCircuited;
+  }
+
+  is_short_circuited(): boolean {
+    return this.isShortCircuited();
+  }
+
+  get shortCircuited(): boolean {
+    return this.isShortCircuited();
+  }
+
+  get short_circuited(): boolean {
+    return this.isShortCircuited();
+  }
+
+  get pipelineName(): string {
+    return currentState<ContextType>().plan.pipelineName;
+  }
+
+  get pipeline_name(): string {
+    return this.pipelineName;
+  }
+
+  get errors(): ReadonlyArray<PipelineError> {
+    return [...currentState<ContextType>().errors];
+  }
+
+  get actionTimings(): ReadonlyArray<ActionTiming> {
+    return [...currentState<ContextType>().actionTimings];
+  }
+
+  get timings(): ReadonlyArray<ActionTiming> {
+    return this.actionTimings;
+  }
+
+  get phase(): string {
+    return currentState<ContextType>().phase;
+  }
+
+  get actionIndex(): number {
+    return currentState<ContextType>().actionIndex;
+  }
+
+  get index(): number {
+    return this.actionIndex;
+  }
+
+  get actionName(): string {
+    return currentState<ContextType>().actionName;
+  }
+
+  get action_name(): string {
+    return this.actionName;
+  }
+
+  get runStartNanos(): bigint {
+    return currentState<ContextType>().runStartNanos;
+  }
+
+  get run_start_ns(): bigint {
+    return this.runStartNanos;
+  }
+
+  async recordError(
+    context: ContextType,
+    exception: Error | string,
+  ): Promise<ContextType> {
+    return recordError(
+      currentState<ContextType>(),
+      context,
+      typeof exception === "string" ? new Error(exception) : exception,
+    );
+  }
+
+  async record_error(
+    context: ContextType,
+    exception: Error | string,
+  ): Promise<ContextType> {
+    return this.recordError(context, exception);
+  }
+}
+
+/** @deprecated Renamed to ActionControl. */
+export { ActionControl as StepControl };
+
+function acceptsControlParameter(action: Function): boolean {
+  return action.length >= 2;
+}
+
+function normalizeAction<ContextType>(
+  action: Action<ContextType> | StepAction<ContextType>,
+): Action<ContextType> {
+  if (typeof action !== "function") {
+    throw new TypeError("Action must be callable");
+  }
+
+  if (acceptsControlParameter(action)) {
+    return (context: ContextType) =>
+      (action as StepAction<ContextType>)(
+        context,
+        new ActionControl<ContextType>(),
+      );
+  }
+  return action as Action<ContextType>;
+}
+
+function formatActionName(
+  phase: string,
+  actionIndex: number,
+  registeredName: string | null,
+): string {
+  const prefix =
+    phase === "preActions"
+      ? "pre"
+      : phase === "postActions"
+        ? "post"
+        : "s";
+  return registeredName == null || registeredName.length === 0
+    ? `${prefix}${actionIndex}`
+    : `${prefix}${actionIndex}:${registeredName}`;
+}
+
+async function notify(callback: (() => MaybePromise<void>) | undefined): Promise<void> {
+  if (callback == null) {
+    return;
+  }
+  try {
+    await callback();
+  } catch {
+    // Observers cannot change Pipeline semantics.
+  }
+}
+
+async function recordError<ContextType>(
+  state: ExecutionState<ContextType>,
+  context: ContextType,
+  exception: Error,
+): Promise<ContextType> {
+  const pipelineError = new PipelineError(
+    state.plan.pipelineName,
+    state.phase,
+    state.actionIndex,
+    state.actionName,
+    exception,
+  );
+  state.errors.push(pipelineError);
+
+  const wasActionExecuting = state.actionExecuting;
+  state.actionExecuting = false;
+  let updatedContext: ContextType;
+  try {
+    updatedContext = await state.plan.errorHandler(context, pipelineError);
+  } catch (handlerException) {
+    throw new InvalidErrorHandlerError(
+      "onError handler raised while recovering from an Action failure",
+      exception,
+      handlerException,
+    );
+  } finally {
+    state.actionExecuting = wasActionExecuting;
+  }
+
+  if (updatedContext == null) {
+    throw new InvalidErrorHandlerError(
+      "onError handler returned null or undefined",
+      exception,
+    );
+  }
+  state.context = updatedContext;
+  return updatedContext;
+}
+
+class PipelineRunner {
+  static async run<ContextType>(
+    plan: PipelinePlan<ContextType>,
+    inputValue: ContextType,
+  ): Promise<ContextType> {
+    return (await this.execute(plan, inputValue, false)).context;
+  }
+
+  static async runDetailed<ContextType>(
+    plan: PipelinePlan<ContextType>,
+    inputValue: ContextType,
+  ): Promise<PipelineResult<ContextType>> {
+    const state = await this.execute(plan, inputValue, true);
+    return new PipelineResult(
+      state.context,
+      state.shortCircuited,
+      [...state.errors],
+      [...state.actionTimings],
+      nowNs() - state.runStartNanos,
+    );
+  }
+
+  private static async execute<ContextType>(
+    plan: PipelinePlan<ContextType>,
+    inputValue: ContextType,
+    collectTimings: boolean,
+  ): Promise<ExecutionState<ContextType>> {
+    if (inputValue == null) {
+      throw new TypeError("inputValue must not be null or undefined");
+    }
+
+    const runStartNanos = nowNs();
+    const state: ExecutionState<ContextType> = {
+      plan,
+      context: inputValue,
+      collectTimings,
+      runStartNanos,
+      errors: [],
+      actionTimings: [],
+      shortCircuited: false,
+      actionExecuting: false,
+      phase: "actions",
+      actionIndex: 0,
+      actionName: "?",
+    };
+
+    await notify(
+      plan.observer.onPipelineStarted?.bind(
+        plan.observer,
+        plan.pipelineName,
+      ),
+    );
+
+    const parentStack = executionStorage.getStore() ?? [];
+    return executionStorage.run(
+      [...parentStack, state as ExecutionState<unknown>],
+      async () => {
+        let pendingFailure: Error | null = null;
+        try {
+          try {
+            pendingFailure = await this.executeActions(
+              state,
+              "preActions",
+              plan.preActions,
+              false,
+              pendingFailure,
+            );
+            if (pendingFailure == null && !state.shortCircuited) {
+              pendingFailure = await this.executeActions(
+                state,
+                "actions",
+                plan.actions,
+                true,
+                pendingFailure,
+              );
+            }
+          } finally {
+            pendingFailure = await this.executeActions(
+              state,
+              "postActions",
+              plan.postActions,
+              false,
+              pendingFailure,
+            );
+          }
+        } finally {
+          await notify(
+            plan.observer.onPipelineCompleted?.bind(
+              plan.observer,
+              plan.pipelineName,
+              state.shortCircuited,
+              state.errors.length,
+              nowNs() - runStartNanos,
+            ),
+          );
         }
-      } catch (caught_error) {
-        step_succeeded = false;
-        ctx = control.record_error(ctx, safe_error_to_string(caught_error));
-        if (this.short_circuit_on_exception) {
-          control.short_circuit();
+
+        if (pendingFailure != null) {
+          throw pendingFailure;
+        }
+        return state;
+      },
+    );
+  }
+
+  private static async executeActions<ContextType>(
+    state: ExecutionState<ContextType>,
+    phase: string,
+    actions: ReadonlyArray<RegisteredAction<ContextType>>,
+    stopOnShortCircuit: boolean,
+    initialFailure: Error | null,
+  ): Promise<Error | null> {
+    if (initialFailure != null && phase !== "postActions") {
+      return initialFailure;
+    }
+
+    let pendingFailure = initialFailure;
+    const observer = state.plan.observer;
+    const observerEnabled = observer !== NOOP_OBSERVER;
+
+    for (let actionIndex = 0; actionIndex < actions.length; actionIndex += 1) {
+      const registeredAction = actions[actionIndex];
+      state.phase = phase;
+      state.actionIndex = actionIndex;
+      state.actionName = formatActionName(
+        phase,
+        actionIndex,
+        registeredAction.name,
+      );
+      const wasShortCircuited = state.shortCircuited;
+
+      if (observerEnabled) {
+        await notify(
+          observer.onActionStarted?.bind(
+            observer,
+            state.plan.pipelineName,
+            phase,
+            actionIndex,
+            state.actionName,
+          ),
+        );
+      }
+
+      const actionStartNanos =
+        state.collectTimings || observerEnabled ? nowNs() : 0n;
+      let actionSucceeded = true;
+      let actionFailure: Error | null = null;
+
+      try {
+        let nextContext: ContextType;
+        state.actionExecuting = true;
+        try {
+          nextContext = await registeredAction.action(state.context);
+        } finally {
+          state.actionExecuting = false;
+        }
+        if (nextContext == null) {
+          throw new TypeError(`Action returned null or undefined: ${state.actionName}`);
+        }
+        state.context = nextContext;
+      } catch (caughtError) {
+        actionSucceeded = false;
+        actionFailure = toError(caughtError);
+        try {
+          await recordError(state, state.context, actionFailure);
+        } catch (handlerFailure) {
+          if (pendingFailure == null) {
+            pendingFailure = toError(handlerFailure);
+          }
+          state.shortCircuited = true;
+        }
+        if (state.plan.shortCircuitOnException) {
+          state.shortCircuited = true;
         }
       }
 
-      const step_elapsed_nanos = now_ns() - step_start_ns;
-      control.record_timing(step_elapsed_nanos, step_succeeded);
+      const elapsedNanos =
+        state.collectTimings || observerEnabled
+          ? nowNs() - actionStartNanos
+          : 0n;
+      if (state.collectTimings) {
+        state.actionTimings.push(
+          new ActionTiming(
+            phase,
+            actionIndex,
+            state.actionName,
+            elapsedNanos,
+            actionSucceeded,
+          ),
+        );
+      }
 
-      if (stop_on_short_circuit && control.is_short_circuited()) {
+      if (observerEnabled) {
+        if (actionSucceeded) {
+          await notify(
+            observer.onActionCompleted?.bind(
+              observer,
+              state.plan.pipelineName,
+              phase,
+              actionIndex,
+              state.actionName,
+              elapsedNanos,
+            ),
+          );
+        } else {
+          await notify(
+            observer.onActionFailed?.bind(
+              observer,
+              state.plan.pipelineName,
+              phase,
+              actionIndex,
+              state.actionName,
+              actionFailure!,
+              elapsedNanos,
+            ),
+          );
+        }
+      }
+
+      if (!wasShortCircuited && state.shortCircuited) {
+        await notify(
+          observer.onShortCircuited?.bind(
+            observer,
+            state.plan.pipelineName,
+            phase,
+            actionIndex,
+            state.actionName,
+          ),
+        );
+      }
+
+      if (pendingFailure != null && phase !== "postActions") {
         break;
       }
-      step_index += 1;
+      if (stopOnShortCircuit && state.shortCircuited) {
+        break;
+      }
     }
-    return ctx;
+
+    return pendingFailure;
+  }
+}
+
+export class Pipeline<ContextType = unknown> {
+  public readonly pipelineName: string;
+  public readonly name: string;
+  public shortCircuitOnException: boolean;
+
+  private errorHandler: OnErrorFn<ContextType>;
+  private pipelineObserver: PipelineObserver;
+  private readonly mutablePreActions: Array<RegisteredAction<ContextType>>;
+  private readonly mutableActions: Array<RegisteredAction<ContextType>>;
+  private readonly mutablePostActions: Array<RegisteredAction<ContextType>>;
+  private frozenPlan: PipelinePlan<ContextType> | null;
+
+  constructor(
+    pipelineName: string,
+    shortCircuitOnException: boolean = true,
+  ) {
+    const normalizedName = pipelineName.trim();
+    if (normalizedName.length === 0) {
+      throw new TypeError("pipelineName must not be blank");
+    }
+    this.pipelineName = normalizedName;
+    this.name = normalizedName;
+    this.shortCircuitOnException = shortCircuitOnException;
+    this.errorHandler = (context) => context;
+    this.pipelineObserver = NOOP_OBSERVER;
+    this.mutablePreActions = [];
+    this.mutableActions = [];
+    this.mutablePostActions = [];
+    this.frozenPlan = null;
+  }
+
+  onError(handler: OnErrorFn<ContextType> | null): this {
+    this.ensureMutable();
+    this.errorHandler = handler ?? ((context) => context);
+    return this;
+  }
+
+  on_error_handler(handler: OnErrorFn<ContextType> | null): this {
+    return this.onError(handler);
+  }
+
+  observer(observer: PipelineObserver | null): this {
+    this.ensureMutable();
+    this.pipelineObserver = observer ?? NOOP_OBSERVER;
+    return this;
+  }
+
+  addPreAction(
+    action: Action<ContextType>,
+    name?: string | null,
+  ): this;
+  addPreAction(
+    action: StepAction<ContextType>,
+    name?: string | null,
+  ): this;
+  addPreAction(
+    action: Action<ContextType> | StepAction<ContextType>,
+    name: string | null = null,
+  ): this {
+    return this.register(this.mutablePreActions, name, action);
+  }
+
+  addAction(
+    action: Action<ContextType>,
+    name?: string | null,
+  ): this;
+  addAction(
+    action: StepAction<ContextType>,
+    name?: string | null,
+  ): this;
+  addAction(
+    action: Action<ContextType> | StepAction<ContextType>,
+    name: string | null = null,
+  ): this {
+    return this.register(this.mutableActions, name, action);
+  }
+
+  addPostAction(
+    action: Action<ContextType>,
+    name?: string | null,
+  ): this;
+  addPostAction(
+    action: StepAction<ContextType>,
+    name?: string | null,
+  ): this;
+  addPostAction(
+    action: Action<ContextType> | StepAction<ContextType>,
+    name: string | null = null,
+  ): this {
+    return this.register(this.mutablePostActions, name, action);
+  }
+
+  add_pre_action(action: Action<ContextType> | StepAction<ContextType>): this {
+    return this.addPreAction(action as Action<ContextType>);
+  }
+
+  add_action(action: Action<ContextType> | StepAction<ContextType>): this {
+    return this.addAction(action as Action<ContextType>);
+  }
+
+  add_post_action(action: Action<ContextType> | StepAction<ContextType>): this {
+    return this.addPostAction(action as Action<ContextType>);
+  }
+
+  add_pre_action_named(
+    name: string,
+    action: Action<ContextType> | StepAction<ContextType>,
+  ): this {
+    return this.register(this.mutablePreActions, name, action);
+  }
+
+  add_action_named(
+    name: string,
+    action: Action<ContextType> | StepAction<ContextType>,
+  ): this {
+    return this.register(this.mutableActions, name, action);
+  }
+
+  add_post_action_named(
+    name: string,
+    action: Action<ContextType> | StepAction<ContextType>,
+  ): this {
+    return this.register(this.mutablePostActions, name, action);
+  }
+
+  shortCircuit(): void {
+    shortCircuit();
+  }
+
+  short_circuit(): void {
+    shortCircuit();
+  }
+
+  async run(inputValue: ContextType): Promise<ContextType> {
+    return PipelineRunner.run(this.plan(), inputValue);
+  }
+
+  async runDetailed(
+    inputValue: ContextType,
+  ): Promise<PipelineResult<ContextType>> {
+    return PipelineRunner.runDetailed(this.plan(), inputValue);
+  }
+
+  async run_detailed(
+    inputValue: ContextType,
+  ): Promise<PipelineResult<ContextType>> {
+    return this.runDetailed(inputValue);
+  }
+
+  async execute(
+    inputValue: ContextType,
+  ): Promise<PipelineResult<ContextType>> {
+    return this.runDetailed(inputValue);
+  }
+
+  freeze(): this {
+    this.plan();
+    return this;
+  }
+
+  isFrozen(): boolean {
+    return this.frozenPlan != null;
+  }
+
+  is_frozen(): boolean {
+    return this.isFrozen();
+  }
+
+  size(): number {
+    return this.frozenPlan?.actions.length ?? this.mutableActions.length;
+  }
+
+  private register(
+    destination: Array<RegisteredAction<ContextType>>,
+    name: string | null,
+    action: Action<ContextType> | StepAction<ContextType>,
+  ): this {
+    this.ensureMutable();
+    destination.push({
+      name: name == null || name.trim().length === 0 ? null : name.trim(),
+      action: normalizeAction(action),
+    });
+    return this;
+  }
+
+  private plan(): PipelinePlan<ContextType> {
+    if (this.frozenPlan == null) {
+      this.frozenPlan = Object.freeze({
+        pipelineName: this.pipelineName,
+        shortCircuitOnException: this.shortCircuitOnException,
+        errorHandler: this.errorHandler,
+        observer: this.pipelineObserver,
+        preActions: Object.freeze([...this.mutablePreActions]),
+        actions: Object.freeze([...this.mutableActions]),
+        postActions: Object.freeze([...this.mutablePostActions]),
+      });
+    }
+    return this.frozenPlan;
+  }
+
+  private ensureMutable(): void {
+    if (this.frozenPlan != null) {
+      throw new Error(`Pipeline '${this.pipelineName}' is frozen`);
+    }
   }
 }

@@ -1,156 +1,163 @@
 import {
+  Action,
   Pipeline,
-  RegisteredAction,
+  PipelineResult,
   StepAction,
-  ActionControl,
-  UnaryOperator,
-  format_step_name,
-  safe_error_to_string,
-  to_registered_action,
 } from "./pipeline.js";
 import { RemoteSpec, http_step } from "../remote/http_step.js";
 
-export class RuntimePipeline {
-  public name: string;
-  public short_circuit_on_exception: boolean;
+type RuntimeAction<ContextType> =
+  | Action<ContextType>
+  | StepAction<ContextType>
+  | RemoteSpec;
 
-  private current: unknown;
-  private ended: boolean;
+function asAction<ContextType>(
+  action: RuntimeAction<ContextType>,
+): Action<ContextType> | StepAction<ContextType> {
+  if (action instanceof RemoteSpec) {
+    return (context: ContextType) =>
+      http_step(action, context) as Promise<ContextType>;
+  }
+  if (typeof action !== "function") {
+    throw new TypeError("Action must be callable or a RemoteSpec");
+  }
+  return action;
+}
 
-  private pre_actions: Array<RegisteredAction>;
-  private actions: Array<RegisteredAction>;
-  private post_actions: Array<RegisteredAction>;
+/** @deprecated Construct a Pipeline directly. */
+export class RuntimePipeline<ContextType = unknown> {
+  private currentValue: ContextType | null;
+  private ended = false;
+  private readonly preActions: Array<
+    Action<ContextType> | StepAction<ContextType>
+  > = [];
+  private readonly actions: Array<
+    Action<ContextType> | StepAction<ContextType>
+  > = [];
+  private readonly postActions: Array<
+    Action<ContextType> | StepAction<ContextType>
+  > = [];
+  public lastResult: PipelineResult<ContextType> | null = null;
 
-  private pre_index: number;
-  private action_index: number;
-  private post_index: number;
+  constructor(
+    public readonly name: string,
+    public readonly shortCircuitOnException: boolean = true,
+    initial: ContextType | null = null,
+  ) {
+    this.currentValue = initial;
+  }
 
-  private control: ActionControl;
+  value(): ContextType | null {
+    return this.currentValue;
+  }
 
-  constructor(name: string, short_circuit_on_exception: boolean = true, initial: unknown = null) {
-    this.name = name;
-    this.short_circuit_on_exception = short_circuit_on_exception;
-    this.current = initial;
+  reset(value: ContextType): void {
+    this.currentValue = value;
     this.ended = false;
-    this.pre_actions = [];
-    this.actions = [];
-    this.post_actions = [];
-    this.pre_index = 0;
-    this.action_index = 0;
-    this.post_index = 0;
-    this.control = new ActionControl(name);
+    this.lastResult = null;
   }
 
-  value(): unknown {
-    return this.current;
+  clearRecorded(): void {
+    this.preActions.length = 0;
+    this.actions.length = 0;
+    this.postActions.length = 0;
   }
 
-  reset(value: unknown): void {
-    this.current = value;
-    this.ended = false;
-    this.control.reset();
+  async addPreAction(
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
+    return this.addAndExecute("preActions", this.preActions, action);
   }
 
-  async add_pre_action(action: UnaryOperator | StepAction | RemoteSpec): Promise<unknown> {
+  async addAction(
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
+    return this.addAndExecute("actions", this.actions, action);
+  }
+
+  async addPostAction(
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
+    return this.addAndExecute("postActions", this.postActions, action);
+  }
+
+  async add_pre_action(
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
+    return this.addPreAction(action);
+  }
+
+  async add_action(
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
+    return this.addAction(action);
+  }
+
+  async add_post_action(
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
+    return this.addPostAction(action);
+  }
+
+  toImmutable(): Pipeline<ContextType> {
+    const pipeline = new Pipeline<ContextType>(
+      this.name,
+      this.shortCircuitOnException,
+    );
+    for (const action of this.preActions) {
+      pipeline.addPreAction(action);
+    }
+    for (const action of this.actions) {
+      pipeline.addAction(action);
+    }
+    for (const action of this.postActions) {
+      pipeline.addPostAction(action);
+    }
+    return pipeline.freeze();
+  }
+
+  to_immutable(): Pipeline<ContextType> {
+    return this.toImmutable();
+  }
+
+  freeze(): Pipeline<ContextType> {
+    return this.toImmutable();
+  }
+
+  private async addAndExecute(
+    phase: string,
+    destination: Array<
+      Action<ContextType> | StepAction<ContextType>
+    >,
+    action: RuntimeAction<ContextType>,
+  ): Promise<ContextType | null> {
     if (this.ended) {
-      return this.current;
+      return this.currentValue;
     }
-    const registered_action = to_registered_action("", action);
-    this.pre_actions.push(registered_action);
-    const output_value = await this.apply_action(registered_action, "pre", this.pre_index);
-    this.pre_index += 1;
-    return output_value;
-  }
-
-  async add_action(action: UnaryOperator | StepAction | RemoteSpec): Promise<unknown> {
-    if (this.ended) {
-      return this.current;
-    }
-    const registered_action = to_registered_action("", action);
-    this.actions.push(registered_action);
-    const output_value = await this.apply_action(registered_action, "main", this.action_index);
-    this.action_index += 1;
-    return output_value;
-  }
-
-  async add_post_action(action: UnaryOperator | StepAction | RemoteSpec): Promise<unknown> {
-    if (this.ended) {
-      return this.current;
-    }
-    const registered_action = to_registered_action("", action);
-    this.post_actions.push(registered_action);
-    const output_value = await this.apply_action(registered_action, "post", this.post_index);
-    this.post_index += 1;
-    return output_value;
-  }
-
-  to_immutable(): Pipeline {
-    const pipeline = new Pipeline(this.name, this.short_circuit_on_exception);
-
-    for (const registered_action of this.pre_actions) {
-      if (registered_action.kind === 0) {
-        pipeline.add_pre_action(registered_action.unary);
-      } else if (registered_action.kind === 1) {
-        pipeline.add_pre_action(registered_action.step_action);
-      } else {
-        pipeline.add_pre_action(registered_action.remote_spec);
-      }
+    if (this.currentValue == null) {
+      throw new TypeError(
+        "RuntimePipeline requires a non-null current value",
+      );
     }
 
-    for (const registered_action of this.actions) {
-      if (registered_action.kind === 0) {
-        pipeline.add_action(registered_action.unary);
-      } else if (registered_action.kind === 1) {
-        pipeline.add_action(registered_action.step_action);
-      } else {
-        pipeline.add_action(registered_action.remote_spec);
-      }
+    const normalized = asAction(action);
+    destination.push(normalized);
+    const pipeline = new Pipeline<ContextType>(
+      `${this.name}:runtime`,
+      this.shortCircuitOnException,
+    );
+    if (phase === "preActions") {
+      pipeline.addPreAction(normalized);
+    } else if (phase === "postActions") {
+      pipeline.addPostAction(normalized);
+    } else {
+      pipeline.addAction(normalized);
     }
 
-    for (const registered_action of this.post_actions) {
-      if (registered_action.kind === 0) {
-        pipeline.add_post_action(registered_action.unary);
-      } else if (registered_action.kind === 1) {
-        pipeline.add_post_action(registered_action.step_action);
-      } else {
-        pipeline.add_post_action(registered_action.remote_spec);
-      }
-    }
-
-    return pipeline;
-  }
-
-  freeze(): Pipeline {
-    return this.to_immutable();
-  }
-
-  private async apply_action(registered_action: RegisteredAction, phase: string, index: number): Promise<unknown> {
-    if (this.ended) {
-      return this.current;
-    }
-
-    const step_name = format_step_name(phase, index, registered_action.name);
-    this.control.begin_step(phase, index, step_name);
-    try {
-      if (registered_action.kind === 0) {
-        this.current = await registered_action.unary(this.current);
-      } else if (registered_action.kind === 1) {
-        this.current = await registered_action.step_action(this.current, this.control);
-      } else {
-        this.current = await http_step(registered_action.remote_spec, this.current);
-      }
-    } catch (caught_error) {
-      this.current = this.control.record_error(this.current, safe_error_to_string(caught_error));
-      if (this.short_circuit_on_exception) {
-        this.control.short_circuit();
-        this.ended = true;
-      }
-    }
-
-    if (this.control.is_short_circuited()) {
-      this.ended = true;
-    }
-
-    return this.current;
+    const result = await pipeline.runDetailed(this.currentValue);
+    this.currentValue = result.context;
+    this.lastResult = result;
+    this.ended = result.shortCircuited;
+    return this.currentValue;
   }
 }

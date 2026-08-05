@@ -12,7 +12,7 @@ func main() {
 {
   "pipeline": "example04_json_loader_remote_get",
   "type": "unary",
-  "steps": [
+  "actions": [
     {
       "name": "remote_get_fixture",
       "$remote": {
@@ -33,6 +33,5 @@ func main() {
 		panic(loadError)
 	}
 
-	result := pipeline.Run("ignored")
-	fmt.Println(result.Context)
+	fmt.Println(pipeline.Run("ignored"))
 }

@@ -1,198 +1,157 @@
 using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace PipelineServices.Core;
 
+/// <summary>Creates or selects reusable Pipeline instances without scheduling work.</summary>
 public sealed class PipelineProvider<ContextType>
 {
-    public enum Mode
-    {
-        Shared,
-        Pooled,
-        PerRun
-    }
-
-    private readonly Mode mode;
-    private readonly Pipeline<ContextType>? sharedPipeline;
-    private readonly ActionPool<Pipeline<ContextType>>? pipelinePool;
+    private readonly PipelineProviderMode mode;
     private readonly Func<Pipeline<ContextType>>? pipelineFactory;
+    private readonly Pipeline<ContextType>? singletonPipeline;
+    private readonly IReadOnlyList<Pipeline<ContextType>> pooledPipelines;
+    private long nextSelection = -1L;
 
     private PipelineProvider(
-        Mode mode,
-        Pipeline<ContextType>? sharedPipeline,
-        ActionPool<Pipeline<ContextType>>? pipelinePool,
-        Func<Pipeline<ContextType>>? pipelineFactory)
+        PipelineProviderMode mode,
+        Func<Pipeline<ContextType>>? pipelineFactory,
+        Pipeline<ContextType>? singletonPipeline,
+        IReadOnlyList<Pipeline<ContextType>>? pooledPipelines)
     {
         this.mode = mode;
-        this.sharedPipeline = sharedPipeline;
-        this.pipelinePool = pipelinePool;
         this.pipelineFactory = pipelineFactory;
+        this.singletonPipeline = singletonPipeline;
+        this.pooledPipelines = pooledPipelines ?? Array.Empty<Pipeline<ContextType>>();
     }
 
-    public static PipelineProvider<ContextType> Shared(Pipeline<ContextType> pipeline)
+    public static PipelineProvider<ContextType> NewInstancePerEvent(
+        Func<Pipeline<ContextType>> factory)
     {
-        if (pipeline == null)
-        {
-            throw new ArgumentNullException(nameof(pipeline));
-        }
-        return new PipelineProvider<ContextType>(Mode.Shared, pipeline, null, null);
+        ArgumentNullException.ThrowIfNull(factory);
+        return new PipelineProvider<ContextType>(
+            PipelineProviderMode.NewInstancePerEvent,
+            factory,
+            null,
+            null);
     }
 
-    public static PipelineProvider<ContextType> Shared(Func<Pipeline<ContextType>> factory)
+    public static PipelineProvider<ContextType> Singleton(
+        Pipeline<ContextType> pipeline)
     {
-        if (factory == null)
-        {
-            throw new ArgumentNullException(nameof(factory));
-        }
-        Pipeline<ContextType> pipeline = factory() ?? throw new InvalidOperationException("factory returned null");
-        return Shared(pipeline);
+        ArgumentNullException.ThrowIfNull(pipeline);
+        return new PipelineProvider<ContextType>(
+            PipelineProviderMode.Singleton,
+            null,
+            pipeline.Freeze(),
+            null);
     }
 
-    public static PipelineProvider<ContextType> Pooled(Func<Pipeline<ContextType>> factory)
+    public static PipelineProvider<ContextType> Singleton(
+        Func<Pipeline<ContextType>> factory)
     {
-        return Pooled(factory, DefaultPoolMax());
+        ArgumentNullException.ThrowIfNull(factory);
+        Pipeline<ContextType> pipeline = factory()
+            ?? throw new InvalidOperationException("factory returned null");
+        return Singleton(pipeline);
     }
 
-    public static PipelineProvider<ContextType> Pooled(Func<Pipeline<ContextType>> factory, int poolMax)
+    public static PipelineProvider<ContextType> Pooled(
+        Func<Pipeline<ContextType>> factory)
+        => Pooled(factory, DefaultInstanceCount());
+
+    public static PipelineProvider<ContextType> Pooled(
+        Func<Pipeline<ContextType>> factory,
+        int instanceCount)
     {
-        if (factory == null)
+        ArgumentNullException.ThrowIfNull(factory);
+        if (instanceCount < 1)
         {
-            throw new ArgumentNullException(nameof(factory));
+            throw new ArgumentOutOfRangeException(
+                nameof(instanceCount),
+                "instanceCount must be >= 1");
         }
-        ActionPool<Pipeline<ContextType>> pool = new ActionPool<Pipeline<ContextType>>(poolMax, factory);
-        return new PipelineProvider<ContextType>(Mode.Pooled, null, pool, null);
+
+        List<Pipeline<ContextType>> pipelines = new(instanceCount);
+        for (int index = 0; index < instanceCount; index++)
+        {
+            Pipeline<ContextType> pipeline = factory()
+                ?? throw new InvalidOperationException("factory returned null");
+            pipelines.Add(pipeline.Freeze());
+        }
+
+        return new PipelineProvider<ContextType>(
+            PipelineProviderMode.Pooled,
+            null,
+            null,
+            pipelines.AsReadOnly());
     }
 
-    public static PipelineProvider<ContextType> PerRun(Func<Pipeline<ContextType>> factory)
+    [Obsolete("Use Singleton().")]
+    public static PipelineProvider<ContextType> Shared(
+        Pipeline<ContextType> pipeline)
+        => Singleton(pipeline);
+
+    [Obsolete("Use Singleton().")]
+    public static PipelineProvider<ContextType> Shared(
+        Func<Pipeline<ContextType>> factory)
+        => Singleton(factory);
+
+    [Obsolete("Use NewInstancePerEvent().")]
+    public static PipelineProvider<ContextType> PerRun(
+        Func<Pipeline<ContextType>> factory)
+        => NewInstancePerEvent(factory);
+
+    public PipelineProviderMode ProviderMode() => mode;
+
+    public PipelineProviderMode Mode => mode;
+
+    public int InstanceCount => mode switch
     {
-        if (factory == null)
-        {
-            throw new ArgumentNullException(nameof(factory));
-        }
-        return new PipelineProvider<ContextType>(Mode.PerRun, null, null, factory);
-    }
+        PipelineProviderMode.NewInstancePerEvent => 0,
+        PipelineProviderMode.Singleton => 1,
+        PipelineProviderMode.Pooled => pooledPipelines.Count,
+        _ => throw new InvalidOperationException("Unsupported provider mode")
+    };
 
-    public Mode ProviderMode()
+    public Pipeline<ContextType> GetPipeline()
     {
-        return mode;
+        return mode switch
+        {
+            PipelineProviderMode.NewInstancePerEvent => CreatePerEventPipeline(),
+            PipelineProviderMode.Singleton => singletonPipeline
+                ?? throw new InvalidOperationException("singletonPipeline is not set"),
+            PipelineProviderMode.Pooled => SelectPooledPipeline(),
+            _ => throw new InvalidOperationException("Unsupported provider mode")
+        };
     }
 
-    public PipelineResult<ContextType> Run(ContextType input)
+    public ContextType Run(ContextType input)
+        => GetPipeline().Run(input);
+
+    public PipelineResult<ContextType> RunDetailed(ContextType input)
+        => GetPipeline().RunDetailed(input);
+
+    private Pipeline<ContextType> CreatePerEventPipeline()
     {
-        if (mode == Mode.Shared)
-        {
-            if (sharedPipeline == null)
-            {
-                throw new InvalidOperationException("sharedPipeline is not set");
-            }
-            return sharedPipeline.Run(input);
-        }
-
-        if (mode == Mode.Pooled)
-        {
-            if (pipelinePool == null)
-            {
-                throw new InvalidOperationException("pipelinePool is not set");
-            }
-
-            Pipeline<ContextType> borrowedPipeline = pipelinePool.Borrow();
-            try
-            {
-                return borrowedPipeline.Run(input);
-            }
-            finally
-            {
-                pipelinePool.Release(borrowedPipeline);
-            }
-        }
-
-        if (pipelineFactory == null)
-        {
-            throw new InvalidOperationException("pipelineFactory is not set");
-        }
-
-        Pipeline<ContextType> pipeline = pipelineFactory() ?? throw new InvalidOperationException("pipelineFactory returned null");
-        return pipeline.Run(input);
+        Func<Pipeline<ContextType>> factory = pipelineFactory
+            ?? throw new InvalidOperationException("pipelineFactory is not set");
+        Pipeline<ContextType> pipeline = factory()
+            ?? throw new InvalidOperationException("pipelineFactory returned null");
+        return pipeline.Freeze();
     }
 
-    private static int DefaultPoolMax()
+    private Pipeline<ContextType> SelectPooledPipeline()
     {
-        int processorCount = Environment.ProcessorCount;
-        int computed = processorCount * 8;
-        if (computed < 1)
+        if (pooledPipelines.Count == 0)
         {
-            computed = 1;
+            throw new InvalidOperationException("pooledPipelines is empty");
         }
-        if (computed > 256)
-        {
-            computed = 256;
-        }
-        return computed;
+        long selection = Interlocked.Increment(ref nextSelection);
+        int index = (int)(selection % pooledPipelines.Count);
+        return pooledPipelines[index];
     }
 
-    private sealed class ActionPool<ItemType>
-    {
-        private readonly int maxSize;
-        private readonly Func<ItemType> factory;
-        private readonly BlockingCollection<ItemType> available;
-        private int createdCount;
-
-        public ActionPool(int maxSize, Func<ItemType> factory)
-        {
-            if (maxSize < 1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(maxSize), "maxSize must be >= 1");
-            }
-            this.maxSize = maxSize;
-            this.factory = factory ?? throw new ArgumentNullException(nameof(factory));
-            available = new BlockingCollection<ItemType>(new ConcurrentQueue<ItemType>(), maxSize);
-            createdCount = 0;
-        }
-
-        public ItemType Borrow()
-        {
-            if (available.TryTake(out ItemType fromQueue))
-            {
-                return fromQueue;
-            }
-
-            int currentCreated = Volatile.Read(ref createdCount);
-            while (currentCreated < maxSize)
-            {
-                int observed = currentCreated;
-                int updated = Interlocked.CompareExchange(ref createdCount, observed + 1, observed);
-                if (updated == observed)
-                {
-                    try
-                    {
-                        ItemType instance = factory();
-                        if (instance == null)
-                        {
-                            throw new InvalidOperationException("factory returned null");
-                        }
-                        return instance;
-                    }
-                    catch
-                    {
-                        Interlocked.Decrement(ref createdCount);
-                        throw;
-                    }
-                }
-
-                currentCreated = Volatile.Read(ref createdCount);
-            }
-
-            return available.Take();
-        }
-
-        public void Release(ItemType instance)
-        {
-            if (instance == null)
-            {
-                return;
-            }
-            available.TryAdd(instance);
-        }
-    }
+    private static int DefaultInstanceCount()
+        => Math.Max(1, Environment.ProcessorCount);
 }

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"runtime"
 	"sync/atomic"
 )
@@ -9,172 +8,167 @@ import (
 type PipelineProviderMode string
 
 const (
-	PipelineProviderModeShared PipelineProviderMode = "shared"
-	PipelineProviderModePooled PipelineProviderMode = "pooled"
-	PipelineProviderModePerRun PipelineProviderMode = "perRun"
+	PipelineProviderModeNewInstancePerEvent PipelineProviderMode = "newInstancePerEvent"
+	PipelineProviderModeSingleton           PipelineProviderMode = "singleton"
+	PipelineProviderModePooled              PipelineProviderMode = "pooled"
+
+	// Preview compatibility aliases.
+	PipelineProviderModeShared = PipelineProviderModeSingleton
+	PipelineProviderModePerRun = PipelineProviderModeNewInstancePerEvent
 )
 
+func DefaultInstanceCount() int {
+	count := runtime.NumCPU()
+	if count < 1 {
+		return 1
+	}
+	return count
+}
+
 func DefaultPoolMax() int {
-	processorCount := runtime.NumCPU()
-	computed := processorCount * 8
-	if computed < 1 {
-		computed = 1
-	}
-	if computed > 256 {
-		computed = 256
-	}
-	return computed
+	return DefaultInstanceCount()
 }
 
 type PipelineFactory[ContextType any] func() *Pipeline[ContextType]
 
-type pipelinePool[ContextType any] struct {
-	maxSize      int32
-	createdCount int32
-	available    chan *Pipeline[ContextType]
-	factory      PipelineFactory[ContextType]
+type PipelineProvider[ContextType any] struct {
+	mode              PipelineProviderMode
+	factory           PipelineFactory[ContextType]
+	singletonPipeline *Pipeline[ContextType]
+	pooledPipelines   []*Pipeline[ContextType]
+	nextSelection     atomic.Uint64
 }
 
-func newPipelinePool[ContextType any](maxSize int, factory PipelineFactory[ContextType]) *pipelinePool[ContextType] {
-	if maxSize < 1 {
-		panic("maxSize must be >= 1")
-	}
+func NewInstancePerEventPipelineProvider[ContextType any](
+	factory PipelineFactory[ContextType],
+) *PipelineProvider[ContextType] {
 	if factory == nil {
 		panic("factory must not be nil")
 	}
-
-	return &pipelinePool[ContextType]{
-		maxSize:      int32(maxSize),
-		createdCount: 0,
-		available:    make(chan *Pipeline[ContextType], maxSize),
-		factory:      factory,
+	return &PipelineProvider[ContextType]{
+		mode: PipelineProviderModeNewInstancePerEvent,
+		factory: factory,
+		pooledPipelines: make([]*Pipeline[ContextType], 0),
 	}
 }
 
-func (pool *pipelinePool[ContextType]) borrow() *Pipeline[ContextType] {
-	select {
-	case availablePipeline := <-pool.available:
-		return availablePipeline
-	default:
-	}
-
-	for {
-		createdSoFar := atomic.LoadInt32(&pool.createdCount)
-		if createdSoFar < pool.maxSize {
-			if atomic.CompareAndSwapInt32(&pool.createdCount, createdSoFar, createdSoFar+1) {
-				pipelineInstance := pool.factory()
-				if pipelineInstance == nil {
-					panic("pipeline pool factory returned nil")
-				}
-				return pipelineInstance
-			}
-			continue
-		}
-
-		availablePipeline := <-pool.available
-		return availablePipeline
-	}
-}
-
-func (pool *pipelinePool[ContextType]) release(pipelineInstance *Pipeline[ContextType]) {
-	if pipelineInstance == nil {
-		return
-	}
-
-	select {
-	case pool.available <- pipelineInstance:
-	default:
-	}
-}
-
-type PipelineProvider[ContextType any] struct {
-	mode          PipelineProviderMode
-	sharedPipeline *Pipeline[ContextType]
-	pool          *pipelinePool[ContextType]
-	factory       PipelineFactory[ContextType]
-}
-
-func NewSharedPipelineProvider[ContextType any](pipeline *Pipeline[ContextType]) *PipelineProvider[ContextType] {
+func NewSingletonPipelineProvider[ContextType any](
+	pipeline *Pipeline[ContextType],
+) *PipelineProvider[ContextType] {
 	if pipeline == nil {
 		panic("pipeline must not be nil")
 	}
+	pipeline.Freeze()
 	return &PipelineProvider[ContextType]{
-		mode:          PipelineProviderModeShared,
-		sharedPipeline: pipeline,
-		pool:          nil,
-		factory:       nil,
+		mode: PipelineProviderModeSingleton,
+		singletonPipeline: pipeline,
+		pooledPipelines: make([]*Pipeline[ContextType], 0),
 	}
 }
 
-func NewSharedPipelineProviderFromFactory[ContextType any](factory PipelineFactory[ContextType]) *PipelineProvider[ContextType] {
+func NewSingletonPipelineProviderFromFactory[ContextType any](
+	factory PipelineFactory[ContextType],
+) *PipelineProvider[ContextType] {
 	if factory == nil {
 		panic("factory must not be nil")
 	}
-	pipeline := factory()
-	if pipeline == nil {
-		panic("factory returned nil pipeline")
-	}
-	return NewSharedPipelineProvider(pipeline)
+	return NewSingletonPipelineProvider(factory())
 }
 
-func NewPooledPipelineProvider[ContextType any](factory PipelineFactory[ContextType], poolMax int) *PipelineProvider[ContextType] {
-	if poolMax <= 0 {
-		poolMax = DefaultPoolMax()
-	}
-	pool := newPipelinePool[ContextType](poolMax, factory)
-	return &PipelineProvider[ContextType]{
-		mode:          PipelineProviderModePooled,
-		sharedPipeline: nil,
-		pool:          pool,
-		factory:       nil,
-	}
-}
-
-func NewPerRunPipelineProvider[ContextType any](factory PipelineFactory[ContextType]) *PipelineProvider[ContextType] {
+func NewPooledPipelineProvider[ContextType any](
+	factory PipelineFactory[ContextType],
+	instanceCount int,
+) *PipelineProvider[ContextType] {
 	if factory == nil {
 		panic("factory must not be nil")
 	}
-	return &PipelineProvider[ContextType]{
-		mode:          PipelineProviderModePerRun,
-		sharedPipeline: nil,
-		pool:          nil,
-		factory:       factory,
+	if instanceCount <= 0 {
+		instanceCount = DefaultInstanceCount()
 	}
+	pipelines := make([]*Pipeline[ContextType], 0, instanceCount)
+	for index := 0; index < instanceCount; index++ {
+		pipeline := factory()
+		if pipeline == nil {
+			panic("factory returned nil Pipeline")
+		}
+		pipeline.Freeze()
+		pipelines = append(pipelines, pipeline)
+	}
+	return &PipelineProvider[ContextType]{
+		mode: PipelineProviderModePooled,
+		pooledPipelines: pipelines,
+	}
+}
+
+// Preview compatibility constructors.
+func NewSharedPipelineProvider[ContextType any](
+	pipeline *Pipeline[ContextType],
+) *PipelineProvider[ContextType] {
+	return NewSingletonPipelineProvider(pipeline)
+}
+
+func NewSharedPipelineProviderFromFactory[ContextType any](
+	factory PipelineFactory[ContextType],
+) *PipelineProvider[ContextType] {
+	return NewSingletonPipelineProviderFromFactory(factory)
+}
+
+func NewPerRunPipelineProvider[ContextType any](
+	factory PipelineFactory[ContextType],
+) *PipelineProvider[ContextType] {
+	return NewInstancePerEventPipelineProvider(factory)
 }
 
 func (provider *PipelineProvider[ContextType]) Mode() PipelineProviderMode {
 	return provider.mode
 }
 
-func (provider *PipelineProvider[ContextType]) Run(input ContextType) PipelineResult[ContextType] {
-	if provider.mode == PipelineProviderModeShared {
-		if provider.sharedPipeline == nil {
-			panic("sharedPipeline is not set")
-		}
-		return provider.sharedPipeline.Run(input)
+func (provider *PipelineProvider[ContextType]) InstanceCount() int {
+	switch provider.mode {
+	case PipelineProviderModeNewInstancePerEvent:
+		return 0
+	case PipelineProviderModeSingleton:
+		return 1
+	case PipelineProviderModePooled:
+		return len(provider.pooledPipelines)
+	default:
+		panic("unsupported PipelineProvider mode")
 	}
-
-	if provider.mode == PipelineProviderModePooled {
-		if provider.pool == nil {
-			panic("pool is not set")
-		}
-		borrowedPipeline := provider.pool.borrow()
-		result := borrowedPipeline.Run(input)
-		provider.pool.release(borrowedPipeline)
-		return result
-	}
-
-	if provider.mode != PipelineProviderModePerRun {
-		panic(fmt.Sprintf("unsupported provider mode: %q", provider.mode))
-	}
-	if provider.factory == nil {
-		panic("factory is not set")
-	}
-
-	pipeline := provider.factory()
-	if pipeline == nil {
-		panic("factory returned nil pipeline")
-	}
-	return pipeline.Run(input)
 }
 
+func (provider *PipelineProvider[ContextType]) GetPipeline() *Pipeline[ContextType] {
+	switch provider.mode {
+	case PipelineProviderModeNewInstancePerEvent:
+		if provider.factory == nil {
+			panic("factory is not set")
+		}
+		pipeline := provider.factory()
+		if pipeline == nil {
+			panic("factory returned nil Pipeline")
+		}
+		return pipeline.Freeze()
+	case PipelineProviderModeSingleton:
+		if provider.singletonPipeline == nil {
+			panic("singleton Pipeline is not set")
+		}
+		return provider.singletonPipeline
+	case PipelineProviderModePooled:
+		if len(provider.pooledPipelines) == 0 {
+			panic("pooled Pipelines are empty")
+		}
+		selection := provider.nextSelection.Add(1) - 1
+		return provider.pooledPipelines[int(selection%uint64(len(provider.pooledPipelines)))]
+	default:
+		panic("unsupported PipelineProvider mode")
+	}
+}
+
+func (provider *PipelineProvider[ContextType]) Run(input ContextType) ContextType {
+	return provider.GetPipeline().Run(input)
+}
+
+func (provider *PipelineProvider[ContextType]) RunDetailed(
+	input ContextType,
+) PipelineResult[ContextType] {
+	return provider.GetPipeline().RunDetailed(input)
+}

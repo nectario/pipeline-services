@@ -1,0 +1,21 @@
+name: phase3-source-export
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Package branch source
+        run: tar --exclude=.git -czf /tmp/phase3-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase3-source
+          path: /tmp/phase3-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1

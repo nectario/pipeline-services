@@ -1,63 +1,70 @@
-import { Pipeline } from "../../index.js";
+import { Pipeline, now_ns } from "../../index.js";
 import { append_marker, strip, to_lower } from "./text_steps.js";
-import { now_ns } from "../core/pipeline.js";
 
 async function main(): Promise<void> {
-  const pipeline = new Pipeline("benchmark01_pipeline_run", true);
-  pipeline.add_action(strip);
-  pipeline.add_action(to_lower);
-  pipeline.add_action(append_marker);
+  const pipeline = new Pipeline<string>("benchmark01_pipeline_run", true)
+    .addAction(strip)
+    .addAction(to_lower)
+    .addAction(append_marker);
 
-  const input_value = "  Hello Benchmark  ";
-  const warmup_iterations = 1000;
+  const inputValue = "  Hello Benchmark  ";
+  const warmupIterations = 1_000;
   const iterations = 10_000;
 
-  let warmup_index = 0;
-  while (warmup_index < warmup_iterations) {
-    await pipeline.run(input_value);
-    warmup_index += 1;
+  for (let index = 0; index < warmupIterations; index += 1) {
+    await pipeline.run(inputValue);
   }
 
-  let total_pipeline_nanos = 0n;
-  const action_totals = new Map<string, bigint>();
-  const action_counts = new Map<string, number>();
-  const action_names: Array<string> = [];
+  let totalPipelineNanos = 0n;
+  const actionTotals = new Map<string, bigint>();
+  const actionCounts = new Map<string, number>();
+  const actionNames: Array<string> = [];
 
-  const start_ns = now_ns();
-  let iteration_index = 0;
-  while (iteration_index < iterations) {
-    const result = await pipeline.run(input_value);
-    total_pipeline_nanos += result.total_nanos;
+  const startNanos = now_ns();
+  for (let index = 0; index < iterations; index += 1) {
+    const result = await pipeline.runDetailed(inputValue);
+    totalPipelineNanos += result.totalNanos;
 
-    for (const timing of result.timings) {
-      if (action_totals.has(timing.action_name)) {
-        action_totals.set(timing.action_name, action_totals.get(timing.action_name)! + timing.elapsed_nanos);
-        action_counts.set(timing.action_name, (action_counts.get(timing.action_name) ?? 0) + 1);
+    for (const timing of result.actionTimings) {
+      if (actionTotals.has(timing.actionName)) {
+        actionTotals.set(
+          timing.actionName,
+          actionTotals.get(timing.actionName)! + timing.elapsedNanos,
+        );
+        actionCounts.set(
+          timing.actionName,
+          (actionCounts.get(timing.actionName) ?? 0) + 1,
+        );
       } else {
-        action_totals.set(timing.action_name, timing.elapsed_nanos);
-        action_counts.set(timing.action_name, 1);
-        action_names.push(timing.action_name);
+        actionTotals.set(timing.actionName, timing.elapsedNanos);
+        actionCounts.set(timing.actionName, 1);
+        actionNames.push(timing.actionName);
       }
     }
-
-    iteration_index += 1;
   }
-  const end_ns = now_ns();
-  const wall_nanos = end_ns - start_ns;
+  const wallNanos = now_ns() - startNanos;
 
   // eslint-disable-next-line no-console
   console.log("iterations=", iterations);
   // eslint-disable-next-line no-console
-  console.log("wallMs=", Number(wall_nanos) / 1_000_000.0);
+  console.log("wallMs=", Number(wallNanos) / 1_000_000.0);
   // eslint-disable-next-line no-console
-  console.log("avgPipelineUs=", Number(total_pipeline_nanos) / Number(iterations) / 1_000.0);
+  console.log(
+    "avgPipelineUs=",
+    Number(totalPipelineNanos) / Number(iterations) / 1_000.0,
+  );
   // eslint-disable-next-line no-console
   console.log("avgActionUs=");
-  for (const action_name of action_names) {
-    const nanos_total = action_totals.get(action_name)!;
-    const count_total = action_counts.get(action_name)!;
+  for (const actionName of actionNames) {
+    const nanosTotal = actionTotals.get(actionName)!;
+    const countTotal = actionCounts.get(actionName)!;
     // eslint-disable-next-line no-console
-    console.log("  ", action_name, "=", Number(nanos_total) / Number(count_total) / 1_000.0);
+    console.log(
+      "  ",
+      actionName,
+      "=",
+      Number(nanosTotal) / Number(countTotal) / 1_000.0,
+    );
   }
 }
 

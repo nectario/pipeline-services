@@ -1,14 +1,15 @@
-from python import PythonObject
+from std.python import PythonObject
 
 from pipeline_services.config.json_loader import PipelineJsonLoader
 from pipeline_services.core.registry import PipelineRegistry
 
-fn main() raises:
+
+def main() raises:
     var json_text = """
 {
   "pipeline": "example04_json_loader_remote_get",
   "type": "unary",
-  "steps": [
+  "actions": [
     {
       "name": "remote_get_fixture",
       "$remote": {
@@ -23,7 +24,5 @@ fn main() raises:
 """
 
     var registry = PipelineRegistry()
-    var loader = PipelineJsonLoader()
-    var pipeline = loader.load_str(json_text, registry)
-    var result = pipeline.run(PythonObject("ignored"))
-    print(result.context)
+    var pipeline = PipelineJsonLoader().load_str(json_text, registry)
+    print(pipeline.run(PythonObject("ignored")))

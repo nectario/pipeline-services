@@ -3,116 +3,168 @@ import os from "node:os";
 import { Pipeline, PipelineResult } from "./pipeline.js";
 
 export enum PipelineProviderMode {
-  SHARED = "shared",
+  NEW_INSTANCE_PER_EVENT = "newInstancePerEvent",
+  SINGLETON = "singleton",
   POOLED = "pooled",
-  PER_RUN = "perRun",
 }
 
+export function defaultInstanceCount(): number {
+  return Math.max(1, os.cpus().length || 1);
+}
+
+/** @deprecated Preview alias for defaultInstanceCount(). */
 export function default_pool_max(): number {
-  const processor_count = os.cpus().length || 1;
-  const computed = processor_count * 8;
-  return Math.min(256, Math.max(1, computed));
+  return defaultInstanceCount();
 }
 
-type PipelineFactory = () => Pipeline;
+type PipelineFactory<ContextType> = () => Pipeline<ContextType>;
 
-class PipelinePool {
-  private max_size: number;
-  private created_count: number;
-  private factory: PipelineFactory;
-  private available: Array<Pipeline>;
-  private waiters: Array<(pipeline: Pipeline) => void>;
+export class PipelineProvider<ContextType = unknown> {
+  private nextSelection = 0;
 
-  constructor(max_size: number, factory: PipelineFactory) {
-    if (max_size < 1) {
-      throw new RangeError("max_size must be >= 1");
+  private constructor(
+    public readonly mode: PipelineProviderMode,
+    private readonly factory: PipelineFactory<ContextType> | null,
+    private readonly singletonPipeline: Pipeline<ContextType> | null,
+    private readonly pooledPipelines: ReadonlyArray<Pipeline<ContextType>>,
+  ) {}
+
+  static newInstancePerEvent<ContextType>(
+    factory: PipelineFactory<ContextType>,
+  ): PipelineProvider<ContextType> {
+    if (typeof factory !== "function") {
+      throw new TypeError("factory must be callable");
     }
-    this.max_size = max_size;
-    this.created_count = 0;
-    this.factory = factory;
-    this.available = [];
-    this.waiters = [];
+    return new PipelineProvider(
+      PipelineProviderMode.NEW_INSTANCE_PER_EVENT,
+      factory,
+      null,
+      [],
+    );
   }
 
-  async borrow(): Promise<Pipeline> {
-    const available_pipeline = this.available.pop();
-    if (available_pipeline != null) {
-      return available_pipeline;
+  static singleton<ContextType>(
+    pipelineOrFactory:
+      | Pipeline<ContextType>
+      | PipelineFactory<ContextType>,
+  ): PipelineProvider<ContextType> {
+    const pipeline =
+      typeof pipelineOrFactory === "function"
+        ? pipelineOrFactory()
+        : pipelineOrFactory;
+    if (!(pipeline instanceof Pipeline)) {
+      throw new TypeError("pipeline must be a Pipeline");
     }
-
-    if (this.created_count < this.max_size) {
-      this.created_count += 1;
-      return this.factory();
-    }
-
-    return new Promise<Pipeline>((resolve) => {
-      this.waiters.push(resolve);
-    });
+    return new PipelineProvider(
+      PipelineProviderMode.SINGLETON,
+      null,
+      pipeline.freeze(),
+      [],
+    );
   }
 
-  release(pipeline: Pipeline): void {
-    const waiter = this.waiters.shift();
-    if (waiter != null) {
-      waiter(pipeline);
-      return;
+  static pooled<ContextType>(
+    factory: PipelineFactory<ContextType>,
+    instanceCount: number = defaultInstanceCount(),
+  ): PipelineProvider<ContextType> {
+    if (typeof factory !== "function") {
+      throw new TypeError("factory must be callable");
     }
-    this.available.push(pipeline);
+    if (!Number.isInteger(instanceCount) || instanceCount < 1) {
+      throw new RangeError("instanceCount must be >= 1");
+    }
+
+    const pipelines: Array<Pipeline<ContextType>> = [];
+    for (let index = 0; index < instanceCount; index += 1) {
+      const pipeline = factory();
+      if (!(pipeline instanceof Pipeline)) {
+        throw new TypeError("factory returned an invalid Pipeline");
+      }
+      pipelines.push(pipeline.freeze());
+    }
+    return new PipelineProvider(
+      PipelineProviderMode.POOLED,
+      null,
+      null,
+      Object.freeze(pipelines),
+    );
+  }
+
+  /** @deprecated Use singleton(). */
+  static shared<ContextType>(
+    pipelineOrFactory:
+      | Pipeline<ContextType>
+      | PipelineFactory<ContextType>,
+  ): PipelineProvider<ContextType> {
+    return PipelineProvider.singleton(pipelineOrFactory);
+  }
+
+  /** @deprecated Use newInstancePerEvent(). */
+  static per_run<ContextType>(
+    factory: PipelineFactory<ContextType>,
+  ): PipelineProvider<ContextType> {
+    return PipelineProvider.newInstancePerEvent(factory);
+  }
+
+  get instanceCount(): number {
+    switch (this.mode) {
+      case PipelineProviderMode.NEW_INSTANCE_PER_EVENT:
+        return 0;
+      case PipelineProviderMode.SINGLETON:
+        return 1;
+      case PipelineProviderMode.POOLED:
+        return this.pooledPipelines.length;
+    }
+  }
+
+  get_pipeline(): Pipeline<ContextType> {
+    return this.getPipeline();
+  }
+
+  getPipeline(): Pipeline<ContextType> {
+    switch (this.mode) {
+      case PipelineProviderMode.NEW_INSTANCE_PER_EVENT: {
+        if (this.factory == null) {
+          throw new Error("factory is not set");
+        }
+        const pipeline = this.factory();
+        if (!(pipeline instanceof Pipeline)) {
+          throw new TypeError("factory returned an invalid Pipeline");
+        }
+        return pipeline.freeze();
+      }
+      case PipelineProviderMode.SINGLETON:
+        if (this.singletonPipeline == null) {
+          throw new Error("singletonPipeline is not set");
+        }
+        return this.singletonPipeline;
+      case PipelineProviderMode.POOLED: {
+        if (this.pooledPipelines.length === 0) {
+          throw new Error("pooledPipelines is empty");
+        }
+        const selected =
+          this.pooledPipelines[
+            this.nextSelection % this.pooledPipelines.length
+          ];
+        this.nextSelection += 1;
+        return selected;
+      }
+    }
+  }
+
+  async run(context: ContextType): Promise<ContextType> {
+    return this.getPipeline().run(context);
+  }
+
+  async runDetailed(
+    context: ContextType,
+  ): Promise<PipelineResult<ContextType>> {
+    return this.getPipeline().runDetailed(context);
+  }
+
+  async run_detailed(
+    context: ContextType,
+  ): Promise<PipelineResult<ContextType>> {
+    return this.runDetailed(context);
   }
 }
-
-export class PipelineProvider {
-  public mode: PipelineProviderMode;
-
-  private shared_pipeline: Pipeline | null;
-  private pool: PipelinePool | null;
-  private factory: PipelineFactory | null;
-
-  private constructor(mode: PipelineProviderMode, shared_pipeline: Pipeline | null, pool: PipelinePool | null, factory: PipelineFactory | null) {
-    this.mode = mode;
-    this.shared_pipeline = shared_pipeline;
-    this.pool = pool;
-    this.factory = factory;
-  }
-
-  static shared(pipeline_or_factory: Pipeline | PipelineFactory): PipelineProvider {
-    const shared_pipeline = typeof pipeline_or_factory === "function" ? pipeline_or_factory() : pipeline_or_factory;
-    return new PipelineProvider(PipelineProviderMode.SHARED, shared_pipeline, null, null);
-  }
-
-  static pooled(factory: PipelineFactory, pool_max: number = default_pool_max()): PipelineProvider {
-    const pool = new PipelinePool(pool_max, factory);
-    return new PipelineProvider(PipelineProviderMode.POOLED, null, pool, null);
-  }
-
-  static per_run(factory: PipelineFactory): PipelineProvider {
-    return new PipelineProvider(PipelineProviderMode.PER_RUN, null, null, factory);
-  }
-
-  async run(input_value: unknown): Promise<PipelineResult> {
-    if (this.mode === PipelineProviderMode.SHARED) {
-      if (this.shared_pipeline == null) {
-        throw new Error("shared_pipeline is not set");
-      }
-      return this.shared_pipeline.run(input_value);
-    }
-
-    if (this.mode === PipelineProviderMode.POOLED) {
-      if (this.pool == null) {
-        throw new Error("pool is not set");
-      }
-      const borrowed_pipeline = await this.pool.borrow();
-      try {
-        return await borrowed_pipeline.run(input_value);
-      } finally {
-        this.pool.release(borrowed_pipeline);
-      }
-    }
-
-    if (this.factory == null) {
-      throw new Error("factory is not set");
-    }
-    const pipeline = this.factory();
-    return pipeline.run(input_value);
-  }
-}
-

@@ -110,3 +110,27 @@ jobs:
         run: cmake --build src/Cpp/build -j
       - name: Run C++ tests
         run: ctest --test-dir src/Cpp/build --output-on-failure
+
+  mojo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline_services
+    steps:
+      - uses: actions/checkout@v6
+      - uses: prefix-dev/setup-pixi@v0.10.0
+        with:
+          pixi-version: v0.76.0
+          working-directory: pipeline_services
+          cache: false
+      - name: Show Mojo version
+        run: pixi run mojo --version
+      - name: Run Mojo vNext conformance
+        run: pixi run mojo run -I ../src/Mojo ../src/Mojo/tests/vnext_pipeline_test.mojo
+      - name: Run representative Mojo examples
+        run: |
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example00_import.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example01_text_clean.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example02_json_loader.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example03_runtime_pipeline.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example05_metrics_post_action.mojo

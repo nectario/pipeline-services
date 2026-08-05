@@ -3,298 +3,247 @@ using System.Collections.Generic;
 
 namespace PipelineServices.Core;
 
+[Obsolete("Construct a Pipeline directly. RuntimePipeline is retained only as a compatibility helper.")]
 public sealed class RuntimePipeline<ContextType>
 {
     private readonly string name;
     private readonly bool shortCircuitOnException;
+    private readonly List<RecordedAction> preActions = new();
+    private readonly List<RecordedAction> actions = new();
+    private readonly List<RecordedAction> postActions = new();
 
     private ContextType current;
     private bool ended;
 
-    private readonly List<StepAction<ContextType>> pre;
-    private readonly List<StepAction<ContextType>> main;
-    private readonly List<StepAction<ContextType>> post;
-
-    private int preIndex;
-    private int actionIndex;
-    private int postIndex;
-
-    private readonly SessionActionControl control;
-
-    public RuntimePipeline(string name, bool shortCircuitOnException, ContextType initial)
+    public RuntimePipeline(
+        string name,
+        bool shortCircuitOnException,
+        ContextType initial)
     {
         this.name = name ?? throw new ArgumentNullException(nameof(name));
         this.shortCircuitOnException = shortCircuitOnException;
         current = initial;
-        ended = false;
-
-        pre = new List<StepAction<ContextType>>();
-        main = new List<StepAction<ContextType>>();
-        post = new List<StepAction<ContextType>>();
-
-        preIndex = 0;
-        actionIndex = 0;
-        postIndex = 0;
-
-        control = new SessionActionControl(name);
     }
 
-    public ContextType AddPreAction(StepAction<ContextType> preAction)
-    {
-        if (ended)
-        {
-            return current;
-        }
-        pre.Add(preAction);
-        return Apply(preAction, StepPhase.Pre, preIndex++, "pre");
-    }
+    public PipelineResult<ContextType>? LastResult { get; private set; }
+
+    public ContextType AddPreAction(Func<ContextType, ContextType> action)
+        => AddAndExecute(
+            StepPhase.Pre,
+            preActions,
+            new UnaryRecordedAction(action));
+
+    public ContextType AddAction(Func<ContextType, ContextType> action)
+        => AddAndExecute(
+            StepPhase.Main,
+            actions,
+            new UnaryRecordedAction(action));
+
+    public ContextType AddPostAction(Func<ContextType, ContextType> action)
+        => AddAndExecute(
+            StepPhase.Post,
+            postActions,
+            new UnaryRecordedAction(action));
+
+    public ContextType AddPreAction(StepAction<ContextType> action)
+        => AddAndExecute(
+            StepPhase.Pre,
+            preActions,
+            new StepRecordedAction(action));
 
     public ContextType AddAction(StepAction<ContextType> action)
-    {
-        if (ended)
-        {
-            return current;
-        }
-        main.Add(action);
-        return Apply(action, StepPhase.Main, actionIndex++, "s");
-    }
+        => AddAndExecute(
+            StepPhase.Main,
+            actions,
+            new StepRecordedAction(action));
 
-    public ContextType AddPostAction(StepAction<ContextType> postAction)
-    {
-        if (ended)
-        {
-            return current;
-        }
-        post.Add(postAction);
-        return Apply(postAction, StepPhase.Post, postIndex++, "post");
-    }
+    public ContextType AddPostAction(StepAction<ContextType> action)
+        => AddAndExecute(
+            StepPhase.Post,
+            postActions,
+            new StepRecordedAction(action));
 
-    public ContextType AddPreAction(Func<ContextType, ContextType> unaryAction)
-    {
-        return AddPreAction(new UnaryActionAdapter(unaryAction));
-    }
+    public ContextType AddPreAction(
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
+        => AddAndExecute(
+            StepPhase.Pre,
+            preActions,
+            new ControlRecordedAction(action));
 
-    public ContextType AddAction(Func<ContextType, ContextType> unaryAction)
-    {
-        return AddAction(new UnaryActionAdapter(unaryAction));
-    }
+    public ContextType AddAction(
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
+        => AddAndExecute(
+            StepPhase.Main,
+            actions,
+            new ControlRecordedAction(action));
 
-    public ContextType AddPostAction(Func<ContextType, ContextType> unaryAction)
-    {
-        return AddPostAction(new UnaryActionAdapter(unaryAction));
-    }
+    public ContextType AddPostAction(
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
+        => AddAndExecute(
+            StepPhase.Post,
+            postActions,
+            new ControlRecordedAction(action));
 
-    public ContextType AddPreAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-    {
-        return AddPreAction(new StepActionAdapter(actionFunction));
-    }
-
-    public ContextType AddAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-    {
-        return AddAction(new StepActionAdapter(actionFunction));
-    }
-
-    public ContextType AddPostAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-    {
-        return AddPostAction(new StepActionAdapter(actionFunction));
-    }
-
-    public ContextType Value()
-    {
-        return current;
-    }
+    public ContextType Value() => current;
 
     public void Reset(ContextType initial)
     {
         current = initial;
         ended = false;
-        control.Reset();
+        LastResult = null;
     }
 
     public void ClearRecorded()
     {
-        pre.Clear();
-        main.Clear();
-        post.Clear();
-        preIndex = 0;
-        actionIndex = 0;
-        postIndex = 0;
+        preActions.Clear();
+        actions.Clear();
+        postActions.Clear();
     }
 
-    public int RecordedPreActionCount()
-    {
-        return pre.Count;
-    }
+    public int RecordedPreActionCount() => preActions.Count;
 
-    public int RecordedActionCount()
-    {
-        return main.Count;
-    }
+    public int RecordedActionCount() => actions.Count;
 
-    public int RecordedPostActionCount()
-    {
-        return post.Count;
-    }
+    public int RecordedPostActionCount() => postActions.Count;
 
     public Pipeline<ContextType> ToImmutable()
     {
-        Pipeline<ContextType> pipeline = new Pipeline<ContextType>(name, shortCircuitOnException);
-        foreach (StepAction<ContextType> preAction in pre)
-        {
-            pipeline.AddPreAction(preAction);
-        }
-        foreach (StepAction<ContextType> action in main)
-        {
-            pipeline.AddAction(action);
-        }
-        foreach (StepAction<ContextType> postAction in post)
-        {
-            pipeline.AddPostAction(postAction);
-        }
-        return pipeline;
+        Pipeline<ContextType> pipeline = new(name, shortCircuitOnException);
+        AddAll(pipeline, StepPhase.Pre, preActions);
+        AddAll(pipeline, StepPhase.Main, actions);
+        AddAll(pipeline, StepPhase.Post, postActions);
+        return pipeline.Freeze();
     }
 
-    public Pipeline<ContextType> Freeze()
-    {
-        return ToImmutable();
-    }
+    public Pipeline<ContextType> Freeze() => ToImmutable();
 
-    private ContextType Apply(StepAction<ContextType> action, StepPhase phase, int index, string prefix)
+    private ContextType AddAndExecute(
+        StepPhase phase,
+        List<RecordedAction> destination,
+        RecordedAction action)
     {
+        ArgumentNullException.ThrowIfNull(action);
         if (ended)
         {
             return current;
         }
 
-        string stepName = prefix + index;
-        control.BeginStep(phase, index, stepName);
+        destination.Add(action);
+        Pipeline<ContextType> temporary = new(
+            name + ":runtime",
+            shortCircuitOnException);
+        action.AddTo(temporary, phase);
 
-        try
+        PipelineResult<ContextType> result = temporary.RunDetailed(current);
+        current = result.Context;
+        ended = result.ShortCircuited;
+        LastResult = result;
+        return current;
+    }
+
+    private static void AddAll(
+        Pipeline<ContextType> pipeline,
+        StepPhase phase,
+        IEnumerable<RecordedAction> recordedActions)
+    {
+        foreach (RecordedAction action in recordedActions)
         {
-            ContextType output = action.Apply(current, control);
-            if (output is null)
-            {
-                throw new InvalidOperationException("Action returned null: " + stepName);
-            }
-            current = output;
-            if (control.IsShortCircuited())
-            {
-                ended = true;
-            }
-            return current;
-        }
-        catch (Exception exception)
-        {
-            current = control.RecordError(current, exception);
-            if (shortCircuitOnException)
-            {
-                control.ShortCircuit();
-                ended = true;
-            }
-            return current;
+            action.AddTo(pipeline, phase);
         }
     }
 
-    private sealed class UnaryActionAdapter : StepAction<ContextType>
+    private abstract class RecordedAction
     {
-        private readonly Func<ContextType, ContextType> unaryAction;
+        internal abstract void AddTo(
+            Pipeline<ContextType> pipeline,
+            StepPhase phase);
+    }
 
-        public UnaryActionAdapter(Func<ContextType, ContextType> unaryAction)
+    private sealed class UnaryRecordedAction : RecordedAction
+    {
+        private readonly Func<ContextType, ContextType> action;
+
+        internal UnaryRecordedAction(Func<ContextType, ContextType> action)
         {
-            this.unaryAction = unaryAction ?? throw new ArgumentNullException(nameof(unaryAction));
+            this.action = action ?? throw new ArgumentNullException(nameof(action));
         }
 
-        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
+        internal override void AddTo(
+            Pipeline<ContextType> pipeline,
+            StepPhase phase)
         {
-            return unaryAction(contextValue);
+            Action<ContextType> canonical = context => action(context);
+            switch (phase)
+            {
+                case StepPhase.Pre:
+                    pipeline.AddPreAction(canonical);
+                    break;
+                case StepPhase.Post:
+                    pipeline.AddPostAction(canonical);
+                    break;
+                default:
+                    pipeline.AddAction(canonical);
+                    break;
+            }
         }
     }
 
-    private sealed class StepActionAdapter : StepAction<ContextType>
+    private sealed class StepRecordedAction : RecordedAction
     {
-        private readonly Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction;
+        private readonly StepAction<ContextType> action;
 
-        public StepActionAdapter(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
+        internal StepRecordedAction(StepAction<ContextType> action)
         {
-            this.actionFunction = actionFunction ?? throw new ArgumentNullException(nameof(actionFunction));
+            this.action = action ?? throw new ArgumentNullException(nameof(action));
         }
 
-        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
+        [Obsolete]
+        internal override void AddTo(
+            Pipeline<ContextType> pipeline,
+            StepPhase phase)
         {
-            return actionFunction(contextValue, control);
+            switch (phase)
+            {
+                case StepPhase.Pre:
+                    pipeline.AddPreAction(action);
+                    break;
+                case StepPhase.Post:
+                    pipeline.AddPostAction(action);
+                    break;
+                default:
+                    pipeline.AddAction(action);
+                    break;
+            }
         }
     }
 
-    private sealed class SessionActionControl : ActionControl<ContextType>
+    private sealed class ControlRecordedAction : RecordedAction
     {
-        private readonly string pipelineName;
-        private readonly List<PipelineError> errors;
+        private readonly Func<ContextType, ActionControl<ContextType>, ContextType> action;
 
-        private bool shortCircuited;
-        private StepPhase phase;
-        private int index;
-        private string stepName;
-
-        public SessionActionControl(string pipelineName)
+        internal ControlRecordedAction(
+            Func<ContextType, ActionControl<ContextType>, ContextType> action)
         {
-            this.pipelineName = pipelineName ?? throw new ArgumentNullException(nameof(pipelineName));
-            errors = new List<PipelineError>();
-            shortCircuited = false;
-            phase = StepPhase.Main;
-            index = 0;
-            stepName = "?";
+            this.action = action ?? throw new ArgumentNullException(nameof(action));
         }
 
-        public void BeginStep(StepPhase phase, int index, string stepName)
+        [Obsolete]
+        internal override void AddTo(
+            Pipeline<ContextType> pipeline,
+            StepPhase phase)
         {
-            this.phase = phase;
-            this.index = index;
-            this.stepName = stepName ?? "?";
-        }
-
-        public void Reset()
-        {
-            shortCircuited = false;
-            errors.Clear();
-            phase = StepPhase.Main;
-            index = 0;
-            stepName = "?";
-        }
-
-        public void ShortCircuit()
-        {
-            shortCircuited = true;
-        }
-
-        public bool IsShortCircuited()
-        {
-            return shortCircuited;
-        }
-
-        public ContextType RecordError(ContextType contextValue, Exception exception)
-        {
-            errors.Add(new PipelineError(pipelineName, phase, index, stepName, exception));
-            return contextValue;
-        }
-
-        public IReadOnlyList<PipelineError> Errors()
-        {
-            return errors.AsReadOnly();
-        }
-
-        public string PipelineName()
-        {
-            return pipelineName;
-        }
-
-        public long RunStartNanos()
-        {
-            return 0L;
-        }
-
-        public IReadOnlyList<ActionTiming> ActionTimings()
-        {
-            return Array.Empty<ActionTiming>();
+            switch (phase)
+            {
+                case StepPhase.Pre:
+                    pipeline.AddPreAction(action);
+                    break;
+                case StepPhase.Post:
+                    pipeline.AddPostAction(action);
+                    break;
+                default:
+                    pipeline.AddAction(action);
+                    break;
+            }
         }
     }
 }

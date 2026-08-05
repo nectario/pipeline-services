@@ -1,130 +1,117 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, List, Union
+import warnings
+from typing import Generic, TypeVar
 
-from .pipeline import (
-    Pipeline,
-    RegisteredAction,
-    ActionControl,
-    StepAction,
-    UnaryOperator,
-    format_step_name,
-    safe_error_to_string,
-    to_registered_action,
-)
+from .pipeline import Action, Pipeline, PipelineResult, StepAction
 from ..remote.http_step import RemoteSpec, http_step
 
+ContextType = TypeVar("ContextType")
+RuntimeAction = Action[ContextType] | StepAction[ContextType] | RemoteSpec
 
-@dataclass
-class RuntimePipeline:
-    name: str
-    short_circuit_on_exception: bool = True
-    current: Any = None
 
-    def __post_init__(self) -> None:
+def _as_action(action: RuntimeAction[ContextType]) -> Action[ContextType] | StepAction[ContextType]:
+    if isinstance(action, RemoteSpec):
+        return lambda context: http_step(action, context)
+    if not callable(action):
+        raise TypeError("Action must be callable or a RemoteSpec")
+    return action
+
+
+class RuntimePipeline(Generic[ContextType]):
+    """Deprecated immediate-execution helper backed by the canonical Pipeline runner."""
+
+    def __init__(
+        self,
+        name: str,
+        short_circuit_on_exception: bool = True,
+        current: ContextType | None = None,
+    ) -> None:
+        warnings.warn(
+            "RuntimePipeline is deprecated; construct a Pipeline directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.name = name
+        self.short_circuit_on_exception = short_circuit_on_exception
+        self.current = current
         self.ended = False
-        self.pre_actions: List[RegisteredAction] = []
-        self.actions: List[RegisteredAction] = []
-        self.post_actions: List[RegisteredAction] = []
-        self.pre_index = 0
-        self.action_index = 0
-        self.post_index = 0
-        self.control = ActionControl(self.name)
+        self.pre_actions: list[Action[ContextType] | StepAction[ContextType]] = []
+        self.actions: list[Action[ContextType] | StepAction[ContextType]] = []
+        self.post_actions: list[Action[ContextType] | StepAction[ContextType]] = []
+        self.last_result: PipelineResult[ContextType] | None = None
 
-    def value(self) -> Any:
+    def value(self) -> ContextType | None:
         return self.current
 
-    def reset(self, value: Any) -> None:
+    def reset(self, value: ContextType) -> None:
         self.current = value
         self.ended = False
-        self.control.reset()
+        self.last_result = None
 
-    def add_pre_action(self, action: Union[UnaryOperator, StepAction, RemoteSpec]) -> Any:
-        if self.ended:
-            return self.current
-        registered_action = to_registered_action("", action)
-        self.pre_actions.append(registered_action)
-        output_value = self.apply_action(registered_action, "pre", self.pre_index)
-        self.pre_index += 1
-        return output_value
+    def clear_recorded(self) -> None:
+        self.pre_actions.clear()
+        self.actions.clear()
+        self.post_actions.clear()
 
-    def add_action(self, action: Union[UnaryOperator, StepAction, RemoteSpec]) -> Any:
-        if self.ended:
-            return self.current
-        registered_action = to_registered_action("", action)
-        self.actions.append(registered_action)
-        output_value = self.apply_action(registered_action, "main", self.action_index)
-        self.action_index += 1
-        return output_value
+    def recorded_pre_action_count(self) -> int:
+        return len(self.pre_actions)
 
-    def add_post_action(self, action: Union[UnaryOperator, StepAction, RemoteSpec]) -> Any:
-        if self.ended:
-            return self.current
-        registered_action = to_registered_action("", action)
-        self.post_actions.append(registered_action)
-        output_value = self.apply_action(registered_action, "post", self.post_index)
-        self.post_index += 1
-        return output_value
+    def recorded_action_count(self) -> int:
+        return len(self.actions)
 
-    def freeze(self) -> Pipeline:
+    def recorded_post_action_count(self) -> int:
+        return len(self.post_actions)
+
+    def add_pre_action(self, action: RuntimeAction[ContextType]) -> ContextType | None:
+        return self._add_and_execute("preActions", self.pre_actions, action)
+
+    def add_action(self, action: RuntimeAction[ContextType]) -> ContextType | None:
+        return self._add_and_execute("actions", self.actions, action)
+
+    def add_post_action(self, action: RuntimeAction[ContextType]) -> ContextType | None:
+        return self._add_and_execute("postActions", self.post_actions, action)
+
+    def freeze(self) -> Pipeline[ContextType]:
         return self.to_immutable()
 
-    def to_immutable(self) -> Pipeline:
-        pipeline = Pipeline(self.name, self.short_circuit_on_exception)
+    def to_immutable(self) -> Pipeline[ContextType]:
+        pipeline = Pipeline[ContextType](self.name, self.short_circuit_on_exception)
+        for action in self.pre_actions:
+            pipeline.add_pre_action(action)
+        for action in self.actions:
+            pipeline.add_action(action)
+        for action in self.post_actions:
+            pipeline.add_post_action(action)
+        return pipeline.freeze()
 
-        for registered_action in self.pre_actions:
-            if registered_action.kind == 0:
-                pipeline.add_pre_action(registered_action.unary)
-            elif registered_action.kind == 1:
-                pipeline.add_pre_action(registered_action.step_action)
-            else:
-                pipeline.add_pre_action(registered_action.remote_spec)
-
-        for registered_action in self.actions:
-            if registered_action.kind == 0:
-                pipeline.add_action(registered_action.unary)
-            elif registered_action.kind == 1:
-                pipeline.add_action(registered_action.step_action)
-            else:
-                pipeline.add_action(registered_action.remote_spec)
-
-        for registered_action in self.post_actions:
-            if registered_action.kind == 0:
-                pipeline.add_post_action(registered_action.unary)
-            elif registered_action.kind == 1:
-                pipeline.add_post_action(registered_action.step_action)
-            else:
-                pipeline.add_post_action(registered_action.remote_spec)
-
-        return pipeline
-
-    def apply_action(self, registered_action: RegisteredAction, phase: str, index: int) -> Any:
+    def _add_and_execute(
+        self,
+        phase: str,
+        destination: list[Action[ContextType] | StepAction[ContextType]],
+        action: RuntimeAction[ContextType],
+    ) -> ContextType | None:
         if self.ended:
             return self.current
+        if self.current is None:
+            raise ValueError("RuntimePipeline requires a non-None current value")
 
-        action_name = format_step_name(phase, index, registered_action.name)
-        self.control.begin_step(phase, index, action_name)
-        try:
-            if registered_action.kind == 0:
-                if registered_action.unary is None:
-                    raise RuntimeError("Registered unary action is missing")
-                self.current = registered_action.unary(self.current)
-            elif registered_action.kind == 1:
-                if registered_action.step_action is None:
-                    raise RuntimeError("Registered step action is missing")
-                self.current = registered_action.step_action(self.current, self.control)
-            else:
-                if registered_action.remote_spec is None:
-                    raise RuntimeError("Registered remote spec is missing")
-                self.current = http_step(registered_action.remote_spec, self.current)
-        except Exception as caught_error:
-            self.current = self.control.record_error(self.current, safe_error_to_string(caught_error))
-            if self.short_circuit_on_exception:
-                self.control.short_circuit()
-                self.ended = True
+        normalized = _as_action(action)
+        destination.append(normalized)
 
-        if self.control.is_short_circuited():
-            self.ended = True
+        pipeline = Pipeline[ContextType](
+            f"{self.name}:runtime",
+            self.short_circuit_on_exception,
+        )
+        if phase == "preActions":
+            pipeline.add_pre_action(normalized)
+        elif phase == "postActions":
+            pipeline.add_post_action(normalized)
+        else:
+            pipeline.add_action(normalized)
 
+        result = pipeline.run_detailed(self.current)
+        self.current = result.context
+        self.last_result = result
+        self.ended = result.short_circuited
         return self.current

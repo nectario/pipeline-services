@@ -7,11 +7,11 @@ import (
 	"pipeline-services-go/pipeline_services/examples"
 )
 
-func truncateAt280(value string, control core.ActionControl[string]) string {
+func truncateAt280(value string) string {
 	if len(value) <= 280 {
 		return value
 	}
-	control.ShortCircuit()
+	core.ShortCircuit()
 	return value[:280]
 }
 
@@ -21,7 +21,7 @@ func main() {
 	pipeline.AddAction(examples.NormalizeWhitespace)
 	pipeline.AddActionNamed("truncate", truncateAt280)
 
-	result := pipeline.Run("  Hello   World  ")
+	result := pipeline.RunDetailed("  Hello   World  ")
 	fmt.Printf("output=%s\n", result.Context)
 	fmt.Printf("shortCircuited=%v\n", result.ShortCircuited)
 	fmt.Printf("errors=%d\n", len(result.Errors))
