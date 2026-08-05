@@ -6,392 +6,693 @@ namespace PipelineServices.Core;
 
 public delegate ContextType OnErrorHandler<ContextType>(ContextType contextValue, PipelineError error);
 
-public sealed class Pipeline<ContextType>
+public sealed class InvalidErrorHandlerException : InvalidOperationException
 {
-    private readonly string name;
-    private readonly bool shortCircuitOnException;
+    public InvalidErrorHandlerException(
+        string message,
+        Exception actionException,
+        Exception? handlerException = null)
+        : base(message, handlerException ?? actionException)
+    {
+        ActionException = actionException ?? throw new ArgumentNullException(nameof(actionException));
+        HandlerException = handlerException;
+    }
 
-    private OnErrorHandler<ContextType> onError;
+    public Exception ActionException { get; }
 
-    private readonly List<RegisteredAction> preActions;
-    private readonly List<RegisteredAction> actions;
-    private readonly List<RegisteredAction> postActions;
+    public Exception? HandlerException { get; }
+}
 
-    public Pipeline(string name)
-        : this(name, true)
+/// <summary>A reusable single-context Pipeline backed by one immutable plan and one runner.</summary>
+public class Pipeline<ContextType>
+{
+    private readonly object assemblyLock = new();
+    private readonly string pipelineName;
+    private readonly List<RegisteredAction> preActions = new();
+    private readonly List<RegisteredAction> actions = new();
+    private readonly List<RegisteredAction> postActions = new();
+
+    private bool shortCircuitOnException;
+    private OnErrorHandler<ContextType> errorHandler = DefaultOnError;
+    private PipelineObserver observer = NoopPipelineObserver.Instance;
+    private PipelinePlan? frozenPlan;
+
+    public Pipeline(string pipelineName)
+        : this(pipelineName, true)
     {
     }
 
-    public Pipeline(string name, bool shortCircuitOnException)
+    public Pipeline(string pipelineName, bool shortCircuitOnException)
     {
-        this.name = name ?? throw new ArgumentNullException(nameof(name));
+        if (string.IsNullOrWhiteSpace(pipelineName))
+        {
+            throw new ArgumentException("pipelineName must not be blank", nameof(pipelineName));
+        }
+        this.pipelineName = pipelineName.Trim();
         this.shortCircuitOnException = shortCircuitOnException;
-        onError = DefaultOnError;
-
-        preActions = new List<RegisteredAction>();
-        actions = new List<RegisteredAction>();
-        postActions = new List<RegisteredAction>();
     }
 
-    public string Name()
-    {
-        return name;
-    }
+    public string PipelineName => pipelineName;
 
-    public bool ShortCircuitOnException()
-    {
-        return shortCircuitOnException;
-    }
+    public string Name() => pipelineName;
 
-    public int Size()
+    public bool ShortCircuitOnException() => PlanOrCurrentShortCircuitPolicy();
+
+    public int Size() => frozenPlan?.Actions.Count ?? actions.Count;
+
+    public bool IsFrozen() => frozenPlan is not null;
+
+    public Pipeline<ContextType> Freeze()
     {
-        return actions.Count;
+        _ = Plan();
+        return this;
     }
 
     public Pipeline<ContextType> OnError(OnErrorHandler<ContextType>? handler)
     {
-        onError = handler ?? DefaultOnError;
+        lock (assemblyLock)
+        {
+            EnsureMutable();
+            errorHandler = handler ?? DefaultOnError;
+            return this;
+        }
+    }
+
+    public Pipeline<ContextType> Observer(PipelineObserver? pipelineObserver)
+    {
+        lock (assemblyLock)
+        {
+            EnsureMutable();
+            observer = pipelineObserver ?? NoopPipelineObserver.Instance;
+            return this;
+        }
+    }
+
+    public Pipeline<ContextType> AddPreAction(Action<ContextType> action)
+        => AddPreAction(string.Empty, action);
+
+    public Pipeline<ContextType> AddPreAction(string actionName, Action<ContextType> action)
+    {
+        Register(preActions, actionName, action);
         return this;
     }
 
-    public Pipeline<ContextType> AddPreAction(StepAction<ContextType> action)
+    public Pipeline<ContextType> AddAction(Action<ContextType> action)
+        => AddAction(string.Empty, action);
+
+    public Pipeline<ContextType> AddAction(string actionName, Action<ContextType> action)
     {
-        return AddPreAction("", action);
+        Register(actions, actionName, action);
+        return this;
     }
 
+    public Pipeline<ContextType> AddPostAction(Action<ContextType> action)
+        => AddPostAction(string.Empty, action);
+
+    public Pipeline<ContextType> AddPostAction(string actionName, Action<ContextType> action)
+    {
+        Register(postActions, actionName, action);
+        return this;
+    }
+
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
+    public Pipeline<ContextType> AddPreAction(StepAction<ContextType> action)
+        => AddPreAction(string.Empty, action);
+
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddPreAction(string actionName, StepAction<ContextType> action)
     {
-        preActions.Add(new RegisteredAction(actionName, action));
+        ArgumentNullException.ThrowIfNull(action);
+        Register(
+            preActions,
+            actionName,
+            (context, state) => action.Apply(context, state));
         return this;
     }
 
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddAction(StepAction<ContextType> action)
-    {
-        return AddAction("", action);
-    }
+        => AddAction(string.Empty, action);
 
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddAction(string actionName, StepAction<ContextType> action)
     {
-        actions.Add(new RegisteredAction(actionName, action));
+        ArgumentNullException.ThrowIfNull(action);
+        Register(
+            actions,
+            actionName,
+            (context, state) => action.Apply(context, state));
         return this;
     }
 
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddPostAction(StepAction<ContextType> action)
-    {
-        return AddPostAction("", action);
-    }
+        => AddPostAction(string.Empty, action);
 
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddPostAction(string actionName, StepAction<ContextType> action)
     {
-        postActions.Add(new RegisteredAction(actionName, action));
+        ArgumentNullException.ThrowIfNull(action);
+        Register(
+            postActions,
+            actionName,
+            (context, state) => action.Apply(context, state));
         return this;
     }
 
-    public Pipeline<ContextType> AddPreAction(Func<ContextType, ContextType> unaryAction)
-    {
-        return AddPreAction("", unaryAction);
-    }
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
+    public Pipeline<ContextType> AddPreAction(
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
+        => AddPreAction(string.Empty, action);
 
-    public Pipeline<ContextType> AddPreAction(string actionName, Func<ContextType, ContextType> unaryAction)
-    {
-        return AddPreAction(actionName, new UnaryActionAdapter(unaryAction));
-    }
-
-    public Pipeline<ContextType> AddAction(Func<ContextType, ContextType> unaryAction)
-    {
-        return AddAction("", unaryAction);
-    }
-
-    public Pipeline<ContextType> AddAction(string actionName, Func<ContextType, ContextType> unaryAction)
-    {
-        return AddAction(actionName, new UnaryActionAdapter(unaryAction));
-    }
-
-    public Pipeline<ContextType> AddPostAction(Func<ContextType, ContextType> unaryAction)
-    {
-        return AddPostAction("", unaryAction);
-    }
-
-    public Pipeline<ContextType> AddPostAction(string actionName, Func<ContextType, ContextType> unaryAction)
-    {
-        return AddPostAction(actionName, new UnaryActionAdapter(unaryAction));
-    }
-
-    public Pipeline<ContextType> AddPreAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-    {
-        return AddPreAction("", actionFunction);
-    }
-
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddPreAction(
         string actionName,
-        Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
     {
-        return AddPreAction(actionName, new StepActionAdapter(actionFunction));
+        ArgumentNullException.ThrowIfNull(action);
+        Register(preActions, actionName, (context, state) => action(context, state));
+        return this;
     }
 
-    public Pipeline<ContextType> AddAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
+    public Pipeline<ContextType> AddAction(
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
+        => AddAction(string.Empty, action);
+
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
+    public Pipeline<ContextType> AddAction(
+        string actionName,
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
     {
-        return AddAction("", actionFunction);
+        ArgumentNullException.ThrowIfNull(action);
+        Register(actions, actionName, (context, state) => action(context, state));
+        return this;
     }
 
-    public Pipeline<ContextType> AddAction(string actionName, Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-    {
-        return AddAction(actionName, new StepActionAdapter(actionFunction));
-    }
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
+    public Pipeline<ContextType> AddPostAction(
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
+        => AddPostAction(string.Empty, action);
 
-    public Pipeline<ContextType> AddPostAction(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-    {
-        return AddPostAction("", actionFunction);
-    }
-
+    [Obsolete("Use a one-argument Action and PipelineExecution.ShortCircuit().")]
     public Pipeline<ContextType> AddPostAction(
         string actionName,
-        Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
+        Func<ContextType, ActionControl<ContextType>, ContextType> action)
     {
-        return AddPostAction(actionName, new StepActionAdapter(actionFunction));
+        ArgumentNullException.ThrowIfNull(action);
+        Register(postActions, actionName, (context, state) => action(context, state));
+        return this;
     }
 
-    public PipelineResult<ContextType> Run(ContextType input)
-    {
-        if (input is null)
-        {
-            throw new ArgumentNullException(nameof(input));
-        }
+    public void ShortCircuit() => PipelineExecution.ShortCircuit();
 
-        long runStartTimestamp = Stopwatch.GetTimestamp();
-        ContextType contextValue = input;
+    public ContextType Run(ContextType input)
+        => PipelineRunner.Run(Plan(), input);
 
-        DefaultActionControl control = new DefaultActionControl(name, onError);
-        control.BeginRun(NanoTime.GetNowNanos());
+    public PipelineResult<ContextType> RunDetailed(ContextType input)
+        => PipelineRunner.RunDetailed(Plan(), input);
 
-        contextValue = RunPhase(control, StepPhase.Pre, contextValue, preActions, stopOnShortCircuit: false);
-        if (!control.IsShortCircuited())
-        {
-            contextValue = RunPhase(control, StepPhase.Main, contextValue, actions, stopOnShortCircuit: true);
-        }
-        contextValue = RunPhase(control, StepPhase.Post, contextValue, postActions, stopOnShortCircuit: false);
-
-        long totalNanos = NanoTime.GetElapsedNanos(runStartTimestamp, Stopwatch.GetTimestamp());
-        return new PipelineResult<ContextType>(
-            contextValue,
-            control.IsShortCircuited(),
-            control.Errors(),
-            control.ActionTimings(),
-            totalNanos);
-    }
-
+    [Obsolete("Use Run() for the final context or RunDetailed() for diagnostics.")]
     public PipelineResult<ContextType> Execute(ContextType input)
+        => RunDetailed(input);
+
+    private void Register(
+        List<RegisteredAction> destination,
+        string actionName,
+        Action<ContextType> action)
     {
-        return Run(input);
+        ArgumentNullException.ThrowIfNull(action);
+        Register(destination, actionName, (context, state) => action(context));
     }
 
-    private ContextType RunPhase(
-        DefaultActionControl control,
-        StepPhase phase,
-        ContextType startContext,
-        List<RegisteredAction> actionList,
-        bool stopOnShortCircuit)
+    private void Register(
+        List<RegisteredAction> destination,
+        string actionName,
+        ActionInvoker action)
     {
-        ContextType contextValue = startContext;
-        for (int actionIndex = 0; actionIndex < actionList.Count; actionIndex++)
+        ArgumentNullException.ThrowIfNull(action);
+        lock (assemblyLock)
         {
-            RegisteredAction registeredAction = actionList[actionIndex];
-            string stepName = FormatStepName(phase, actionIndex, registeredAction.Name);
-            control.BeginStep(phase, actionIndex, stepName);
+            EnsureMutable();
+            destination.Add(new RegisteredAction(actionName, action));
+        }
+    }
 
-            long actionStartTimestamp = Stopwatch.GetTimestamp();
-            bool actionSucceeded = true;
+    private PipelinePlan Plan()
+    {
+        PipelinePlan? currentPlan = frozenPlan;
+        if (currentPlan is not null)
+        {
+            return currentPlan;
+        }
 
-            ContextType contextBeforeAction = contextValue;
+        lock (assemblyLock)
+        {
+            currentPlan = frozenPlan;
+            if (currentPlan is null)
+            {
+                currentPlan = new PipelinePlan(
+                    pipelineName,
+                    shortCircuitOnException,
+                    errorHandler,
+                    observer,
+                    preActions.ToArray(),
+                    actions.ToArray(),
+                    postActions.ToArray());
+                frozenPlan = currentPlan;
+            }
+            return currentPlan;
+        }
+    }
+
+    private bool PlanOrCurrentShortCircuitPolicy()
+        => frozenPlan?.ShortCircuitOnException ?? shortCircuitOnException;
+
+    private void EnsureMutable()
+    {
+        if (frozenPlan is not null)
+        {
+            throw new InvalidOperationException($"Pipeline '{pipelineName}' is frozen");
+        }
+    }
+
+    private static ContextType DefaultOnError(ContextType context, PipelineError error)
+    {
+        _ = error;
+        return context;
+    }
+
+    private delegate ContextType ActionInvoker(ContextType context, ExecutionState state);
+
+    private sealed record RegisteredAction(string Name, ActionInvoker Invoke)
+    {
+        internal RegisteredAction(string? name, ActionInvoker invoke)
+            : this(string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim(), invoke)
+        {
+        }
+    }
+
+    private sealed record PipelinePlan(
+        string PipelineName,
+        bool ShortCircuitOnException,
+        OnErrorHandler<ContextType> ErrorHandler,
+        PipelineObserver Observer,
+        IReadOnlyList<RegisteredAction> PreActions,
+        IReadOnlyList<RegisteredAction> Actions,
+        IReadOnlyList<RegisteredAction> PostActions);
+
+    private sealed class ExecutionState : IPipelineExecutionState, ActionControl<ContextType>
+    {
+        private readonly bool collectTimings;
+        private readonly List<PipelineError> errors = new();
+        private readonly List<ActionTiming> actionTimings = new();
+
+        internal ExecutionState(
+            PipelinePlan plan,
+            ContextType context,
+            bool collectTimings,
+            long runStartTimestamp,
+            long runStartNanos)
+        {
+            Plan = plan;
+            Context = context;
+            this.collectTimings = collectTimings;
+            RunStartTimestamp = runStartTimestamp;
+            RunStartNanosValue = runStartNanos;
+            Phase = StepPhase.Main;
+            ActionName = "?";
+        }
+
+        internal PipelinePlan Plan { get; }
+        internal ContextType Context { get; set; }
+        internal bool ShortCircuited { get; private set; }
+        internal StepPhase Phase { get; private set; }
+        internal int ActionIndex { get; private set; }
+        internal string ActionName { get; private set; }
+        internal long RunStartTimestamp { get; }
+        internal long RunStartNanosValue { get; }
+
+        public bool ActionExecuting { get; private set; }
+        public int ActionThreadId { get; private set; }
+
+        internal void BeginAction(StepPhase phase, int actionIndex, string actionName)
+        {
+            Phase = phase;
+            ActionIndex = actionIndex;
+            ActionName = actionName;
+        }
+
+        internal void BeginActionExecution()
+        {
+            if (ActionExecuting)
+            {
+                throw new InvalidOperationException("A Pipeline Action is already executing");
+            }
+            ActionThreadId = Environment.CurrentManagedThreadId;
+            ActionExecuting = true;
+        }
+
+        internal void EndActionExecution()
+        {
+            if (!ActionExecuting)
+            {
+                throw new InvalidOperationException("No Pipeline Action is executing");
+            }
+            ActionExecuting = false;
+            ActionThreadId = 0;
+        }
+
+        public void RequestShortCircuit() => ShortCircuited = true;
+
+        public void ShortCircuit() => RequestShortCircuit();
+
+        public bool IsShortCircuited() => ShortCircuited;
+
+        public ContextType RecordError(ContextType contextValue, Exception exception)
+            => HandleActionFailure(contextValue, exception);
+
+        internal ContextType HandleActionFailure(
+            ContextType currentContext,
+            Exception actionException)
+        {
+            PipelineError pipelineError = new(
+                Plan.PipelineName,
+                Phase,
+                ActionIndex,
+                ActionName,
+                actionException);
+            errors.Add(pipelineError);
+
+            bool wasExecuting = ActionExecuting;
+            int previousThreadId = ActionThreadId;
+            ActionExecuting = false;
+            ActionThreadId = 0;
             try
             {
-                ContextType nextContext = registeredAction.Action.Apply(contextValue, control);
-                if (nextContext is null)
+                ContextType updatedContext;
+                try
                 {
-                    throw new InvalidOperationException("Action returned null: " + stepName);
+                    updatedContext = Plan.ErrorHandler(currentContext, pipelineError);
                 }
-                contextValue = nextContext;
-            }
-            catch (Exception exception)
-            {
-                actionSucceeded = false;
-                contextValue = control.RecordError(contextBeforeAction, exception);
-                if (shortCircuitOnException)
+                catch (Exception handlerException)
                 {
-                    control.ShortCircuit();
+                    throw new InvalidErrorHandlerException(
+                        "OnError handler raised while recovering from an Action failure",
+                        actionException,
+                        handlerException);
+                }
+
+                if (updatedContext is null)
+                {
+                    throw new InvalidErrorHandlerException(
+                        "OnError handler returned null",
+                        actionException);
+                }
+                Context = updatedContext;
+                return updatedContext;
+            }
+            finally
+            {
+                ActionExecuting = wasExecuting;
+                ActionThreadId = previousThreadId;
+            }
+        }
+
+        internal void RecordTiming(long elapsedNanos, bool success)
+        {
+            if (!collectTimings)
+            {
+                return;
+            }
+            actionTimings.Add(new ActionTiming(
+                Phase,
+                ActionIndex,
+                ActionName,
+                elapsedNanos,
+                success));
+        }
+
+        public IReadOnlyList<PipelineError> Errors() => errors.AsReadOnly();
+
+        public string PipelineName() => Plan.PipelineName;
+
+        public long RunStartNanos() => RunStartNanosValue;
+
+        public IReadOnlyList<ActionTiming> ActionTimings() => actionTimings.AsReadOnly();
+    }
+
+    private static class PipelineRunner
+    {
+        internal static ContextType Run(PipelinePlan plan, ContextType input)
+            => Execute(plan, input, collectTimings: false).Context;
+
+        internal static PipelineResult<ContextType> RunDetailed(
+            PipelinePlan plan,
+            ContextType input)
+        {
+            ExecutionState state = Execute(plan, input, collectTimings: true);
+            long totalNanos = NanoTime.GetElapsedNanos(
+                state.RunStartTimestamp,
+                Stopwatch.GetTimestamp());
+            return new PipelineResult<ContextType>(
+                state.Context,
+                state.ShortCircuited,
+                state.Errors(),
+                state.ActionTimings(),
+                totalNanos);
+        }
+
+        private static ExecutionState Execute(
+            PipelinePlan plan,
+            ContextType input,
+            bool collectTimings)
+        {
+            if (input is null)
+            {
+                throw new ArgumentNullException(nameof(input));
+            }
+
+            long runStartTimestamp = Stopwatch.GetTimestamp();
+            ExecutionState state = new(
+                plan,
+                input,
+                collectTimings,
+                runStartTimestamp,
+                NanoTime.GetNowNanos());
+            Notify(() => plan.Observer.OnPipelineStarted(plan.PipelineName));
+
+            Exception? pendingFailure = null;
+            using IDisposable executionScope = PipelineExecution.Open(state);
+            try
+            {
+                try
+                {
+                    pendingFailure = ExecuteActions(
+                        state,
+                        StepPhase.Pre,
+                        plan.PreActions,
+                        stopOnShortCircuit: false,
+                        pendingFailure);
+
+                    if (pendingFailure is null && !state.ShortCircuited)
+                    {
+                        pendingFailure = ExecuteActions(
+                            state,
+                            StepPhase.Main,
+                            plan.Actions,
+                            stopOnShortCircuit: true,
+                            pendingFailure);
+                    }
+                }
+                finally
+                {
+                    pendingFailure = ExecuteActions(
+                        state,
+                        StepPhase.Post,
+                        plan.PostActions,
+                        stopOnShortCircuit: false,
+                        pendingFailure);
                 }
             }
             finally
             {
-                long elapsedNanos = NanoTime.GetElapsedNanos(actionStartTimestamp, Stopwatch.GetTimestamp());
-                control.RecordTiming(elapsedNanos, actionSucceeded);
+                long elapsedNanos = NanoTime.GetElapsedNanos(
+                    runStartTimestamp,
+                    Stopwatch.GetTimestamp());
+                Notify(() => plan.Observer.OnPipelineCompleted(
+                    plan.PipelineName,
+                    state.ShortCircuited,
+                    state.Errors().Count,
+                    elapsedNanos));
             }
 
-            if (stopOnShortCircuit && control.IsShortCircuited())
+            if (pendingFailure is not null)
             {
-                break;
+                throw pendingFailure;
             }
-        }
-        return contextValue;
-    }
-
-    private static string FormatStepName(StepPhase phase, int index, string labelOrEmpty)
-    {
-        string prefix = "s";
-        if (phase == StepPhase.Pre)
-        {
-            prefix = "pre";
-        }
-        else if (phase == StepPhase.Post)
-        {
-            prefix = "post";
+            return state;
         }
 
-        if (string.IsNullOrWhiteSpace(labelOrEmpty))
+        private static Exception? ExecuteActions(
+            ExecutionState state,
+            StepPhase phase,
+            IReadOnlyList<RegisteredAction> registeredActions,
+            bool stopOnShortCircuit,
+            Exception? initialFailure)
         {
-            return prefix + index;
-        }
-        return prefix + index + ":" + labelOrEmpty;
-    }
-
-    private static ContextType DefaultOnError(ContextType contextValue, PipelineError error)
-    {
-        if (error == null)
-        {
-            return contextValue;
-        }
-        return contextValue;
-    }
-
-    private sealed class UnaryActionAdapter : StepAction<ContextType>
-    {
-        private readonly Func<ContextType, ContextType> unaryAction;
-
-        public UnaryActionAdapter(Func<ContextType, ContextType> unaryAction)
-        {
-            this.unaryAction = unaryAction ?? throw new ArgumentNullException(nameof(unaryAction));
-        }
-
-        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
-        {
-            return unaryAction(contextValue);
-        }
-    }
-
-    private sealed class StepActionAdapter : StepAction<ContextType>
-    {
-        private readonly Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction;
-
-        public StepActionAdapter(Func<ContextType, ActionControl<ContextType>, ContextType> actionFunction)
-        {
-            this.actionFunction = actionFunction ?? throw new ArgumentNullException(nameof(actionFunction));
-        }
-
-        public ContextType Apply(ContextType contextValue, ActionControl<ContextType> control)
-        {
-            return actionFunction(contextValue, control);
-        }
-    }
-
-    private readonly struct RegisteredAction
-    {
-        public RegisteredAction(string name, StepAction<ContextType> action)
-        {
-            Name = name ?? "";
-            Action = action ?? throw new ArgumentNullException(nameof(action));
-        }
-
-        public string Name { get; }
-
-        public StepAction<ContextType> Action { get; }
-    }
-
-    private sealed class DefaultActionControl : ActionControl<ContextType>
-    {
-        private readonly string pipelineName;
-        private readonly OnErrorHandler<ContextType> onErrorHandler;
-
-        private readonly List<PipelineError> errors;
-        private readonly List<ActionTiming> actionTimings;
-
-        private bool shortCircuited;
-        private StepPhase phase;
-        private int index;
-        private string stepName;
-        private long runStartNanos;
-
-        public DefaultActionControl(string pipelineName, OnErrorHandler<ContextType> onErrorHandler)
-        {
-            this.pipelineName = pipelineName ?? throw new ArgumentNullException(nameof(pipelineName));
-            this.onErrorHandler = onErrorHandler ?? throw new ArgumentNullException(nameof(onErrorHandler));
-
-            errors = new List<PipelineError>();
-            actionTimings = new List<ActionTiming>();
-            shortCircuited = false;
-            phase = StepPhase.Main;
-            index = 0;
-            stepName = "?";
-            runStartNanos = 0L;
-        }
-
-        public void BeginRun(long startNanos)
-        {
-            runStartNanos = startNanos;
-        }
-
-        public void BeginStep(StepPhase phase, int index, string stepName)
-        {
-            this.phase = phase;
-            this.index = index;
-            this.stepName = stepName ?? "?";
-        }
-
-        public void RecordTiming(long elapsedNanos, bool success)
-        {
-            actionTimings.Add(new ActionTiming(phase, index, stepName, elapsedNanos, success));
-        }
-
-        public void ShortCircuit()
-        {
-            shortCircuited = true;
-        }
-
-        public bool IsShortCircuited()
-        {
-            return shortCircuited;
-        }
-
-        public ContextType RecordError(ContextType contextValue, Exception exception)
-        {
-            PipelineError error = new PipelineError(pipelineName, phase, index, stepName, exception);
-            errors.Add(error);
-
-            ContextType nextContext = onErrorHandler(contextValue, error);
-            if (nextContext is null)
+            if (initialFailure is not null && phase != StepPhase.Post)
             {
-                throw new InvalidOperationException("onError returned null");
+                return initialFailure;
             }
-            return nextContext;
+
+            Exception? pendingFailure = initialFailure;
+            for (int actionIndex = 0; actionIndex < registeredActions.Count; actionIndex++)
+            {
+                RegisteredAction registeredAction = registeredActions[actionIndex];
+                string actionName = FormatActionName(
+                    phase,
+                    actionIndex,
+                    registeredAction.Name);
+                state.BeginAction(phase, actionIndex, actionName);
+                bool wasShortCircuited = state.ShortCircuited;
+
+                Notify(() => state.Plan.Observer.OnActionStarted(
+                    state.Plan.PipelineName,
+                    phase,
+                    actionIndex,
+                    actionName));
+
+                long actionStartTimestamp = Stopwatch.GetTimestamp();
+                bool actionSucceeded = true;
+                Exception? actionFailure = null;
+                ContextType contextBeforeAction = state.Context;
+
+                try
+                {
+                    ContextType nextContext;
+                    state.BeginActionExecution();
+                    try
+                    {
+                        nextContext = registeredAction.Invoke(state.Context, state);
+                    }
+                    finally
+                    {
+                        state.EndActionExecution();
+                    }
+
+                    if (nextContext is null)
+                    {
+                        throw new InvalidOperationException(
+                            "Action returned null: " + actionName);
+                    }
+                    state.Context = nextContext;
+                }
+                catch (InvalidErrorHandlerException invalidHandler)
+                {
+                    actionSucceeded = false;
+                    actionFailure = invalidHandler.ActionException;
+                    pendingFailure ??= invalidHandler;
+                    state.RequestShortCircuit();
+                    state.Context = contextBeforeAction;
+                }
+                catch (Exception exception)
+                {
+                    actionSucceeded = false;
+                    actionFailure = exception;
+                    try
+                    {
+                        state.Context = state.HandleActionFailure(
+                            contextBeforeAction,
+                            exception);
+                    }
+                    catch (InvalidErrorHandlerException invalidHandler)
+                    {
+                        pendingFailure ??= invalidHandler;
+                        state.RequestShortCircuit();
+                        state.Context = contextBeforeAction;
+                    }
+
+                    if (state.Plan.ShortCircuitOnException)
+                    {
+                        state.RequestShortCircuit();
+                    }
+                }
+
+                long elapsedNanos = NanoTime.GetElapsedNanos(
+                    actionStartTimestamp,
+                    Stopwatch.GetTimestamp());
+                state.RecordTiming(elapsedNanos, actionSucceeded);
+
+                if (actionSucceeded)
+                {
+                    Notify(() => state.Plan.Observer.OnActionCompleted(
+                        state.Plan.PipelineName,
+                        phase,
+                        actionIndex,
+                        actionName,
+                        elapsedNanos));
+                }
+                else
+                {
+                    Exception reportedFailure = actionFailure
+                        ?? new InvalidOperationException("Unknown Action failure");
+                    Notify(() => state.Plan.Observer.OnActionFailed(
+                        state.Plan.PipelineName,
+                        phase,
+                        actionIndex,
+                        actionName,
+                        reportedFailure,
+                        elapsedNanos));
+                }
+
+                if (!wasShortCircuited && state.ShortCircuited)
+                {
+                    Notify(() => state.Plan.Observer.OnShortCircuited(
+                        state.Plan.PipelineName,
+                        phase,
+                        actionIndex,
+                        actionName));
+                }
+
+                if (pendingFailure is not null && phase != StepPhase.Post)
+                {
+                    break;
+                }
+                if (stopOnShortCircuit && state.ShortCircuited)
+                {
+                    break;
+                }
+            }
+            return pendingFailure;
         }
 
-        public IReadOnlyList<PipelineError> Errors()
+        private static string FormatActionName(
+            StepPhase phase,
+            int actionIndex,
+            string registeredName)
         {
-            return errors.AsReadOnly();
+            string prefix = phase switch
+            {
+                StepPhase.Pre => "pre",
+                StepPhase.Post => "post",
+                _ => "s"
+            };
+            return string.IsNullOrWhiteSpace(registeredName)
+                ? prefix + actionIndex
+                : prefix + actionIndex + ":" + registeredName;
         }
 
-        public string PipelineName()
+        private static void Notify(System.Action callback)
         {
-            return pipelineName;
-        }
-
-        public long RunStartNanos()
-        {
-            return runStartNanos;
-        }
-
-        public IReadOnlyList<ActionTiming> ActionTimings()
-        {
-            return actionTimings.AsReadOnly();
+            try
+            {
+                callback();
+            }
+            catch
+            {
+                // Observers cannot change Pipeline semantics.
+            }
         }
     }
 }
