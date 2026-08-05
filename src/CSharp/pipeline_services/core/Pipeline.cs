@@ -285,12 +285,17 @@ public class Pipeline<ContextType>
 
     private delegate ContextType ActionInvoker(ContextType context, ExecutionState state);
 
-    private sealed record RegisteredAction(string Name, ActionInvoker Invoke)
+    private sealed class RegisteredAction
     {
         internal RegisteredAction(string? name, ActionInvoker invoke)
-            : this(string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim(), invoke)
         {
+            Name = string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim();
+            Invoke = invoke ?? throw new ArgumentNullException(nameof(invoke));
         }
+
+        internal string Name { get; }
+
+        internal ActionInvoker Invoke { get; }
     }
 
     private sealed record PipelinePlan(
