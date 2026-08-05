@@ -22,7 +22,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .phase35/patch.part.* | base64 -d | gzip -dc > /tmp/phase35.patch
+          cat .phase35/plain.part.* > /tmp/phase35.patch
+          printf '%s  %s\n' '721e79203e45b3617ac884acb1f166528c0807d0189198d4554105f79d3796dc' /tmp/phase35.patch | sha256sum -c -
           git apply --check /tmp/phase35.patch
           git apply /tmp/phase35.patch
           rm -rf .phase35
