@@ -1,26 +1,25 @@
-import { ActionControl, Pipeline } from "../../index.js";
+import { Pipeline, shortCircuit } from "../../index.js";
 import { normalize_whitespace, strip } from "./text_steps.js";
 
-async function truncate_at_280(text_value: unknown, control: ActionControl): Promise<string> {
-  const text_string = String(text_value);
-  if (text_string.length <= 280) {
-    return text_string;
+async function truncateAt280(textValue: string): Promise<string> {
+  if (textValue.length <= 280) {
+    return textValue;
   }
-  control.short_circuit();
-  return text_string.slice(0, 280);
+  shortCircuit();
+  return textValue.slice(0, 280);
 }
 
 async function main(): Promise<void> {
-  const pipeline = new Pipeline("example01_text_clean", true);
-  pipeline.add_action(strip);
-  pipeline.add_action(normalize_whitespace);
-  pipeline.add_action_named("truncate", truncate_at_280);
+  const pipeline = new Pipeline<string>("example01_text_clean", true)
+    .addAction(strip)
+    .addAction(normalize_whitespace)
+    .addAction(truncateAt280, "truncate");
 
-  const result = await pipeline.run("  Hello   World  ");
+  const result = await pipeline.runDetailed("  Hello   World  ");
   // eslint-disable-next-line no-console
   console.log("output=", result.context);
   // eslint-disable-next-line no-console
-  console.log("shortCircuited=", result.short_circuited);
+  console.log("shortCircuited=", result.shortCircuited);
   // eslint-disable-next-line no-console
   console.log("errors=", result.errors.length);
 }
