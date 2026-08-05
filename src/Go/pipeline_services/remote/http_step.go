@@ -57,10 +57,6 @@ func (defaults RemoteDefaults) ResolveEndpoint(endpointOrPath string) string {
 }
 
 func (defaults RemoteDefaults) MergeHeaders(overrides map[string]string) map[string]string {
-	if len(overrides) == 0 {
-		return copyHeaders(defaults.Headers)
-	}
-
 	merged := copyHeaders(defaults.Headers)
 	for key, value := range overrides {
 		merged[key] = value
@@ -69,7 +65,7 @@ func (defaults RemoteDefaults) MergeHeaders(overrides map[string]string) map[str
 }
 
 func (defaults RemoteDefaults) SpecString(endpointOrPath string) RemoteSpec[string] {
-	spec := RemoteSpec[string]{
+	return RemoteSpec[string]{
 		Endpoint:      defaults.ResolveEndpoint(endpointOrPath),
 		TimeoutMillis: defaults.TimeoutMillis,
 		Retries:       defaults.Retries,
@@ -77,11 +73,10 @@ func (defaults RemoteDefaults) SpecString(endpointOrPath string) RemoteSpec[stri
 		ToJson:        defaultToJsonString,
 		FromJson:      defaultFromJsonString,
 	}
-	return spec
 }
 
 func Spec[ContextType any](defaults RemoteDefaults, endpointOrPath string) RemoteSpec[ContextType] {
-	spec := RemoteSpec[ContextType]{
+	return RemoteSpec[ContextType]{
 		Endpoint:      defaults.ResolveEndpoint(endpointOrPath),
 		TimeoutMillis: defaults.TimeoutMillis,
 		Retries:       defaults.Retries,
@@ -89,44 +84,38 @@ func Spec[ContextType any](defaults RemoteDefaults, endpointOrPath string) Remot
 		ToJson:        defaultToJson[ContextType],
 		FromJson:      defaultFromJson[ContextType],
 	}
-	return spec
 }
 
-func JsonPost[ContextType any](spec RemoteSpec[ContextType]) core.StepAction[ContextType] {
-	return httpStepAction[ContextType]{spec: spec, method: "POST"}
+func JsonPost[ContextType any](spec RemoteSpec[ContextType]) core.Action[ContextType] {
+	return func(context ContextType) (ContextType, error) {
+		return Invoke(spec, "POST", context)
+	}
 }
 
-func JsonGet[ContextType any](spec RemoteSpec[ContextType]) core.StepAction[ContextType] {
-	return httpStepAction[ContextType]{spec: spec, method: "GET"}
+func JsonGet[ContextType any](spec RemoteSpec[ContextType]) core.Action[ContextType] {
+	return func(context ContextType) (ContextType, error) {
+		return Invoke(spec, "GET", context)
+	}
 }
 
-type httpStepAction[ContextType any] struct {
-	spec   RemoteSpec[ContextType]
-	method string
-}
-
-func (action httpStepAction[ContextType]) Apply(
-	ctx ContextType,
-	control core.ActionControl[ContextType],
+func Invoke[ContextType any](
+	spec RemoteSpec[ContextType],
+	method string,
+	context ContextType,
 ) (ContextType, error) {
-	markUsed(control)
-	return Invoke(action.spec, action.method, ctx)
-}
-
-func Invoke[ContextType any](spec RemoteSpec[ContextType], method string, ctx ContextType) (ContextType, error) {
 	if spec.Endpoint == "" {
-		return ctx, errors.New("RemoteSpec.Endpoint is required")
+		return context, errors.New("RemoteSpec.Endpoint is required")
 	}
 	if spec.ToJson == nil {
-		return ctx, errors.New("RemoteSpec.ToJson is required")
+		return context, errors.New("RemoteSpec.ToJson is required")
 	}
 	if spec.FromJson == nil {
-		return ctx, errors.New("RemoteSpec.FromJson is required")
+		return context, errors.New("RemoteSpec.FromJson is required")
 	}
 
-	bodyText, bodyError := spec.ToJson(ctx)
+	bodyText, bodyError := spec.ToJson(context)
 	if bodyError != nil {
-		return ctx, bodyError
+		return context, bodyError
 	}
 
 	resolvedEndpoint := spec.Endpoint
@@ -134,37 +123,37 @@ func Invoke[ContextType any](spec RemoteSpec[ContextType], method string, ctx Co
 		resolvedEndpoint = withQuery(resolvedEndpoint, bodyText)
 	}
 
-	timeoutDuration := time.Duration(spec.TimeoutMillis) * time.Millisecond
-	client := &http.Client{Timeout: timeoutDuration}
-
-	lastError := error(nil)
-	attemptIndex := 0
-	for attemptIndex <= spec.Retries {
-		responseBody, statusCode, requestError := doRequest(client, resolvedEndpoint, method, bodyText, spec.Headers)
+	client := &http.Client{Timeout: time.Duration(spec.TimeoutMillis) * time.Millisecond}
+	var lastError error
+	for attemptIndex := 0; attemptIndex <= spec.Retries; attemptIndex++ {
+		responseBody, statusCode, requestError := doRequest(
+			client,
+			resolvedEndpoint,
+			method,
+			bodyText,
+			spec.Headers,
+		)
 		if requestError != nil {
 			lastError = requestError
-			attemptIndex += 1
 			continue
 		}
 		if statusCode < 200 || statusCode >= 300 {
 			lastError = fmt.Errorf("HTTP %d body=%s", statusCode, responseBody)
-			attemptIndex += 1
 			continue
 		}
 
-		nextCtx, parseError := spec.FromJson(ctx, responseBody)
+		nextContext, parseError := spec.FromJson(context, responseBody)
 		if parseError != nil {
 			lastError = parseError
-			attemptIndex += 1
 			continue
 		}
-		return nextCtx, nil
+		return nextContext, nil
 	}
 
 	if lastError == nil {
 		lastError = errors.New("unknown HTTP error")
 	}
-	return ctx, lastError
+	return context, lastError
 }
 
 func doRequest(
@@ -183,7 +172,6 @@ func doRequest(
 	if requestError != nil {
 		return "", 0, requestError
 	}
-
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
@@ -199,7 +187,6 @@ func doRequest(
 	if readError != nil {
 		return "", 0, readError
 	}
-
 	return string(responseBytes), response.StatusCode, nil
 }
 
@@ -225,8 +212,8 @@ func defaultToJsonString(value string) (string, error) {
 	return value, nil
 }
 
-func defaultFromJsonString(ctx string, responseBody string) (string, error) {
-	markUsed(ctx)
+func defaultFromJsonString(context string, responseBody string) (string, error) {
+	_ = context
 	return responseBody, nil
 }
 
@@ -238,18 +225,12 @@ func defaultToJson[ContextType any](value ContextType) (string, error) {
 	return string(jsonBytes), nil
 }
 
-func defaultFromJson[ContextType any](ctx ContextType, responseBody string) (ContextType, error) {
-	markUsed(ctx)
+func defaultFromJson[ContextType any](context ContextType, responseBody string) (ContextType, error) {
+	_ = context
 	var output ContextType
 	unmarshalError := json.Unmarshal([]byte(responseBody), &output)
 	if unmarshalError != nil {
 		return output, unmarshalError
 	}
 	return output, nil
-}
-
-func markUsed(value any) {
-	if value == nil {
-		return
-	}
 }
