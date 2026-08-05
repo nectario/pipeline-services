@@ -1,11 +1,11 @@
 import { PipelineJsonLoader, PipelineRegistry } from "../../index.js";
 
 async function main(): Promise<void> {
-  const json_text = `
+  const jsonText = `
 {
   "pipeline": "example04_json_loader_remote_get",
   "type": "unary",
-  "steps": [
+  "actions": [
     {
       "name": "remote_get_fixture",
       "$remote": {
@@ -19,12 +19,13 @@ async function main(): Promise<void> {
 }
 `;
 
-  const registry = new PipelineRegistry();
-  const loader = new PipelineJsonLoader();
-  const pipeline = loader.load_str(json_text, registry);
-  const result = await pipeline.run("ignored");
+  const pipeline = new PipelineJsonLoader().load_str(
+    jsonText,
+    new PipelineRegistry(),
+  );
+  const output = await pipeline.run("ignored");
   // eslint-disable-next-line no-console
-  console.log(result.context);
+  console.log(String(output));
 }
 
 void main();
