@@ -202,6 +202,11 @@ export function nowNs(): bigint {
   return process.hrtime.bigint();
 }
 
+/** @deprecated Use nowNs(). */
+export function now_ns(): bigint {
+  return nowNs();
+}
+
 function currentState<ContextType>(): ExecutionState<ContextType> {
   const stack = executionStorage.getStore();
   if (stack == null || stack.length === 0) {
@@ -704,12 +709,28 @@ export class Pipeline<ContextType = unknown> {
   }
 
   addPreAction(
+    action: Action<ContextType>,
+    name?: string | null,
+  ): this;
+  addPreAction(
+    action: StepAction<ContextType>,
+    name?: string | null,
+  ): this;
+  addPreAction(
     action: Action<ContextType> | StepAction<ContextType>,
     name: string | null = null,
   ): this {
     return this.register(this.mutablePreActions, name, action);
   }
 
+  addAction(
+    action: Action<ContextType>,
+    name?: string | null,
+  ): this;
+  addAction(
+    action: StepAction<ContextType>,
+    name?: string | null,
+  ): this;
   addAction(
     action: Action<ContextType> | StepAction<ContextType>,
     name: string | null = null,
@@ -718,6 +739,14 @@ export class Pipeline<ContextType = unknown> {
   }
 
   addPostAction(
+    action: Action<ContextType>,
+    name?: string | null,
+  ): this;
+  addPostAction(
+    action: StepAction<ContextType>,
+    name?: string | null,
+  ): this;
+  addPostAction(
     action: Action<ContextType> | StepAction<ContextType>,
     name: string | null = null,
   ): this {
@@ -725,36 +754,36 @@ export class Pipeline<ContextType = unknown> {
   }
 
   add_pre_action(action: Action<ContextType> | StepAction<ContextType>): this {
-    return this.addPreAction(action);
+    return this.addPreAction(action as Action<ContextType>);
   }
 
   add_action(action: Action<ContextType> | StepAction<ContextType>): this {
-    return this.addAction(action);
+    return this.addAction(action as Action<ContextType>);
   }
 
   add_post_action(action: Action<ContextType> | StepAction<ContextType>): this {
-    return this.addPostAction(action);
+    return this.addPostAction(action as Action<ContextType>);
   }
 
   add_pre_action_named(
     name: string,
     action: Action<ContextType> | StepAction<ContextType>,
   ): this {
-    return this.addPreAction(action, name);
+    return this.register(this.mutablePreActions, name, action);
   }
 
   add_action_named(
     name: string,
     action: Action<ContextType> | StepAction<ContextType>,
   ): this {
-    return this.addAction(action, name);
+    return this.register(this.mutableActions, name, action);
   }
 
   add_post_action_named(
     name: string,
     action: Action<ContextType> | StepAction<ContextType>,
   ): this {
-    return this.addPostAction(action, name);
+    return this.register(this.mutablePostActions, name, action);
   }
 
   shortCircuit(): void {
