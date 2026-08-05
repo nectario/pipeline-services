@@ -1,0 +1,172 @@
+diff --git a/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs b/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs
+--- a/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs
++++ b/src/CSharp/pipeline_services/config/PipelineJsonLoader.cs
+@@ -380,10 +380,9 @@ public sealed class PipelineJsonLoader
+     private static bool SpecContainsPromptSteps(JsonElement root)
+     {
+         string[] sections = new[]
+         {
+-            "preActions", "pre",
+-            "actions", "steps",
+-            "postActions", "post"
++            root.TryGetProperty("preActions", out _) ? "preActions" : "pre",
++            root.TryGetProperty("actions", out _) ? "actions" : "steps",
++            root.TryGetProperty("postActions", out _) ? "postActions" : "post"
+         };
+         foreach (string sectionName in sections)
+         {
+diff --git a/src/CSharp/pipeline_services_tests/JsonLoaderTests.cs b/src/CSharp/pipeline_services_tests/JsonLoaderTests.cs
+--- a/src/CSharp/pipeline_services_tests/JsonLoaderTests.cs
++++ b/src/CSharp/pipeline_services_tests/JsonLoaderTests.cs
+@@ -102,6 +102,28 @@ public sealed class JsonLoaderTests
+ 
+         Assert.Contains("$prompt", exception.Message, StringComparison.Ordinal);
+     }
++
++    [Theory]
++    [InlineData("preActions", "pre")]
++    [InlineData("actions", "steps")]
++    [InlineData("postActions", "post")]
++    public void CanonicalSectionSuppressesPromptInLegacyAlias(
++        string canonicalSectionName,
++        string legacySectionName)
++    {
++        PipelineRegistry<string> registry = new PipelineRegistry<string>();
++        registry.RegisterUnary("identity", value => value);
++        string jsonText =
++            "{\"pipeline\":\"t\",\"" + canonicalSectionName +
++            "\":[{\"$local\":\"identity\"}],\"" + legacySectionName +
++            "\":[{\"$prompt\":\"ignored\"}]}";
++
++        Pipeline<string> pipeline =
++            new PipelineJsonLoader().LoadString(jsonText, registry);
++
++        Assert.Equal("X", pipeline.Run("X"));
++    }
+ 
+     private static string Strip(string value)
+     {
+diff --git a/src/Cpp/pipeline_services/config/json_loader.hpp b/src/Cpp/pipeline_services/config/json_loader.hpp
+--- a/src/Cpp/pipeline_services/config/json_loader.hpp
++++ b/src/Cpp/pipeline_services/config/json_loader.hpp
+@@ -116,8 +116,10 @@ inline remote::RemoteSpec<std::string> parse_remote_spec(
+ }
+ 
+ inline bool specContainsPromptSteps(const nlohmann::json& spec_value) {
+   for (const std::string section_name : {
+-         "preActions", "pre", "actions", "steps", "postActions", "post"}) {
++         spec_value.contains("preActions") ? std::string("preActions") : std::string("pre"),
++         spec_value.contains("actions") ? std::string("actions") : std::string("steps"),
++         spec_value.contains("postActions") ? std::string("postActions") : std::string("post")}) {
+     if (!spec_value.contains(section_name)) {
+       continue;
+     }
+diff --git a/src/Cpp/tests/vnext_pipeline_test.cpp b/src/Cpp/tests/vnext_pipeline_test.cpp
+--- a/src/Cpp/tests/vnext_pipeline_test.cpp
++++ b/src/Cpp/tests/vnext_pipeline_test.cpp
+@@ -9,9 +9,11 @@
+ #include <thread>
+ #include <vector>
+ 
++#include "pipeline_services/config/json_loader.hpp"
+ #include "pipeline_services/core/pipeline.hpp"
+ #include "pipeline_services/core/pipeline_provider.hpp"
+ #include "pipeline_services/core/pipeline_router.hpp"
++#include "pipeline_services/core/registry.hpp"
+ 
+ namespace {
+ 
+@@ -19,6 +21,8 @@ using pipeline_services::PipelineObserver;
+ using pipeline_services::PipelineProvider;
+ using pipeline_services::PipelineProviderMode;
+ using pipeline_services::PipelineRouter;
++using pipeline_services::config::PipelineJsonLoader;
++using pipeline_services::core::PipelineRegistry;
+ using pipeline_services::StepPhase;
+ using pipeline_services::shortCircuit;
+ 
+@@ -252,6 +256,31 @@ void testProviderAndRouter() {
+   assert(router.getPipelineProvider("QUOTE") == quote);
+ }
++
++void assertCanonicalSectionSuppressesLegacyPrompt(
++    const std::string& canonicalSection,
++    const std::string& legacySection) {
++  PipelineRegistry<std::string> registry;
++  registry.registerAction(
++      "identity",
++      [](std::string value) { return value; });
++  const std::string json =
++      "{\"pipeline\":\"json\",\"" + canonicalSection +
++      "\":[{\"$local\":\"identity\"}],\"" + legacySection +
++      "\":[{\"$prompt\":\"ignored\"}]}";
++
++  PipelineJsonLoader loader;
++  auto pipeline = loader.load_str(json, registry);
++  assert(pipeline.run("X") == "X");
++}
++
++void testCanonicalSectionsSuppressLegacyPromptAliases() {
++  assertCanonicalSectionSuppressesLegacyPrompt("preActions", "pre");
++  assertCanonicalSectionSuppressesLegacyPrompt("actions", "steps");
++  assertCanonicalSectionSuppressesLegacyPrompt("postActions", "post");
++}
+ 
+ }  // namespace
+ 
+@@ -264,4 +293,5 @@ int main() {
+   testNestedAndConcurrentIsolation();
+   testFreezeAndObserverIsolation();
+   testProviderAndRouter();
++  testCanonicalSectionsSuppressLegacyPromptAliases();
+ }
+diff --git a/src/typescript/src/pipeline_services/config/json_loader.ts b/src/typescript/src/pipeline_services/config/json_loader.ts
+--- a/src/typescript/src/pipeline_services/config/json_loader.ts
++++ b/src/typescript/src/pipeline_services/config/json_loader.ts
+@@ -300,12 +300,9 @@ function specContainsPromptActions(spec: unknown): boolean {
+   }
+   const specObject = spec as Record<string, unknown>;
+   for (const sectionName of [
+-    "preActions",
+-    "pre",
+-    "actions",
+-    "steps",
+-    "postActions",
+-    "post",
++    specObject["preActions"] != null ? "preActions" : "pre",
++    specObject["actions"] != null ? "actions" : "steps",
++    specObject["postActions"] != null ? "postActions" : "post",
+   ]) {
+     const nodes = specObject[sectionName];
+     if (!Array.isArray(nodes)) {
+diff --git a/src/typescript/tests/pipeline.test.ts b/src/typescript/tests/pipeline.test.ts
+--- a/src/typescript/tests/pipeline.test.ts
++++ b/src/typescript/tests/pipeline.test.ts
+@@ -286,6 +286,31 @@ test("JSON loader accepts canonical vocabulary", async () => {
+   assert.equal(await pipeline.run("ok"), "ok");
+ });
++
++test("canonical JSON sections suppress prompt directives in legacy aliases", async () => {
++  const registry = new PipelineRegistry();
++  registry.register_unary("identity", identityAction);
++  const sectionPairs: ReadonlyArray<readonly [string, string]> = [
++    ["preActions", "pre"],
++    ["actions", "steps"],
++    ["postActions", "post"],
++  ];
++
++  for (const [canonicalSection, legacySection] of sectionPairs) {
++    const pipeline = new PipelineJsonLoader().load_str(
++      JSON.stringify({
++        pipeline: "json",
++        [canonicalSection]: [{ $local: "identity" }],
++        [legacySection]: [{ $prompt: "ignored" }],
++      }),
++      registry,
++    );
++
++    assert.equal(await pipeline.run("ok"), "ok");
++  }
++});
+ 
+ const remoteFixtureBody = "Hello from remote fixture\n";
