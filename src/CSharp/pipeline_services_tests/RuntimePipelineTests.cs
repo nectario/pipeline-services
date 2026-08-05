@@ -48,8 +48,7 @@ public sealed class RuntimePipelineTests
         runtimePipeline.AddAction(Upper);
         Pipeline<string> frozen = runtimePipeline.Freeze();
 
-        PipelineResult<string> result = frozen.Run("hi");
-        Assert.Equal("HI", result.Context);
+        Assert.Equal("HI", frozen.Run("hi"));
     }
 
     private static string Upper(string value)
