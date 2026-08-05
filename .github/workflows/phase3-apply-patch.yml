@@ -3,7 +3,7 @@ name: phase3-apply-patch
 on:
   pull_request:
     paths:
-      - .phase3/apply.patch
+      - .phase3/apply.patch.gz.b64
 
 permissions:
   contents: write
@@ -16,19 +16,21 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
-      - name: Apply and commit Phase 3 patch
+      - name: Decode, apply, and commit Phase 3 patch
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -f .phase3/apply.patch ]]; then
-            echo "No patch file present; nothing to apply."
+          payload=.phase3/apply.patch.gz.b64
+          if [[ ! -f "$payload" ]]; then
+            echo "No patch payload present; nothing to apply."
             exit 0
           fi
-          git apply --check .phase3/apply.patch
-          git apply .phase3/apply.patch
-          rm .phase3/apply.patch
+          base64 --decode "$payload" | gzip --decompress > /tmp/phase3.patch
+          git apply --check /tmp/phase3.patch
+          git apply /tmp/phase3.patch
+          rm "$payload"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "refactor(polyglot): apply Phase 3 integration fixes"
+          git commit -m "refactor(mojo): complete stable Phase 3 port"
           git push origin HEAD:${{ github.head_ref }}
