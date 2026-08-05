@@ -1,52 +1,42 @@
-use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
 use crate::core::pipeline::{
-  default_on_error, format_step_name, safe_panic_to_string, ActionControl, OnErrorFn, Pipeline, PipelineError,
-  RegisteredAction, RegisteredActionKind,
+  default_on_error, ActionControl, OnErrorFn, Pipeline, PipelineError, PipelineResult, RegisteredAction,
+  RegisteredActionKind,
 };
 
-pub struct RuntimePipeline<ContextType> {
+#[deprecated(note = "Construct a Pipeline directly.")]
+pub struct RuntimePipeline<ContextType>
+where
+  ContextType: Clone + 'static,
+{
   pub name: String,
   pub short_circuit_on_exception: bool,
   pub on_error: OnErrorFn<ContextType>,
-
   ended: bool,
   current: Option<ContextType>,
-
   pre_actions: Vec<RegisteredAction<ContextType>>,
   actions: Vec<RegisteredAction<ContextType>>,
   post_actions: Vec<RegisteredAction<ContextType>>,
-
-  pre_index: usize,
-  action_index: usize,
-  post_index: usize,
-
-  control: ActionControl<ContextType>,
+  pub last_result: Option<PipelineResult<ContextType>>,
 }
 
+#[allow(deprecated)]
 impl<ContextType> RuntimePipeline<ContextType>
 where
   ContextType: Clone + 'static,
 {
   pub fn new(name: impl Into<String>, short_circuit_on_exception: bool, initial: ContextType) -> Self {
-    let name_value = name.into();
-    let on_error: OnErrorFn<ContextType> = Arc::new(default_on_error);
-    let control = ActionControl::new(name_value.clone(), on_error.clone());
-
     Self {
-      name: name_value,
+      name: name.into(),
       short_circuit_on_exception,
-      on_error,
+      on_error: Arc::new(default_on_error),
       ended: false,
       current: Some(initial),
       pre_actions: Vec::new(),
       actions: Vec::new(),
       post_actions: Vec::new(),
-      pre_index: 0,
-      action_index: 0,
-      post_index: 0,
-      control,
+      last_result: None,
     }
   }
 
@@ -57,7 +47,25 @@ where
   pub fn reset(&mut self, value: ContextType) {
     self.current = Some(value);
     self.ended = false;
-    self.control.reset();
+    self.last_result = None;
+  }
+
+  pub fn clear_recorded(&mut self) {
+    self.pre_actions.clear();
+    self.actions.clear();
+    self.post_actions.clear();
+  }
+
+  pub fn recorded_pre_action_count(&self) -> usize {
+    self.pre_actions.len()
+  }
+
+  pub fn recorded_action_count(&self) -> usize {
+    self.actions.len()
+  }
+
+  pub fn recorded_post_action_count(&self) -> usize {
+    self.post_actions.len()
   }
 
   pub fn on_error_handler<ErrorHandler>(&mut self, handler: ErrorHandler)
@@ -65,82 +73,68 @@ where
     ErrorHandler: Fn(ContextType, PipelineError) -> ContextType + Send + Sync + 'static,
   {
     self.on_error = Arc::new(handler);
-    self.control.on_error = self.on_error.clone();
   }
 
   pub fn add_pre_action<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
     ActionFn: Fn(ContextType) -> ContextType + Send + Sync + 'static,
   {
-    let registered_action = RegisteredAction {
-      name: "".to_string(),
-      kind: RegisteredActionKind::Unary(Arc::new(action)),
+    let registered = RegisteredAction {
+      name: String::new(),
+      kind: RegisteredActionKind::Action(Arc::new(action)),
     };
-    self.pre_actions.push(registered_action.clone());
-    let index_value = self.pre_index;
-    self.pre_index += 1;
-    let output_value = self.apply_action(registered_action, "pre", index_value);
-    output_value
+    self.pre_actions.push(registered.clone());
+    self.apply_registered("preActions", registered)
   }
 
   pub fn add_action<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
     ActionFn: Fn(ContextType) -> ContextType + Send + Sync + 'static,
   {
-    let registered_action = RegisteredAction {
-      name: "".to_string(),
-      kind: RegisteredActionKind::Unary(Arc::new(action)),
+    let registered = RegisteredAction {
+      name: String::new(),
+      kind: RegisteredActionKind::Action(Arc::new(action)),
     };
-    self.actions.push(registered_action.clone());
-    let index_value = self.action_index;
-    self.action_index += 1;
-    let output_value = self.apply_action(registered_action, "main", index_value);
-    output_value
+    self.actions.push(registered.clone());
+    self.apply_registered("actions", registered)
   }
 
+  #[deprecated(note = "Use a one-argument Action and short_circuit().")]
   pub fn add_action_control<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
     ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
-    let registered_action = RegisteredAction {
-      name: "".to_string(),
+    let registered = RegisteredAction {
+      name: String::new(),
       kind: RegisteredActionKind::StepAction(Arc::new(action)),
     };
-    self.actions.push(registered_action.clone());
-    let index_value = self.action_index;
-    self.action_index += 1;
-    let output_value = self.apply_action(registered_action, "main", index_value);
-    output_value
+    self.actions.push(registered.clone());
+    self.apply_registered("actions", registered)
   }
 
   pub fn add_post_action<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
     ActionFn: Fn(ContextType) -> ContextType + Send + Sync + 'static,
   {
-    let registered_action = RegisteredAction {
-      name: "".to_string(),
-      kind: RegisteredActionKind::Unary(Arc::new(action)),
+    let registered = RegisteredAction {
+      name: String::new(),
+      kind: RegisteredActionKind::Action(Arc::new(action)),
     };
-    self.post_actions.push(registered_action.clone());
-    let index_value = self.post_index;
-    self.post_index += 1;
-    let output_value = self.apply_action(registered_action, "post", index_value);
-    output_value
+    self.post_actions.push(registered.clone());
+    self.apply_registered("postActions", registered)
   }
 
+  #[deprecated(note = "Use a one-argument Action and short_circuit().")]
   pub fn add_post_action_control<ActionFn>(&mut self, action: ActionFn) -> Option<&ContextType>
   where
     ActionFn: Fn(ContextType, &mut ActionControl<ContextType>) -> ContextType + Send + Sync + 'static,
   {
-    let registered_action = RegisteredAction {
-      name: "".to_string(),
+    let registered = RegisteredAction {
+      name: String::new(),
       kind: RegisteredActionKind::StepAction(Arc::new(action)),
     };
-    self.post_actions.push(registered_action.clone());
-    let index_value = self.post_index;
-    self.post_index += 1;
-    let output_value = self.apply_action(registered_action, "post", index_value);
-    output_value
+    self.post_actions.push(registered.clone());
+    self.apply_registered("postActions", registered)
   }
 
   pub fn freeze(&self) -> Pipeline<ContextType> {
@@ -149,75 +143,39 @@ where
 
   pub fn to_immutable(&self) -> Pipeline<ContextType> {
     let mut pipeline = Pipeline::new(self.name.clone(), self.short_circuit_on_exception);
-    pipeline.on_error = self.on_error.clone();
-    pipeline.pre_actions = self.pre_actions.clone();
-    pipeline.actions = self.actions.clone();
-    pipeline.post_actions = self.post_actions.clone();
+    let error_handler = self.on_error.clone();
+    pipeline.on_error_handler(move |context, error| error_handler(context, error));
+    for action in &self.pre_actions {
+      pipeline.add_registered_pre_action(action.clone());
+    }
+    for action in &self.actions {
+      pipeline.add_registered_action(action.clone());
+    }
+    for action in &self.post_actions {
+      pipeline.add_registered_post_action(action.clone());
+    }
+    pipeline.freeze();
     pipeline
   }
 
-  fn apply_action(
-    &mut self,
-    registered_action: RegisteredAction<ContextType>,
-    phase: &str,
-    index: usize,
-  ) -> Option<&ContextType> {
+  fn apply_registered(&mut self, phase: &str, registered: RegisteredAction<ContextType>) -> Option<&ContextType> {
     if self.ended {
       return self.current.as_ref();
     }
-
-    let current_value = match self.current.take() {
-      Some(value) => value,
-      None => return None,
-    };
-
-    let step_name = format_step_name(phase, index, &registered_action.name);
-    self.control.begin_step(phase.to_string(), index, step_name);
-
-    match registered_action.kind {
-      RegisteredActionKind::Unary(unary_action) => {
-        let ctx_before_step = current_value.clone();
-        let call_result = std::panic::catch_unwind(AssertUnwindSafe(|| (unary_action)(current_value)));
-        match call_result {
-          Ok(output_value) => {
-            self.current = Some(output_value);
-          }
-          Err(payload) => {
-            let message = safe_panic_to_string(payload);
-            let updated = self.control.record_error(ctx_before_step, message);
-            self.current = Some(updated);
-            if self.short_circuit_on_exception {
-              self.control.short_circuit();
-              self.ended = true;
-            }
-          }
-        }
-      }
-      RegisteredActionKind::StepAction(step_action) => {
-        let ctx_before_step = current_value.clone();
-        let call_result =
-          std::panic::catch_unwind(AssertUnwindSafe(|| (step_action)(current_value, &mut self.control)));
-        match call_result {
-          Ok(output_value) => {
-            self.current = Some(output_value);
-          }
-          Err(payload) => {
-            let message = safe_panic_to_string(payload);
-            let updated = self.control.record_error(ctx_before_step, message);
-            self.current = Some(updated);
-            if self.short_circuit_on_exception {
-              self.control.short_circuit();
-              self.ended = true;
-            }
-          }
-        }
-      }
+    let input = self.current.take()?;
+    let mut pipeline = Pipeline::new(format!("{}:runtime", self.name), self.short_circuit_on_exception);
+    let error_handler = self.on_error.clone();
+    pipeline.on_error_handler(move |context, error| error_handler(context, error));
+    match phase {
+      "preActions" => pipeline.add_registered_pre_action(registered),
+      "postActions" => pipeline.add_registered_post_action(registered),
+      _ => pipeline.add_registered_action(registered),
     }
 
-    if self.control.is_short_circuited() {
-      self.ended = true;
-    }
-
+    let result = pipeline.run_detailed(input);
+    self.current = Some(result.context.clone());
+    self.ended = result.short_circuited;
+    self.last_result = Some(result);
     self.current.as_ref()
   }
 }
