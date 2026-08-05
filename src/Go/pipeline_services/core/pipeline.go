@@ -125,17 +125,15 @@ type PipelineObserver interface {
 
 type NoopPipelineObserver struct{}
 
-func (NoopPipelineObserver) OnPipelineStarted(string)                         {}
-func (NoopPipelineObserver) OnActionStarted(string, StepPhase, int, string)   {}
-func (NoopPipelineObserver) OnActionCompleted(string, StepPhase, int, string, int64) {
-}
-func (NoopPipelineObserver) OnActionFailed(string, StepPhase, int, string, error, int64) {
-}
+func (NoopPipelineObserver) OnPipelineStarted(string) {}
+func (NoopPipelineObserver) OnActionStarted(string, StepPhase, int, string) {}
+func (NoopPipelineObserver) OnActionCompleted(string, StepPhase, int, string, int64) {}
+func (NoopPipelineObserver) OnActionFailed(string, StepPhase, int, string, error, int64) {}
 func (NoopPipelineObserver) OnShortCircuited(string, StepPhase, int, string) {}
-func (NoopPipelineObserver) OnPipelineCompleted(string, bool, int, int64)    {}
+func (NoopPipelineObserver) OnPipelineCompleted(string, bool, int, int64) {}
 
 type executionSignal struct {
-	shortCircuited atomic.Bool
+	shortCircuited  atomic.Bool
 	actionExecuting atomic.Bool
 }
 
@@ -201,15 +199,15 @@ func ShortCircuit() {
 }
 
 type defaultActionControl[ContextType any] struct {
-	pipelineName  string
-	onError       OnErrorFn[ContextType]
-	errors        []PipelineError
-	actionTimings []ActionTiming
-	phase         StepPhase
-	actionIndex   int
-	actionName    string
-	runStart      time.Time
-	signal        *executionSignal
+	pipelineName   string
+	onError        OnErrorFn[ContextType]
+	errors         []PipelineError
+	actionTimings  []ActionTiming
+	phase          StepPhase
+	actionIndex    int
+	actionName     string
+	runStart       time.Time
+	signal         *executionSignal
 	collectTimings bool
 }
 
@@ -223,14 +221,14 @@ func newDefaultActionControl[ContextType any](
 		onError = DefaultOnError[ContextType]
 	}
 	return &defaultActionControl[ContextType]{
-		pipelineName: pipelineName,
-		onError: onError,
-		errors: make([]PipelineError, 0),
-		actionTimings: make([]ActionTiming, 0),
-		phase: StepPhaseMain,
-		actionName: "?",
-		runStart: time.Now(),
-		signal: signal,
+		pipelineName:   pipelineName,
+		onError:        onError,
+		errors:         make([]PipelineError, 0),
+		actionTimings:  make([]ActionTiming, 0),
+		phase:          StepPhaseMain,
+		actionName:     "?",
+		runStart:       time.Now(),
+		signal:         signal,
 		collectTimings: collectTimings,
 	}
 }
@@ -298,12 +296,12 @@ func (control *defaultActionControl[ContextType]) recordTiming(
 		return
 	}
 	control.actionTimings = append(control.actionTimings, ActionTiming{
-		Phase: control.phase,
-		ActionIndex: control.actionIndex,
-		Index: control.actionIndex,
-		ActionName: control.actionName,
+		Phase:        control.phase,
+		ActionIndex:  control.actionIndex,
+		Index:        control.actionIndex,
+		ActionName:   control.actionName,
 		ElapsedNanos: elapsedNanos,
-		Success: success,
+		Success:      success,
 	})
 }
 
@@ -339,13 +337,13 @@ func NewPipeline[ContextType any](name string, shortCircuitOnException bool) *Pi
 		panic("Pipeline name must not be blank")
 	}
 	return &Pipeline[ContextType]{
-		name: name,
+		name:                    name,
 		shortCircuitOnException: shortCircuitOnException,
-		onError: DefaultOnError[ContextType],
-		observer: NoopPipelineObserver{},
-		preActions: make([]registeredAction[ContextType], 0),
-		actions: make([]registeredAction[ContextType], 0),
-		postActions: make([]registeredAction[ContextType], 0),
+		onError:                 DefaultOnError[ContextType],
+		observer:                NoopPipelineObserver{},
+		preActions:              make([]registeredAction[ContextType], 0),
+		actions:                 make([]registeredAction[ContextType], 0),
+		postActions:             make([]registeredAction[ContextType], 0),
 	}
 }
 
@@ -397,7 +395,7 @@ func (pipeline *Pipeline[ContextType]) AddPreAction(action any) *Pipeline[Contex
 func (pipeline *Pipeline[ContextType]) AddPreActionNamed(name string, action any) *Pipeline[ContextType] {
 	pipeline.ensureMutable()
 	pipeline.preActions = append(pipeline.preActions, registeredAction[ContextType]{
-		name: name,
+		name:   name,
 		action: normalizeAction[ContextType](action),
 	})
 	return pipeline
@@ -410,7 +408,7 @@ func (pipeline *Pipeline[ContextType]) AddAction(action any) *Pipeline[ContextTy
 func (pipeline *Pipeline[ContextType]) AddActionNamed(name string, action any) *Pipeline[ContextType] {
 	pipeline.ensureMutable()
 	pipeline.actions = append(pipeline.actions, registeredAction[ContextType]{
-		name: name,
+		name:   name,
 		action: normalizeAction[ContextType](action),
 	})
 	return pipeline
@@ -423,25 +421,24 @@ func (pipeline *Pipeline[ContextType]) AddPostAction(action any) *Pipeline[Conte
 func (pipeline *Pipeline[ContextType]) AddPostActionNamed(name string, action any) *Pipeline[ContextType] {
 	pipeline.ensureMutable()
 	pipeline.postActions = append(pipeline.postActions, registeredAction[ContextType]{
-		name: name,
+		name:   name,
 		action: normalizeAction[ContextType](action),
 	})
 	return pipeline
 }
 
 func (pipeline *Pipeline[ContextType]) Run(input ContextType) ContextType {
-	state := executePipeline(pipeline.plan(), input, false)
-	return state.context
+	return executePipeline(pipeline.plan(), input, false).context
 }
 
 func (pipeline *Pipeline[ContextType]) RunDetailed(input ContextType) PipelineResult[ContextType] {
 	state := executePipeline(pipeline.plan(), input, true)
 	return PipelineResult[ContextType]{
-		Context: state.context,
+		Context:        state.context,
 		ShortCircuited: state.control.IsShortCircuited(),
-		Errors: state.control.Errors(),
-		ActionTimings: state.control.ActionTimings(),
-		TotalNanos: time.Since(state.control.runStart).Nanoseconds(),
+		Errors:         state.control.Errors(),
+		ActionTimings:  state.control.ActionTimings(),
+		TotalNanos:     time.Since(state.control.runStart).Nanoseconds(),
 	}
 }
 
@@ -454,13 +451,13 @@ func (pipeline *Pipeline[ContextType]) plan() *pipelinePlan[ContextType] {
 	defer pipeline.planMutex.Unlock()
 	if pipeline.frozenPlan == nil {
 		pipeline.frozenPlan = &pipelinePlan[ContextType]{
-			name: pipeline.name,
+			name:                    pipeline.name,
 			shortCircuitOnException: pipeline.shortCircuitOnException,
-			onError: pipeline.onError,
-			observer: pipeline.observer,
-			preActions: append([]registeredAction[ContextType](nil), pipeline.preActions...),
-			actions: append([]registeredAction[ContextType](nil), pipeline.actions...),
-			postActions: append([]registeredAction[ContextType](nil), pipeline.postActions...),
+			onError:                 pipeline.onError,
+			observer:                pipeline.observer,
+			preActions:              append([]registeredAction[ContextType](nil), pipeline.preActions...),
+			actions:                 append([]registeredAction[ContextType](nil), pipeline.actions...),
+			postActions:             append([]registeredAction[ContextType](nil), pipeline.postActions...),
 		}
 	}
 	return pipeline.frozenPlan
@@ -560,7 +557,9 @@ func executeActions[ContextType any](
 		actionStarted := time.Now()
 		contextBeforeAction := contextValue
 		control.signal.actionExecuting.Store(true)
+		restoreControl := setCurrentControl(control)
 		nextContext, actionError, actionPanic := invokeAction(registered.action, contextValue)
+		restoreControl()
 		control.signal.actionExecuting.Store(false)
 		succeeded := actionError == nil && actionPanic == nil
 		if succeeded {
@@ -655,12 +654,12 @@ func makePipelineError(
 ) PipelineError {
 	return PipelineError{
 		PipelineName: pipelineName,
-		Phase: phase,
-		ActionIndex: actionIndex,
-		ActionName: actionName,
-		Exception: exception,
-		StepIndex: actionIndex,
-		StepName: actionName,
+		Phase:        phase,
+		ActionIndex:  actionIndex,
+		ActionName:   actionName,
+		Exception:    exception,
+		StepIndex:    actionIndex,
+		StepName:     actionName,
 	}
 }
 
@@ -695,10 +694,10 @@ func normalizeAction[ContextType any](action any) Action[ContextType] {
 		}
 	}
 	if unary, ok := action.(func(ContextType) (ContextType, error)); ok {
-		return unary
+		return Action[ContextType](unary)
 	}
 	if unary, ok := action.(UnaryFuncWithError[ContextType]); ok {
-		return unary
+		return Action[ContextType](unary)
 	}
 	if legacy, ok := action.(StepAction[ContextType]); ok {
 		return func(context ContextType) (ContextType, error) {
@@ -720,22 +719,27 @@ func normalizeAction[ContextType any](action any) Action[ContextType] {
 
 var activeControls = struct {
 	sync.Mutex
-	values map[uint64]any
-}{values: make(map[uint64]any)}
+	values map[uint64][]any
+}{values: make(map[uint64][]any)}
 
 func setCurrentControl[ContextType any](control *defaultActionControl[ContextType]) func() {
 	goroutineID := currentGoroutineID()
 	activeControls.Lock()
-	previous, hadPrevious := activeControls.values[goroutineID]
-	activeControls.values[goroutineID] = control
+	activeControls.values[goroutineID] = append(activeControls.values[goroutineID], control)
 	activeControls.Unlock()
 	return func() {
 		activeControls.Lock()
 		defer activeControls.Unlock()
-		if hadPrevious {
-			activeControls.values[goroutineID] = previous
-		} else {
+		stack := activeControls.values[goroutineID]
+		if len(stack) == 0 || stack[len(stack)-1] != control {
 			delete(activeControls.values, goroutineID)
+			panic("ActionControl scopes were closed out of order")
+		}
+		stack = stack[:len(stack)-1]
+		if len(stack) == 0 {
+			delete(activeControls.values, goroutineID)
+		} else {
+			activeControls.values[goroutineID] = stack
 		}
 	}
 }
@@ -744,9 +748,13 @@ func currentControl[ContextType any]() ActionControl[ContextType] {
 	goroutineID := currentGoroutineID()
 	activeControls.Lock()
 	defer activeControls.Unlock()
-	control, ok := activeControls.values[goroutineID].(*defaultActionControl[ContextType])
-	if !ok {
+	stack := activeControls.values[goroutineID]
+	if len(stack) == 0 {
 		panic("No compatible ActionControl is active")
+	}
+	control, ok := stack[len(stack)-1].(*defaultActionControl[ContextType])
+	if !ok {
+		panic("Active ActionControl has an incompatible context type")
 	}
 	return control
 }
