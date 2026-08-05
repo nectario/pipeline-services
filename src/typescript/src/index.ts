@@ -12,6 +12,8 @@ export {
   StepAction,
   StepControl,
   UnaryOperator,
+  nowNs,
+  now_ns,
   shortCircuit,
   short_circuit,
 } from "./pipeline_services/core/pipeline.js";
