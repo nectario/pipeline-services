@@ -2,8 +2,8 @@ from std.python import Python, PythonObject
 from std.collections.list import List
 
 
-comptime Action = def(PythonObject) raises -> PythonObject
-comptime OnErrorFn = def(PythonObject, PipelineError) raises -> PythonObject
+comptime Action = def(PythonObject) thin raises -> PythonObject
+comptime OnErrorFn = def(PythonObject, PipelineError) thin raises -> PythonObject
 
 
 def _execution_api() raises -> PythonObject:
