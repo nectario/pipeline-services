@@ -18,7 +18,7 @@ func main() {
   "pipeline": "example02_json_loader",
   "type": "unary",
   "shortCircuitOnException": true,
-  "steps": [
+  "actions": [
     {"$local": "strip"},
     {"$local": "normalize_whitespace"}
   ]
@@ -31,6 +31,5 @@ func main() {
 		panic(loadError)
 	}
 
-	result := pipeline.Run("  Hello   JSON  ")
-	fmt.Println(result.Context)
+	fmt.Println(pipeline.Run("  Hello   JSON  "))
 }
