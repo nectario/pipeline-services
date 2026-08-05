@@ -5,7 +5,7 @@ on:
     branches:
       - agent/vnext-phase-3-5-stabilization
     paths:
-      - .phase35/READY
+      - .github/workflows/phase35-apply.yml
 
 permissions:
   contents: write
