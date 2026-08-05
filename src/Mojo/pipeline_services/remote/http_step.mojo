@@ -1,5 +1,7 @@
-from python import Python
-from python import PythonObject
+from std.python import Python, PythonObject
+
+from ..core.pipeline import Action
+
 
 struct RemoteSpec(ImplicitlyCopyable):
     var endpoint: String
@@ -8,12 +10,26 @@ struct RemoteSpec(ImplicitlyCopyable):
     var method: String
     var headers: PythonObject
 
-    fn __init__(out self, endpoint: String):
+    def __init__(out self, endpoint: String):
         self.endpoint = endpoint
         self.timeout_millis = 1000
         self.retries = 0
         self.method = "POST"
         self.headers = PythonObject(None)
+
+    def to_python(self) raises -> PythonObject:
+        var builtins = Python.import_module("builtins")
+        var value = builtins.dict()
+        value["endpoint"] = self.endpoint
+        value["timeout_millis"] = self.timeout_millis
+        value["retries"] = self.retries
+        value["method"] = self.method
+        if self.headers is None:
+            value["headers"] = builtins.dict()
+        else:
+            value["headers"] = self.headers
+        return value
+
 
 struct RemoteDefaults(ImplicitlyCopyable):
     var base_url: String
@@ -22,75 +38,102 @@ struct RemoteDefaults(ImplicitlyCopyable):
     var method: String
     var headers: PythonObject
 
-    fn __init__(out self):
+    def __init__(out self):
         self.base_url = ""
         self.timeout_millis = 1000
         self.retries = 0
         self.method = "POST"
         self.headers = PythonObject(None)
 
-    fn resolve_endpoint(self, endpoint_or_path: String) -> String:
-        if endpoint_or_path.startswith("http://") or endpoint_or_path.startswith("https://"):
+    def resolve_endpoint(self, endpoint_or_path: String) -> String:
+        if endpoint_or_path.startswith("http://") or endpoint_or_path.startswith("https://") or endpoint_or_path.startswith("data:"):
             return endpoint_or_path
         if self.base_url == "":
             return endpoint_or_path
         if self.base_url.endswith("/") and endpoint_or_path.startswith("/"):
-            return self.base_url + endpoint_or_path[1:]
+            return self.base_url + endpoint_or_path[codepoint=1:]
         if not self.base_url.endswith("/") and not endpoint_or_path.startswith("/"):
             return self.base_url + "/" + endpoint_or_path
         return self.base_url + endpoint_or_path
 
-    fn to_spec(self, endpoint_or_path: String) -> RemoteSpec:
-        var resolved_endpoint = self.resolve_endpoint(endpoint_or_path)
-        var spec = RemoteSpec(resolved_endpoint)
+    def to_spec(self, endpoint_or_path: String) -> RemoteSpec:
+        var spec = RemoteSpec(self.resolve_endpoint(endpoint_or_path))
         spec.timeout_millis = self.timeout_millis
         spec.retries = self.retries
         spec.method = self.method
         spec.headers = self.headers
         return spec
 
-fn http_step(spec: RemoteSpec, input_value: PythonObject) raises -> PythonObject:
-    var request_module = Python.import_module("urllib.request")
-    var json_module = Python.import_module("json")
-    var time_module = Python.import_module("time")
-    var builtins_module = Python.import_module("builtins")
 
-    var headers_value = spec.headers
-    if headers_value is None:
-        headers_value = builtins_module.dict()
+def _remote_api() raises -> PythonObject:
+    var module = Python.evaluate(
+        """
+import builtins
+import json
+import time
+import types
+import urllib.parse
+import urllib.request
 
-    var json_body = json_module.dumps(input_value)
-    var last_error_message = ""
+if not hasattr(builtins, "_pipeline_services_remote_api"):
+    def make_action(spec):
+        spec = dict(spec)
 
-    var attempt_index: Int = 0
-    while attempt_index < (spec.retries + 1):
-        try:
-            var timeout_seconds = Float64(spec.timeout_millis) / 1000.0
-            var method_value = PythonObject(String(spec.method))
+        def action(value):
+            method = str(spec.get("method", "POST")).upper()
+            endpoint = str(spec["endpoint"])
+            headers = dict(spec.get("headers") or {})
+            retries = int(spec.get("retries", 0))
+            timeout_seconds = float(spec.get("timeout_millis", 1000)) / 1000.0
+            body_text = json.dumps(value)
+            last_error = None
 
-            if spec.method == "GET":
-                var url_value = spec.endpoint
-                var request_object = request_module.Request(url_value, method = method_value, headers = headers_value)
-                var response_object = request_module.urlopen(request_object, timeout = PythonObject(timeout_seconds))
-                var response_body = response_object.read().decode("utf-8")
-                return PythonObject(String(response_body))
+            for attempt_index in range(retries + 1):
+                try:
+                    if method == "GET":
+                        request = urllib.request.Request(
+                            endpoint,
+                            method="GET",
+                            headers=headers,
+                        )
+                    else:
+                        request_headers = dict(headers)
+                        request_headers.setdefault("Content-Type", "application/json")
+                        request = urllib.request.Request(
+                            endpoint,
+                            data=body_text.encode("utf-8"),
+                            method=method,
+                            headers=request_headers,
+                        )
+                    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                        return response.read().decode("utf-8")
+                except Exception as error:
+                    last_error = error
+                    if attempt_index < retries:
+                        time.sleep(0.05 * (attempt_index + 1))
 
-            var content_headers = builtins_module.dict()
-            content_headers[PythonObject("Content-Type")] = PythonObject("application/json")
-            content_headers.update(headers_value)
-            var request_object = request_module.Request(
-                spec.endpoint,
-                data = json_body.encode("utf-8"),
-                method = method_value,
-                headers = content_headers,
-            )
-            var response_object = request_module.urlopen(request_object, timeout = PythonObject(timeout_seconds))
-            var response_body = response_object.read().decode("utf-8")
-            return PythonObject(String(response_body))
-        except caught_error:
-            last_error_message = String(caught_error)
-            if attempt_index < spec.retries:
-                time_module.sleep(0.05 * Float64(attempt_index + 1))
-            attempt_index = attempt_index + 1
+            raise last_error or RuntimeError("Unknown remote Action failure")
 
-    raise last_error_message
+        return action
+
+    builtins._pipeline_services_remote_api = types.SimpleNamespace(
+        make_action=make_action,
+    )
+
+api = builtins._pipeline_services_remote_api
+""",
+        file=True,
+        name="_pipeline_services_remote_loader",
+    )
+    return module.api
+
+
+def remote_action(spec: RemoteSpec) raises -> Action:
+    return Action(_remote_api().make_action(spec.to_python()))
+
+
+def http_step(
+    spec: RemoteSpec,
+    input_value: PythonObject,
+) raises -> PythonObject:
+    return remote_action(spec).call(input_value)

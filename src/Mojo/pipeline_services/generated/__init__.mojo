@@ -1,1 +1,1 @@
-from .prompt_actions import register_generated_actions
+from .prompt_actions import normalize_name_action, register_generated_actions

@@ -125,5 +125,12 @@ jobs:
           cache: false
       - name: Show Mojo version
         run: pixi run mojo --version
-      - name: Run Mojo import smoke
-        run: pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example00_import.mojo
+      - name: Run Mojo vNext conformance
+        run: pixi run mojo run -I ../src/Mojo ../src/Mojo/tests/vnext_pipeline_test.mojo
+      - name: Run representative Mojo examples
+        run: |
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example00_import.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example01_text_clean.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example02_json_loader.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example03_runtime_pipeline.mojo
+          pixi run mojo run -I ../src/Mojo ../src/Mojo/pipeline_services/examples/example05_metrics_post_action.mojo

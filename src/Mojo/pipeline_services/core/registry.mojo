@@ -1,34 +1,43 @@
-from collections.dict import Dict
+from std.collections import Dict
 
-from .pipeline import StepAction, UnaryOperator
+from .pipeline import Action, ActionFunction
 
-struct PipelineRegistry:
-    var unary_actions: Dict[String, UnaryOperator]
-    var step_actions: Dict[String, StepAction]
 
-    fn __init__(out self):
-        self.unary_actions = Dict[String, UnaryOperator]()
-        self.step_actions = Dict[String, StepAction]()
+struct PipelineRegistry(Movable):
+    var actions: Dict[String, Action]
 
-    fn register_unary(mut self, name: String, action: UnaryOperator) -> None:
-        self.unary_actions[name] = action
+    def __init__(out self):
+        self.actions = Dict[String, Action]()
 
-    fn register_action(mut self, name: String, action: StepAction) -> None:
-        self.step_actions[name] = action
+    def register_action(mut self, name: String, action: Action) raises:
+        if name == "":
+            raise "name must not be blank"
+        self.actions[name] = action
 
-    fn has_unary(self, name: String) -> Bool:
-        return name in self.unary_actions
+    def register_action(
+        mut self,
+        name: String,
+        action: ActionFunction,
+    ) raises:
+        self.register_action(name, Action(action))
 
-    fn has_action(self, name: String) -> Bool:
-        return name in self.step_actions
+    def register_unary(
+        mut self,
+        name: String,
+        action: ActionFunction,
+    ) raises:
+        self.register_action(name, action)
 
-    fn get_unary(self, name: String) raises -> UnaryOperator:
-        if name in self.unary_actions:
-            return self.unary_actions[name]
-        raise "Unknown unary action: " + name
+    def has_action(self, name: String) -> Bool:
+        return name in self.actions
 
-    fn get_action(self, name: String) raises -> StepAction:
-        if name in self.step_actions:
-            return self.step_actions[name]
-        raise "Unknown step action: " + name
+    def has_unary(self, name: String) -> Bool:
+        return self.has_action(name)
 
+    def get_action(self, name: String) raises -> Action:
+        if name in self.actions:
+            return self.actions[name]
+        raise "Unknown Action: " + name
+
+    def get_unary(self, name: String) raises -> Action:
+        return self.get_action(name)

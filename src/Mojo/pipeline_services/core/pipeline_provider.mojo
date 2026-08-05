@@ -1,115 +1,154 @@
-from python import Python
-from python import PythonObject
-from collections.list import List
-from memory.arc import ArcPointer
+from std.python import Python, PythonObject
+from std.collections import List
+from std.memory import ArcPointer
 
 from .pipeline import Pipeline, PipelineResult
 
-comptime PipelineFactory = fn() -> Pipeline
+
+comptime PipelineFactory = def() thin raises -> Pipeline
 
 
-struct PipelineProviderMode(ImplicitlyCopyable):
+struct PipelineProviderMode(ImplicitlyCopyable, Equatable):
     var value: Int
 
-    fn __init__(out self, value: Int):
+    def __init__(out self, value: Int):
         self.value = value
 
-    fn shared() -> PipelineProviderMode:
+    @staticmethod
+    def new_instance_per_event() -> PipelineProviderMode:
         return PipelineProviderMode(0)
 
-    fn pooled() -> PipelineProviderMode:
+    @staticmethod
+    def singleton() -> PipelineProviderMode:
         return PipelineProviderMode(1)
 
-    fn per_run() -> PipelineProviderMode:
+    @staticmethod
+    def pooled() -> PipelineProviderMode:
         return PipelineProviderMode(2)
 
+    def __eq__(self, other: PipelineProviderMode) -> Bool:
+        return self.value == other.value
 
-fn default_pool_max() -> Int:
-    var processor_count: Int = 1
+    def __ne__(self, other: PipelineProviderMode) -> Bool:
+        return self.value != other.value
+
+
+def default_instance_count() raises -> Int:
+    var processor_count = 1
     try:
         var os_module = Python.import_module("os")
         var cpu_count_value = os_module.cpu_count()
         if cpu_count_value is not None:
-            processor_count = Int(cpu_count_value)
+            processor_count = Int(py=cpu_count_value)
     except:
         processor_count = 1
 
-    var computed = processor_count * 8
-    if computed < 1:
-        computed = 1
-    if computed > 256:
-        computed = 256
-    return computed
+    if processor_count < 1:
+        processor_count = 1
+    return processor_count
 
 
-fn default_pipeline_factory() -> Pipeline:
+def _default_pipeline_factory() raises -> Pipeline:
     return Pipeline("pipeline", True)
 
 
-struct PipelinePool(Movable):
-    var max_size: Int
-    var created_count: Int
-    var factory: PipelineFactory
-    var available: List[ArcPointer[Pipeline]]
-
-    fn __init__(out self, max_size: Int, factory: PipelineFactory):
-        if max_size < 1:
-            raise "max_size must be >= 1"
-        self.max_size = max_size
-        self.created_count = 0
-        self.factory = factory
-        self.available = List[ArcPointer[Pipeline]]()
-
-    fn borrow(mut self) -> ArcPointer[Pipeline]:
-        if len(self.available) > 0:
-            return self.available.pop()
-
-        if self.created_count < self.max_size:
-            self.created_count = self.created_count + 1
-            var new_pipeline = self.factory()
-            var pipeline_ptr = ArcPointer(new_pipeline)
-            return pipeline_ptr
-
-        raise "Pipeline pool exhausted. Increase pool size."
-
-    fn release(mut self, pipeline_ptr: ArcPointer[Pipeline]) -> None:
-        self.available.append(pipeline_ptr)
-
-
 struct PipelineProvider(Movable):
-    var mode: PipelineProviderMode
-    var shared_pipeline: ArcPointer[Pipeline]
-    var pool: PipelinePool
-    var factory: PipelineFactory
+    var provider_mode: PipelineProviderMode
+    var singleton_pipeline: ArcPointer[Pipeline]
+    var pooled_pipelines: List[ArcPointer[Pipeline]]
+    var pipeline_factory: PipelineFactory
+    var next_pipeline_index: Int
 
-    fn __init__(out self, pipeline: Pipeline):
-        self.mode = PipelineProviderMode.shared()
-        self.shared_pipeline = ArcPointer(pipeline)
-        self.pool = PipelinePool(1, default_pipeline_factory)
-        self.factory = default_pipeline_factory
+    def __init__(out self, var singleton_pipeline: Pipeline) raises:
+        singleton_pipeline.freeze()
+        self.provider_mode = PipelineProviderMode.singleton()
+        self.singleton_pipeline = ArcPointer(singleton_pipeline^)
+        self.pooled_pipelines = List[ArcPointer[Pipeline]]()
+        self.pipeline_factory = _default_pipeline_factory
+        self.next_pipeline_index = 0
 
-    fn __init__(out self, pool_max: Int, factory: PipelineFactory):
-        self.mode = PipelineProviderMode.pooled()
-        self.shared_pipeline = ArcPointer(Pipeline("pipeline", True))
-        self.pool = PipelinePool(pool_max, factory)
-        self.factory = default_pipeline_factory
+    def __init__(
+        out self,
+        pipeline_factory: PipelineFactory,
+    ) raises:
+        self.provider_mode = PipelineProviderMode.new_instance_per_event()
+        self.singleton_pipeline = ArcPointer(Pipeline("unused", True))
+        self.pooled_pipelines = List[ArcPointer[Pipeline]]()
+        self.pipeline_factory = pipeline_factory
+        self.next_pipeline_index = 0
 
-    fn __init__(out self, factory: PipelineFactory):
-        self.mode = PipelineProviderMode.per_run()
-        self.shared_pipeline = ArcPointer(Pipeline("pipeline", True))
-        self.pool = PipelinePool(1, default_pipeline_factory)
-        self.factory = factory
+    def __init__(
+        out self,
+        pipeline_factory: PipelineFactory,
+        instance_count: Int,
+    ) raises:
+        if instance_count < 1:
+            raise "instance_count must be >= 1"
+        self.provider_mode = PipelineProviderMode.pooled()
+        self.singleton_pipeline = ArcPointer(Pipeline("unused", True))
+        self.pooled_pipelines = List[ArcPointer[Pipeline]]()
+        self.pipeline_factory = pipeline_factory
+        self.next_pipeline_index = 0
 
-    fn run(mut self, input_value: PythonObject) -> PipelineResult:
-        if self.mode.value == PipelineProviderMode.shared().value:
-            return self.shared_pipeline[].run(input_value)
+        var index = 0
+        while index < instance_count:
+            var pipeline = pipeline_factory()
+            pipeline.freeze()
+            self.pooled_pipelines.append(ArcPointer(pipeline^))
+            index += 1
 
-        if self.mode.value == PipelineProviderMode.pooled().value:
-            var borrowed_pipeline_ptr = self.pool.borrow()
-            var result = borrowed_pipeline_ptr[].run(input_value)
-            self.pool.release(borrowed_pipeline_ptr)
-            return result
+    @staticmethod
+    def new_instance_per_event(
+        pipeline_factory: PipelineFactory,
+    ) raises -> PipelineProvider:
+        return PipelineProvider(pipeline_factory)
 
-        var new_pipeline = self.factory()
-        return new_pipeline.run(input_value)
+    @staticmethod
+    def singleton(var pipeline: Pipeline) raises -> PipelineProvider:
+        return PipelineProvider(pipeline^)
 
+    @staticmethod
+    def pooled(
+        pipeline_factory: PipelineFactory,
+        instance_count: Int,
+    ) raises -> PipelineProvider:
+        return PipelineProvider(pipeline_factory, instance_count)
+
+    def mode(self) -> PipelineProviderMode:
+        return self.provider_mode
+
+    def instance_count(self) -> Int:
+        if self.provider_mode == PipelineProviderMode.new_instance_per_event():
+            return 0
+        if self.provider_mode == PipelineProviderMode.pooled():
+            return Int(len(self.pooled_pipelines))
+        return 1
+
+    def get_pipeline(mut self) raises -> ArcPointer[Pipeline]:
+        if self.provider_mode == PipelineProviderMode.singleton():
+            return self.singleton_pipeline
+
+        if self.provider_mode == PipelineProviderMode.pooled():
+            var selected_index = self.next_pipeline_index
+            self.next_pipeline_index = (
+                self.next_pipeline_index + 1
+            ) % Int(len(self.pooled_pipelines))
+            return self.pooled_pipelines[selected_index]
+
+        var pipeline = self.pipeline_factory()
+        pipeline.freeze()
+        return ArcPointer(pipeline^)
+
+    def run(
+        mut self,
+        input_value: PythonObject,
+    ) raises -> PythonObject:
+        var pipeline = self.get_pipeline()
+        return pipeline[].run(input_value)
+
+    def run_detailed(
+        mut self,
+        input_value: PythonObject,
+    ) raises -> PipelineResult:
+        var pipeline = self.get_pipeline()
+        return pipeline[].run_detailed(input_value)
