@@ -19,11 +19,19 @@ jobs:
           pixi-version: v0.76.0
           working-directory: pipeline_services
           cache: false
-      - name: Package installed Mojo environment
-        run: tar -C pipeline_services/.pixi/envs/default -czf /tmp/mojo-1.0.0b2-linux64.tar.gz .
+      - name: Verify lockfile and package installed Mojo environment
+        run: |
+          test -f pipeline_services/pixi.lock
+          tar -C pipeline_services/.pixi/envs/default -czf /tmp/mojo-1.0.0b2-linux64.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: mojo-1.0.0b2-linux64
           path: /tmp/mojo-1.0.0b2-linux64.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mojo-pixi-lock
+          path: pipeline_services/pixi.lock
           if-no-files-found: error
           retention-days: 1
