@@ -1,328 +1,363 @@
-from python import Python
-from python import PythonObject
-from collections.list import List
+from std.python import Python, PythonObject
+from std.collections.list import List
 
-from ..remote.http_step import RemoteSpec, http_step
+
+comptime Action = def(PythonObject) raises -> PythonObject
+comptime OnErrorFn = def(PythonObject, PipelineError) raises -> PythonObject
+
+
+def _execution_api() raises -> PythonObject:
+    var module = Python.evaluate(
+        """
+import builtins
+import contextvars
+import types
+
+if not hasattr(builtins, "_pipeline_services_execution_api"):
+    current = contextvars.ContextVar("pipeline_services_execution", default=())
+
+    def open_scope():
+        state = {"short_circuited": False, "action_executing": False}
+        token = current.set(current.get() + (state,))
+        return state, token
+
+    def close_scope(token):
+        current.reset(token)
+
+    def begin_action(state):
+        if state["action_executing"]:
+            raise RuntimeError("A Pipeline Action is already executing")
+        state["action_executing"] = True
+
+    def end_action(state):
+        if not state["action_executing"]:
+            raise RuntimeError("No Pipeline Action is executing")
+        state["action_executing"] = False
+
+    def short_circuit():
+        stack = current.get()
+        if not stack:
+            raise RuntimeError("short_circuit() can only be called during an active Pipeline run")
+        state = stack[-1]
+        if not state["action_executing"]:
+            raise RuntimeError("short_circuit() can only be called while a Pipeline Action is executing")
+        state["short_circuited"] = True
+
+    builtins._pipeline_services_execution_api = types.SimpleNamespace(
+        open_scope=open_scope,
+        close_scope=close_scope,
+        begin_action=begin_action,
+        end_action=end_action,
+        short_circuit=short_circuit,
+    )
+
+api = builtins._pipeline_services_execution_api
+""",
+        file=True,
+        name="_pipeline_services_execution_loader",
+    )
+    return module.api
+
+
+def short_circuit() raises:
+    _execution_api().short_circuit()
+
+
+def default_on_error(context: PythonObject, error: PipelineError) -> PythonObject:
+    _ = error
+    return context
+
 
 struct PipelineError(ImplicitlyCopyable):
-    var pipeline: String
-    var phase: String      # "pre" | "main" | "post"
-    var index: Int
+    var pipeline_name: String
+    var phase: String
+    var action_index: Int
     var action_name: String
     var message: String
 
-    fn __init__(out self,
-                pipeline: String,
-                phase: String,
-                index: Int,
-                action_name: String,
-                message: String):
-        self.pipeline = pipeline
+    def __init__(
+        out self,
+        pipeline_name: String,
+        phase: String,
+        action_index: Int,
+        action_name: String,
+        message: String,
+    ):
+        self.pipeline_name = pipeline_name
         self.phase = phase
-        self.index = index
+        self.action_index = action_index
         self.action_name = action_name
         self.message = message
 
+
 struct ActionTiming(ImplicitlyCopyable):
     var phase: String
-    var index: Int
+    var action_index: Int
     var action_name: String
     var elapsed_nanos: Int64
     var success: Bool
 
-    fn __init__(out self,
-                phase: String,
-                index: Int,
-                action_name: String,
-                elapsed_nanos: Int64,
-                success: Bool):
+    def __init__(
+        out self,
+        phase: String,
+        action_index: Int,
+        action_name: String,
+        elapsed_nanos: Int64,
+        success: Bool,
+    ):
         self.phase = phase
-        self.index = index
+        self.action_index = action_index
         self.action_name = action_name
         self.elapsed_nanos = elapsed_nanos
         self.success = success
 
-comptime OnErrorFn = fn(ctx: PythonObject, err: PipelineError) -> PythonObject
 
-fn default_on_error(ctx: PythonObject, err: PipelineError) -> PythonObject:
-    return ctx
-
-struct ActionControl:
-    var pipeline_name: String
-    var on_error: OnErrorFn
-    var errors: List[PipelineError]
-    var timings: List[ActionTiming]
-    var short_circuited: Bool
-
-    var phase: String
-    var index: Int
-    var action_name: String
-
-    var run_start_ns: Int64
-
-    fn __init__(out self, pipeline_name: String, on_error: OnErrorFn = default_on_error):
-        self.pipeline_name = pipeline_name
-        self.on_error = on_error
-        self.errors = List[PipelineError]()
-        self.timings = List[ActionTiming]()
-        self.short_circuited = False
-        self.phase = "main"
-        self.index = 0
-        self.action_name = "?"
-        self.run_start_ns = 0
-
-    fn begin_step(mut self, phase: String, index: Int, action_name: String) -> None:
-        self.phase = phase
-        self.index = index
-        self.action_name = action_name
-
-    fn begin_run(mut self, run_start_ns: Int64) -> None:
-        self.run_start_ns = run_start_ns
-
-    fn reset(mut self) -> None:
-        self.short_circuited = False
-        self.errors = List[PipelineError]()
-        self.timings = List[ActionTiming]()
-        self.phase = "main"
-        self.index = 0
-        self.action_name = "?"
-        self.run_start_ns = 0
-
-    fn short_circuit(mut self) -> None:
-        self.short_circuited = True
-
-    fn is_short_circuited(self) -> Bool:
-        return self.short_circuited
-
-    fn record_error(mut self, ctx: PythonObject, message: String) -> PythonObject:
-        var pipeline_error = PipelineError(self.pipeline_name, self.phase, self.index, self.action_name, message)
-        self.errors.append(pipeline_error)
-        return self.on_error(ctx, pipeline_error)
-
-    fn record_timing(mut self, elapsed_nanos: Int64, success: Bool) -> None:
-        var timing = ActionTiming(self.phase, self.index, self.action_name, elapsed_nanos, success)
-        self.timings.append(timing)
-
-comptime StepControl = ActionControl
-
-comptime UnaryOperator = fn(ctx: PythonObject) raises -> PythonObject
-comptime StepAction = fn(ctx: PythonObject, mut control: ActionControl) raises -> PythonObject
-
-struct PipelineResult:
+struct PipelineResult(Movable):
     var context: PythonObject
     var short_circuited: Bool
     var errors: List[PipelineError]
-    var timings: List[ActionTiming]
+    var action_timings: List[ActionTiming]
     var total_nanos: Int64
 
-    fn __init__(out self,
-                context: PythonObject,
-                short_circuited: Bool,
-                errors: List[PipelineError],
-                timings: List[ActionTiming],
-                total_nanos: Int64):
+    def __init__(
+        out self,
+        context: PythonObject,
+        short_circuited: Bool,
+        errors: List[PipelineError],
+        action_timings: List[ActionTiming],
+        total_nanos: Int64,
+    ):
         self.context = context
         self.short_circuited = short_circuited
         self.errors = errors.copy()
-        self.timings = timings.copy()
+        self.action_timings = action_timings.copy()
         self.total_nanos = total_nanos
 
-    fn has_errors(self) -> Bool:
+    def has_errors(self) -> Bool:
         return len(self.errors) > 0
 
-fn noop_unary(ctx: PythonObject) -> PythonObject:
-    return ctx
-
-fn noop_action(ctx: PythonObject, mut control: ActionControl) -> PythonObject:
-    return ctx
-
-fn noop_remote_spec() -> RemoteSpec:
-    return RemoteSpec("")
 
 struct RegisteredAction(ImplicitlyCopyable):
     var name: String
-    var kind: Int  # 0 = unary, 1 = step_action, 2 = remote_http
-    var unary: UnaryOperator
-    var step_action: StepAction
-    var remote_spec: RemoteSpec
+    var action: Action
 
-    fn __init__(out self, name: String, action: UnaryOperator):
+    def __init__(out self, name: String, action: Action):
         self.name = name
-        self.kind = 0
-        self.unary = action
-        self.step_action = noop_action
-        self.remote_spec = noop_remote_spec()
+        self.action = action
 
-    fn __init__(out self, name: String, action: StepAction):
-        self.name = name
-        self.kind = 1
-        self.unary = noop_unary
-        self.step_action = action
-        self.remote_spec = noop_remote_spec()
 
-    fn __init__(out self, name: String, spec: RemoteSpec):
-        self.name = name
-        self.kind = 2
-        self.unary = noop_unary
-        self.step_action = noop_action
-        self.remote_spec = spec
+struct ExecutionState(Movable):
+    var context: PythonObject
+    var scope_state: PythonObject
+    var scope_token: PythonObject
+    var errors: List[PipelineError]
+    var action_timings: List[ActionTiming]
+    var short_circuited: Bool
+    var start_ns: Int64
+
+    def __init__(
+        out self,
+        context: PythonObject,
+        scope_state: PythonObject,
+        scope_token: PythonObject,
+        start_ns: Int64,
+    ):
+        self.context = context
+        self.scope_state = scope_state
+        self.scope_token = scope_token
+        self.errors = List[PipelineError]()
+        self.action_timings = List[ActionTiming]()
+        self.short_circuited = False
+        self.start_ns = start_ns
+
 
 struct Pipeline(Movable):
-    var name: String
+    var pipeline_name: String
     var short_circuit_on_exception: Bool
-    var on_error: OnErrorFn
-
+    var error_handler: OnErrorFn
     var pre_actions: List[RegisteredAction]
     var actions: List[RegisteredAction]
     var post_actions: List[RegisteredAction]
+    var frozen: Bool
 
-    fn __init__(out self, name: String, short_circuit_on_exception: Bool = True):
-        self.name = name
+    def __init__(
+        out self,
+        pipeline_name: String,
+        short_circuit_on_exception: Bool = True,
+    ):
+        if pipeline_name == "":
+            raise "pipeline_name must not be blank"
+        self.pipeline_name = pipeline_name
         self.short_circuit_on_exception = short_circuit_on_exception
-        self.on_error = default_on_error
+        self.error_handler = default_on_error
         self.pre_actions = List[RegisteredAction]()
         self.actions = List[RegisteredAction]()
         self.post_actions = List[RegisteredAction]()
+        self.frozen = False
 
-    fn on_error_handler(mut self, handler: OnErrorFn) -> None:
-        self.on_error = handler
+    def on_error(mut self, handler: OnErrorFn):
+        self._ensure_mutable()
+        self.error_handler = handler
 
-    # --- add pre ---
-    fn add_pre_action(mut self, action: StepAction) -> None:
+    def add_pre_action(mut self, action: Action):
         self.add_pre_action_named("", action)
 
-    fn add_pre_action(mut self, action: UnaryOperator) -> None:
-        self.add_pre_action_named("", action)
-
-    fn add_pre_action(mut self, spec: RemoteSpec) -> None:
-        self.add_pre_action_named("", spec)
-
-    fn add_pre_action_named(mut self, name: String, action: StepAction) -> None:
+    def add_pre_action_named(mut self, name: String, action: Action):
+        self._ensure_mutable()
         self.pre_actions.append(RegisteredAction(name, action))
 
-    fn add_pre_action_named(mut self, name: String, action: UnaryOperator) -> None:
-        self.pre_actions.append(RegisteredAction(name, action))
-
-    fn add_pre_action_named(mut self, name: String, spec: RemoteSpec) -> None:
-        self.pre_actions.append(RegisteredAction(name, spec))
-
-    # --- add main ---
-    fn add_action(mut self, action: StepAction) -> None:
+    def add_action(mut self, action: Action):
         self.add_action_named("", action)
 
-    fn add_action(mut self, action: UnaryOperator) -> None:
-        self.add_action_named("", action)
-
-    fn add_action(mut self, spec: RemoteSpec) -> None:
-        self.add_action_named("", spec)
-
-    fn add_action_named(mut self, name: String, action: StepAction) -> None:
+    def add_action_named(mut self, name: String, action: Action):
+        self._ensure_mutable()
         self.actions.append(RegisteredAction(name, action))
 
-    fn add_action_named(mut self, name: String, action: UnaryOperator) -> None:
-        self.actions.append(RegisteredAction(name, action))
-
-    fn add_action_named(mut self, name: String, spec: RemoteSpec) -> None:
-        self.actions.append(RegisteredAction(name, spec))
-
-    # --- add post ---
-    fn add_post_action(mut self, action: StepAction) -> None:
+    def add_post_action(mut self, action: Action):
         self.add_post_action_named("", action)
 
-    fn add_post_action(mut self, action: UnaryOperator) -> None:
-        self.add_post_action_named("", action)
-
-    fn add_post_action(mut self, spec: RemoteSpec) -> None:
-        self.add_post_action_named("", spec)
-
-    fn add_post_action_named(mut self, name: String, action: StepAction) -> None:
+    def add_post_action_named(mut self, name: String, action: Action):
+        self._ensure_mutable()
         self.post_actions.append(RegisteredAction(name, action))
 
-    fn add_post_action_named(mut self, name: String, action: UnaryOperator) -> None:
-        self.post_actions.append(RegisteredAction(name, action))
+    def freeze(mut self):
+        self.frozen = True
 
-    fn add_post_action_named(mut self, name: String, spec: RemoteSpec) -> None:
-        self.post_actions.append(RegisteredAction(name, spec))
+    def is_frozen(self) -> Bool:
+        return self.frozen
 
-    fn run(self, input_value: PythonObject) -> PipelineResult:
-        var perf_counter_ns_fn: PythonObject
+    def short_circuit(self) raises:
+        short_circuit()
+
+    def run(mut self, input_value: PythonObject) raises -> PythonObject:
+        return self._execute(input_value, False).context
+
+    def run_detailed(mut self, input_value: PythonObject) raises -> PipelineResult:
+        return self._execute(input_value, True)
+
+    def execute(mut self, input_value: PythonObject) raises -> PipelineResult:
+        return self.run_detailed(input_value)
+
+    def _execute(
+        mut self,
+        input_value: PythonObject,
+        collect_timings: Bool,
+    ) raises -> PipelineResult:
+        self.frozen = True
+        var execution_api = _execution_api()
+        var scope = execution_api.open_scope()
+        var state = ExecutionState(
+            input_value,
+            scope[0],
+            scope[1],
+            _now_ns(),
+        )
+
         try:
-            var time_module = Python.import_module("time")
-            perf_counter_ns_fn = time_module.perf_counter_ns
-        except:
-            perf_counter_ns_fn = PythonObject(None)
+            self._execute_actions(
+                state,
+                "preActions",
+                self.pre_actions,
+                False,
+                collect_timings,
+            )
+            if not state.short_circuited:
+                self._execute_actions(
+                    state,
+                    "actions",
+                    self.actions,
+                    True,
+                    collect_timings,
+                )
+        finally:
+            self._execute_actions(
+                state,
+                "postActions",
+                self.post_actions,
+                False,
+                collect_timings,
+            )
+            execution_api.close_scope(state.scope_token)
 
-        var ctx: PythonObject = input_value
-        var control = ActionControl(self.name, self.on_error)
-        control.begin_run(now_ns(perf_counter_ns_fn))
+        return PipelineResult(
+            state.context,
+            state.short_circuited,
+            state.errors,
+            state.action_timings,
+            _now_ns() - state.start_ns,
+        )
 
-        ctx = self.run_phase("pre", ctx, self.pre_actions, perf_counter_ns_fn, control, stop_on_short_circuit = False)
-        if not control.is_short_circuited():
-            ctx = self.run_phase("main", ctx, self.actions, perf_counter_ns_fn, control, stop_on_short_circuit = True)
-        ctx = self.run_phase("post", ctx, self.post_actions, perf_counter_ns_fn, control, stop_on_short_circuit = False)
+    def _execute_actions(
+        self,
+        mut state: ExecutionState,
+        phase: String,
+        registered_actions: List[RegisteredAction],
+        stop_on_short_circuit: Bool,
+        collect_timings: Bool,
+    ) raises:
+        var execution_api = _execution_api()
+        var action_index = 0
+        while action_index < Int(len(registered_actions)):
+            var registered_action = registered_actions[action_index]
+            var action_name = _format_action_name(
+                phase,
+                action_index,
+                registered_action.name,
+            )
+            var action_start_ns = _now_ns()
+            var succeeded = True
 
-        var total_nanos = now_ns(perf_counter_ns_fn) - control.run_start_ns
-        return PipelineResult(ctx, control.is_short_circuited(), control.errors, control.timings, total_nanos)
-
-    fn execute(self, input_value: PythonObject) -> PipelineResult:
-        return self.run(input_value)
-
-    fn run_phase(self,
-                 phase: String,
-                 start_ctx: PythonObject,
-                 actions: List[RegisteredAction],
-                 perf_counter_ns_fn: PythonObject,
-                 mut control: ActionControl,
-                 stop_on_short_circuit: Bool) -> PythonObject:
-        var ctx = start_ctx
-        var step_index: Int = 0
-        while step_index < Int(len(actions)):
-            var registered_action = actions[step_index]
-            var action_name = format_action_name(phase, step_index, registered_action.name)
-            control.begin_step(phase, step_index, action_name)
-            var step_start_ns = now_ns(perf_counter_ns_fn)
-            var step_succeeded = True
+            execution_api.begin_action(state.scope_state)
             try:
-                if registered_action.kind == 0:
-                    ctx = registered_action.unary(ctx)
-                elif registered_action.kind == 1:
-                    ctx = registered_action.step_action(ctx, control)
-                else:
-                    ctx = http_step(registered_action.remote_spec, ctx)
+                state.context = registered_action.action(state.context)
             except caught_error:
-                step_succeeded = False
-                ctx = control.record_error(ctx, safe_error_to_string(caught_error))
+                succeeded = False
+                var pipeline_error = PipelineError(
+                    self.pipeline_name,
+                    phase,
+                    action_index,
+                    action_name,
+                    String(caught_error),
+                )
+                state.errors.append(pipeline_error)
+                state.context = self.error_handler(state.context, pipeline_error)
                 if self.short_circuit_on_exception:
-                    control.short_circuit()
-            var step_elapsed_nanos = now_ns(perf_counter_ns_fn) - step_start_ns
-            control.record_timing(step_elapsed_nanos, step_succeeded)
-            if stop_on_short_circuit and control.is_short_circuited():
+                    execution_api.short_circuit()
+            finally:
+                execution_api.end_action(state.scope_state)
+
+            state.short_circuited = Bool(py=state.scope_state["short_circuited"])
+            if collect_timings:
+                state.action_timings.append(
+                    ActionTiming(
+                        phase,
+                        action_index,
+                        action_name,
+                        _now_ns() - action_start_ns,
+                        succeeded,
+                    )
+                )
+
+            if stop_on_short_circuit and state.short_circuited:
                 break
-            step_index = step_index + 1
-        return ctx
+            action_index += 1
 
-fn format_action_name(phase: String, index: Int, name: String) -> String:
+    def _ensure_mutable(self):
+        if self.frozen:
+            raise "Pipeline '" + self.pipeline_name + "' is frozen"
+
+
+def _format_action_name(phase: String, index: Int, name: String) -> String:
     var prefix = "s"
-    if phase == "pre":
+    if phase == "preActions":
         prefix = "pre"
-    elif phase == "post":
+    elif phase == "postActions":
         prefix = "post"
-
     if name == "":
         return prefix + String(index)
     return prefix + String(index) + ":" + name
 
-fn format_step_name(phase: String, index: Int, name: String) -> String:
-    return format_action_name(phase, index, name)
 
-fn safe_error_to_string(value: Error) -> String:
-    return String(value)
-
-fn now_ns(perf_counter_ns_fn: PythonObject) -> Int64:
-    if perf_counter_ns_fn is None:
-        return 0
-    try:
-        var value = perf_counter_ns_fn()
-        return Int64(value)
-    except:
-        return 0
+def _now_ns() raises -> Int64:
+    var time_module = Python.import_module("time")
+    return Int64(py=time_module.perf_counter_ns())
