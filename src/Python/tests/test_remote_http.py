@@ -36,7 +36,7 @@ class RemoteHttpTests(unittest.TestCase):
             http_server.shutdown()
             http_server.server_close()
 
-    def test_json_loader_remote_get(self) -> None:
+    def test_json_loader_remote_get_runs_as_an_ordinary_action(self) -> None:
         fixtures_dir = pathlib.Path(__file__).resolve().parents[1] / "pipeline_services" / "examples" / "fixtures"
         FixtureHandler.base_directory = str(fixtures_dir)
 
@@ -49,7 +49,7 @@ class RemoteHttpTests(unittest.TestCase):
 {{
   "pipeline": "t",
   "type": "unary",
-  "steps": [
+  "actions": [
     {{
       "name": "remote_get_fixture",
       "$remote": {{
@@ -60,11 +60,9 @@ class RemoteHttpTests(unittest.TestCase):
   ]
 }}
 """
-            registry = PipelineRegistry()
-            loader = PipelineJsonLoader()
-            pipeline = loader.load_str(json_text, registry)
-            result = pipeline.run("ignored")
-            self.assertIn("Hello from remote fixture", result.context)
+            pipeline = PipelineJsonLoader().load_str(json_text, PipelineRegistry())
+            output = pipeline.run("ignored")
+            self.assertIn("Hello from remote fixture", output)
         finally:
             http_server.shutdown()
             http_server.server_close()
