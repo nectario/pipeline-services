@@ -5,7 +5,7 @@ fn main() {
 {
   "pipeline": "example04_json_loader_remote_get",
   "type": "unary",
-  "steps": [
+  "actions": [
     {
       "name": "remote_get_fixture",
       "$remote": {
@@ -22,6 +22,5 @@ fn main() {
   let registry: PipelineRegistry<String> = PipelineRegistry::new();
   let loader = PipelineJsonLoader::new();
   let pipeline = loader.load_str(json_text, &registry).expect("loader failed");
-  let result = pipeline.run("ignored".to_string());
-  println!("{}", result.context);
+  println!("{}", pipeline.run("ignored".to_string()));
 }
